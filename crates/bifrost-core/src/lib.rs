@@ -4,6 +4,8 @@
 //! security-hardened path utilities, error taxonomy, capability metadata,
 //! and structured logging initialization.
 
+#![forbid(unsafe_code)]
+
 pub mod capabilities;
 pub mod config;
 pub mod error;
