@@ -1,0 +1,33 @@
+# Rust / Cargo
+/target/
+**/*.rs.bk
+Cargo.lock.bak
+
+# Windows & IDE
+.DS_Store
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Runtime images, virtual disks & logs (never commit large binary blobs or user data)
+*.img
+*.raw
+*.qcow2
+*.vhdx
+*.vmdk
+*.iso
+*.apk
+*.log
+/runtime-data/
+/images/
+/.bifrost/
+
+# Environment & secrets
+.env
+.env.*
+*.key
+*.pem
+*.pfx
