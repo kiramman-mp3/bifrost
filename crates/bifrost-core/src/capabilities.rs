@@ -62,7 +62,8 @@ impl VersionInfo {
             version: VERSION.to_string(),
             target_os: std::env::consts::OS.to_string(),
             target_arch: std::env::consts::ARCH.to_string(),
-            current_milestone: "Milestone 2 — Windows Compatibility (`bifrost doctor`)".to_string(),
+            current_milestone: "Milestone 3 — Midgard Prototype (WHPX VM, Storage & Logs)"
+                .to_string(),
             capabilities: vec![
                 ComponentCapability {
                     name: "bifrost-core".to_string(),
@@ -74,7 +75,7 @@ impl VersionInfo {
                     name: "mimir".to_string(),
                     status: FeatureStatus::PartiallyImplemented,
                     summary:
-                        "CLI active (version, status, config, doctor); runtime commands pending"
+                        "CLI active (version, status, config, doctor, runtime, logs); Bridge/Valhalla pending"
                             .to_string(),
                 },
                 ComponentCapability {
@@ -86,8 +87,10 @@ impl VersionInfo {
                 },
                 ComponentCapability {
                     name: "midgard".to_string(),
-                    status: FeatureStatus::Planned,
-                    summary: "Milestone 3 — Real AOSP x86_64 VM prototype over WHPX".to_string(),
+                    status: FeatureStatus::Experimental,
+                    summary:
+                        "Verified image manifests, userdata disks, QEMU-WHPX launch, QMP shutdown & logs"
+                            .to_string(),
                 },
                 ComponentCapability {
                     name: "heimdall-bridge".to_string(),
