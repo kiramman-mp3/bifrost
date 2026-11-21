@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "id": "aosp-16-x86_64-midgard",
+  "name": "AOSP 16 Midgard x86_64 (Template)",
+  "android_version": "16",
+  "arch": "x86_64",
+  "boot": {
+    "type": "direct_kernel",
+    "kernel": {
+      "relative_path": "bzImage",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "initrd": {
+      "relative_path": "ramdisk.img",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "cmdline": "root=/dev/ram0 rw init=/init console=ttyS0 androidboot.hardware=generic_x86_64 androidboot.console=ttyS0 transparent_hugepage=never",
+    "disks": [
+      {
+        "id": "super",
+        "artifact": {
+          "relative_path": "super.img",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "format": "raw",
+        "read_only": true
+      }
+    ]
+  }
+}

@@ -52,6 +52,28 @@ pub enum BifrostError {
     /// A target file already exists and overwrite was not explicitly confirmed.
     #[error("refusing to overwrite existing file '{path}' without explicit confirmation")]
     AlreadyExists { path: PathBuf },
+
+    /// Cryptographic integrity check failed on a runtime image or update artifact.
+    #[error(
+        "integrity verification failed for '{path}': expected sha256 '{expected}', got '{actual}'"
+    )]
+    IntegrityMismatch {
+        path: PathBuf,
+        expected: String,
+        actual: String,
+    },
+
+    /// A required external dependency (such as the VMM binary) is missing or unusable.
+    #[error("hypervisor error: {0}")]
+    Hypervisor(String),
+
+    /// Runtime lifecycle operation failed (e.g., already running, not running, or missing image).
+    #[error("runtime error: {0}")]
+    Runtime(String),
+
+    /// Destructive action requires explicit user confirmation.
+    #[error("destructive operation '{operation}' requires explicit confirmation")]
+    ConfirmationRequired { operation: String },
 }
 
 impl BifrostError {

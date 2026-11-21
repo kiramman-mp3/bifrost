@@ -48,12 +48,12 @@ This roadmap tracks BIFRÖST's incremental delivery from feasibility research to
 
 ---
 
-## Milestone 3 — Midgard Prototype (`Planned` — **Next Implementation Milestone**)
-- [ ] Create `crates/bifrost-storage`, `crates/bifrost-hypervisor`, and `crates/bifrost-runtime`.
-- [ ] Implement image manifest SHA-256 verification and persistent `userdata` virtual disk management.
-- [ ] Implement `HypervisorBackend` trait + Phase 1 WHPX-accelerated QEMU backend.
-- [ ] Boot a **real AOSP x86_64** image inside Windows 11 with serial console access, runtime log capture, and clean shutdown.
-- [ ] Document hardware acceleration bring-up (`virtio-gpu` + `gfxstream` vs. SwiftShader fallback).
+## Milestone 3 — Midgard Prototype (`Partially implemented` — **Live AOSP Boot Verification Pending**)
+- [x] Created `crates/bifrost-storage` (`MidgardImageManifest` schema v1, streaming SHA-256 verification, path traversal guards, and persistent sparse `userdata.img` management with confirmation-guarded wipe).
+- [x] Created `crates/bifrost-hypervisor` (VMM-agnostic `HypervisorBackend` trait, pure-Rust loopback QMP client for graceful ACPI `system_powerdown`, and Phase 1 `QemuWhpxBackend` with VirtIO devices and loopback-only ADB forwarding).
+- [x] Created `crates/bifrost-runtime` (`MidgardRuntime` lifecycle coordinator, atomic `runtime-state.json` persistence with live PID reconciliation, and serial/VMM log reading).
+- [x] Wired `bifrost runtime start|stop|restart|verify`, live `bifrost status`, and `bifrost logs` into `mimir`, plus documented bundle layout in [android/midgard/README.md](android/midgard/README.md) (`31` passing workspace tests).
+- [ ] **Exit gate (pending)**: Install `qemu-system-x86_64` (requires UAC approval via `winget install SoftwareFreedomConservancy.QEMU`) and execute a real end-to-end WHPX boot + serial console + clean ACPI shutdown with a verified open-source Android `x86_64` image bundle.
 
 ---
 

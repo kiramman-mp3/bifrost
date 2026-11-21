@@ -10,6 +10,7 @@ use bifrost_core::{
     VersionInfo,
 };
 use bifrost_diagnostics::{render_human_report, run_doctor, OverallReadiness};
+use bifrost_runtime::{MidgardRuntime, RuntimeRecord, StartOptions};
 use serde::Serialize;
 
 use crate::cli::{AppsAction, Cli, Command, ConfigAction, RuntimeAction};
@@ -21,6 +22,7 @@ pub struct StatusReport {
     pub heimdall_connected: bool,
     pub config_path: PathBuf,
     pub config_exists: bool,
+    pub runtime: RuntimeRecord,
     pub note: String,
 }
 
@@ -50,15 +52,7 @@ pub fn execute(cli: &Cli) -> Result<CommandOutput> {
         }
         Command::Doctor { strict } => handle_doctor(cli.config.as_ref(), cli.json, *strict),
         Command::Runtime { action } => {
-            let sub = match action {
-                RuntimeAction::Start => "bifrost runtime start",
-                RuntimeAction::Stop => "bifrost runtime stop",
-                RuntimeAction::Restart => "bifrost runtime restart",
-            };
-            Err(BifrostError::Unsupported {
-                feature: sub.to_string(),
-                planned_milestone: "Planned in Milestones 3-4 — Midgard & Heimdall".to_string(),
-            })
+            handle_runtime(action, cli.config.as_ref(), cli.json).map(CommandOutput::ok)
         }
         Command::Devices => Err(BifrostError::Unsupported {
             feature: "bifrost devices".to_string(),
@@ -74,7 +68,6 @@ pub fn execute(cli: &Cli) -> Result<CommandOutput> {
             })
         }
         Command::Install { apk } => {
-            // Enforce security path validation even before reporting unsupported status.
             validate_host_file_path(apk, Some("apk"))?;
             Err(BifrostError::Unsupported {
                 feature: "bifrost install".to_string(),
@@ -93,10 +86,9 @@ pub fn execute(cli: &Cli) -> Result<CommandOutput> {
                 planned_milestone: "Planned in Milestone 5 — Valhalla".to_string(),
             })
         }
-        Command::Logs => Err(BifrostError::Unsupported {
-            feature: "bifrost logs".to_string(),
-            planned_milestone: "Planned in Milestone 4 — Heimdall & Bridge".to_string(),
-        }),
+        Command::Logs { tail } => {
+            handle_logs(cli.config.as_ref(), *tail, cli.json).map(CommandOutput::ok)
+        }
     }
 }
 
@@ -106,6 +98,27 @@ fn resolve_config_path(explicit: Option<&PathBuf>) -> Result<PathBuf> {
     }
     let paths = BifrostPaths::discover()?;
     Ok(paths.default_config_file())
+}
+
+fn load_effective_config_and_paths(
+    explicit_config: Option<&PathBuf>,
+) -> Result<(PathBuf, bool, BifrostConfig, BifrostPaths)> {
+    let config_path = resolve_config_path(explicit_config)?;
+    let config_exists = config_path.exists();
+    let config = if config_exists {
+        BifrostConfig::load_from_file(&config_path)?
+    } else {
+        BifrostConfig::default()
+    };
+
+    let mut paths = BifrostPaths::discover()?;
+    if let Some(ref custom_data_dir) = config.runtime.data_dir {
+        paths.data_dir = custom_data_dir.clone();
+        paths.images_dir = custom_data_dir.join("images");
+        paths.logs_dir = custom_data_dir.join("logs");
+    }
+
+    Ok((config_path, config_exists, config, paths))
 }
 
 fn handle_version(as_json: bool) -> Result<String> {
@@ -135,16 +148,24 @@ fn handle_version(as_json: bool) -> Result<String> {
 }
 
 fn handle_status(explicit_config: Option<&PathBuf>, as_json: bool) -> Result<String> {
-    let config_path = resolve_config_path(explicit_config)?;
-    let config_exists = config_path.exists();
+    let (config_path, config_exists, config, paths) =
+        load_effective_config_and_paths(explicit_config)?;
+    let runtime_mgr = MidgardRuntime::with_default_backend(config, paths);
+    let record = runtime_mgr.status()?;
+
+    let note = if record.state.is_active() {
+        "Midgard VM is active directly under Mimir prototype orchestration (Heimdall daemon planned in Milestone 4)."
+    } else {
+        "Heimdall daemon is not implemented yet (Planned in Milestone 4). Start Midgard directly via `bifrost runtime start --image <manifest.json>`."
+    };
 
     let report = StatusReport {
-        runtime_state: RuntimeState::Stopped,
+        runtime_state: record.state,
         heimdall_connected: false,
         config_path,
         config_exists,
-        note: "Heimdall daemon and Midgard runtime are not implemented yet (Planned in Milestones 3-4)."
-            .to_string(),
+        runtime: record,
+        note: note.to_string(),
     };
 
     if as_json {
@@ -152,17 +173,155 @@ fn handle_status(explicit_config: Option<&PathBuf>, as_json: bool) -> Result<Str
             .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
     }
 
-    Ok(format!(
-        "Runtime State:      {}\nHeimdall Daemon:    disconnected\nConfig Path:        {} ({})\nNote:               {}",
+    let mut out = format!(
+        "Runtime State:      {}\nHeimdall Daemon:    disconnected (Milestone 4)\nConfig Path:        {} ({})",
         report.runtime_state,
         report.config_path.display(),
         if report.config_exists {
             "found"
         } else {
             "not initialized; using built-in defaults"
-        },
-        report.note
-    ))
+        }
+    );
+
+    if let Some(pid) = report.runtime.pid {
+        out.push_str(&format!("\nVM PID:             {pid}"));
+    }
+    if let Some(ref backend) = report.runtime.backend {
+        out.push_str(&format!("\nHypervisor Backend: {backend}"));
+    }
+    if let Some(ref image_id) = report.runtime.image_id {
+        out.push_str(&format!("\nImage ID:           {image_id}"));
+    }
+    if let Some(ref adb) = report.runtime.adb_endpoint {
+        out.push_str(&format!("\nADB Endpoint:       {adb} (loopback)"));
+    }
+    if let Some(ref serial) = report.runtime.serial_log_path {
+        out.push_str(&format!("\nSerial Log:         {}", serial.display()));
+    }
+    out.push_str(&format!("\nNote:               {}", report.note));
+    Ok(out)
+}
+
+fn handle_runtime(
+    action: &RuntimeAction,
+    explicit_config: Option<&PathBuf>,
+    as_json: bool,
+) -> Result<String> {
+    let (_, _, config, paths) = load_effective_config_and_paths(explicit_config)?;
+    let runtime = MidgardRuntime::with_default_backend(config, paths);
+
+    match action {
+        RuntimeAction::Start {
+            image,
+            headless,
+            console,
+        } => {
+            let record = runtime.start(
+                image,
+                StartOptions {
+                    headless: *headless,
+                    interactive_console: *console,
+                },
+            )?;
+            if as_json {
+                return serde_json::to_string_pretty(&record)
+                    .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
+            }
+            Ok(format!(
+                "Started Midgard VM (state: {}, PID: {}, backend: {}, image: {}).\nADB Endpoint: {}\nSerial Log:   {}",
+                record.state,
+                record.pid.unwrap_or(0),
+                record.backend.as_deref().unwrap_or("unknown"),
+                record.image_id.as_deref().unwrap_or("unknown"),
+                record.adb_endpoint.as_deref().unwrap_or("n/a"),
+                record
+                    .serial_log_path
+                    .as_ref()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|| "stdio".to_string())
+            ))
+        }
+        RuntimeAction::Stop { force } => {
+            let record = runtime.stop(*force)?;
+            if as_json {
+                return serde_json::to_string_pretty(&record)
+                    .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
+            }
+            Ok(format!(
+                "Midgard VM stopped (state: {}). {}",
+                record.state,
+                record.note.as_deref().unwrap_or("")
+            ))
+        }
+        RuntimeAction::Restart { image, headless } => {
+            let record = runtime.restart(
+                image.as_deref(),
+                StartOptions {
+                    headless: *headless,
+                    interactive_console: false,
+                },
+            )?;
+            if as_json {
+                return serde_json::to_string_pretty(&record)
+                    .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
+            }
+            Ok(format!(
+                "Restarted Midgard VM (state: {}, PID: {}, image: {}).",
+                record.state,
+                record.pid.unwrap_or(0),
+                record.image_id.as_deref().unwrap_or("unknown")
+            ))
+        }
+        RuntimeAction::Verify { image } => {
+            let bundle = runtime.verify_image(image)?;
+            if as_json {
+                return serde_json::to_string_pretty(&bundle)
+                    .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
+            }
+            Ok(format!(
+                "Verified Midgard bundle '{}' (Android {}, arch: {}) — all SHA-256 digests match.",
+                bundle.id, bundle.android_version, bundle.arch
+            ))
+        }
+    }
+}
+
+fn handle_logs(explicit_config: Option<&PathBuf>, tail: usize, as_json: bool) -> Result<String> {
+    let (_, _, config, paths) = load_effective_config_and_paths(explicit_config)?;
+    let runtime = MidgardRuntime::with_default_backend(config, paths);
+    let logs = runtime.read_logs(tail)?;
+
+    if as_json {
+        return serde_json::to_string_pretty(&logs)
+            .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
+    }
+
+    let mut out = format!(
+        "=== Serial Console Log ({}) ===\n",
+        logs.serial_log_path.display()
+    );
+    if logs.serial_lines.is_empty() {
+        out.push_str("(no serial log output recorded yet)\n");
+    } else {
+        for line in &logs.serial_lines {
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+
+    if !logs.vmm_stderr_lines.is_empty() {
+        out.push_str(&format!(
+            "\n=== VMM Stderr Log ({}) ===\n",
+            logs.vmm_stderr_path.display()
+        ));
+        for line in &logs.vmm_stderr_lines {
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+
+    Ok(out.trim_end().to_string())
 }
 
 fn handle_config(
@@ -229,20 +388,8 @@ fn handle_doctor(
     as_json: bool,
     strict: bool,
 ) -> Result<CommandOutput> {
-    let config_path = resolve_config_path(explicit_config)?;
-    let config = if config_path.exists() {
-        BifrostConfig::load_from_file(&config_path)?
-    } else {
-        BifrostConfig::default()
-    };
-
-    let target_storage_path = if let Some(ref custom_dir) = config.runtime.data_dir {
-        custom_dir.clone()
-    } else {
-        BifrostPaths::discover()?.data_dir
-    };
-
-    let report = run_doctor(&config, &target_storage_path);
+    let (_, _, config, paths) = load_effective_config_and_paths(explicit_config)?;
+    let report = run_doctor(&config, &paths.data_dir);
     let exit_code = if strict && report.overall == OverallReadiness::NotReady {
         1
     } else {
@@ -304,6 +451,11 @@ mod tests {
     fn status_honestly_reports_stopped_and_disconnected() {
         let tmp = TempDir::new().unwrap();
         let cfg_file = tmp.path().join("bifrost.toml");
+        let data_dir = tmp.path().join("data");
+        let mut cfg = BifrostConfig::default();
+        cfg.runtime.data_dir = Some(data_dir);
+        cfg.save_to_file(&cfg_file, true).unwrap();
+
         let cli = Cli::try_parse_from([
             "bifrost",
             "--json",
@@ -329,11 +481,11 @@ mod tests {
 
     #[test]
     fn unimplemented_commands_explicitly_return_unsupported() {
-        let start = Cli::try_parse_from(["bifrost", "runtime", "start"]).unwrap();
-        assert!(execute(&start).unwrap_err().is_unsupported());
-
         let devices = Cli::try_parse_from(["bifrost", "devices"]).unwrap();
         assert!(execute(&devices).unwrap_err().is_unsupported());
+
+        let apps = Cli::try_parse_from(["bifrost", "apps", "list"]).unwrap();
+        assert!(execute(&apps).unwrap_err().is_unsupported());
 
         let install = Cli::try_parse_from(["bifrost", "install", "app.apk"]).unwrap();
         assert!(execute(&install).unwrap_err().is_unsupported());

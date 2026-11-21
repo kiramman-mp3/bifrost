@@ -73,7 +73,7 @@ pub enum Command {
         strict: bool,
     },
 
-    /// Manage the Midgard Android runtime lifecycle (Planned: Milestones 3-4).
+    /// Manage the Midgard Android runtime lifecycle (start, stop, restart, verify).
     Runtime {
         #[command(subcommand)]
         action: RuntimeAction,
@@ -100,8 +100,12 @@ pub enum Command {
         package: String,
     },
 
-    /// Stream or inspect Heimdall and Midgard runtime logs (Planned: Milestone 4).
-    Logs,
+    /// Inspect Midgard serial console and VMM runtime logs.
+    Logs {
+        /// Number of trailing lines to show (0 = all lines).
+        #[arg(long, default_value_t = 100)]
+        tail: usize,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -126,12 +130,42 @@ pub enum ConfigAction {
 
 #[derive(Debug, Subcommand)]
 pub enum RuntimeAction {
-    /// Start the Midgard Android runtime.
-    Start,
-    /// Stop the Midgard Android runtime gracefully.
-    Stop,
-    /// Restart the Midgard Android runtime.
-    Restart,
+    /// Verify image bundle integrity and start the Midgard Android VM over WHPX.
+    Start {
+        /// Path to the Midgard image bundle `manifest.json`.
+        #[arg(long)]
+        image: PathBuf,
+
+        /// Run without a graphical display window (`-display none`).
+        #[arg(long)]
+        headless: bool,
+
+        /// Attach serial console directly to current terminal stdio.
+        #[arg(long)]
+        console: bool,
+    },
+    /// Stop the running Midgard Android VM gracefully via ACPI/QMP.
+    Stop {
+        /// Forcefully terminate the VM process immediately.
+        #[arg(long)]
+        force: bool,
+    },
+    /// Restart the Midgard Android VM.
+    Restart {
+        /// Optional replacement manifest path (reuses previous manifest if omitted).
+        #[arg(long)]
+        image: Option<PathBuf>,
+
+        /// Run without a graphical display window.
+        #[arg(long)]
+        headless: bool,
+    },
+    /// Cryptographically verify a Midgard image bundle manifest and SHA-256 digests.
+    Verify {
+        /// Path to the Midgard image bundle `manifest.json`.
+        #[arg(long)]
+        image: PathBuf,
+    },
 }
 
 #[derive(Debug, Subcommand)]
