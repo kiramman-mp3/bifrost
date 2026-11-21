@@ -1,0 +1,251 @@
+# 🌈 BIFRÖST
+
+[![Rust](https://img.shields.io/badge/Rust-Primary%20Language-000000?style=flat-square&logo=rust)](https://www.rust-lang.org/)
+[![Windows 11](https://img.shields.io/badge/Windows%2011-x64%20(Home%20%7C%20Pro)-0078D4?style=flat-square&logo=windows11)](https://learn.microsoft.com/en-us/virtualization/api/)
+[![AOSP](https://img.shields.io/badge/Android-AOSP%20x86__64-3DDC84?style=flat-square&logo=android)](https://source.android.com/)
+[![WHPX](https://img.shields.io/badge/Hypervisor-WHPX-5C2D91?style=flat-square)](https://learn.microsoft.com/en-us/virtualization/api/hypervisor-platform/hypervisor-platform)
+
+**BIFRÖST** is an open-source, Rust-powered Android subsystem for Windows 11 designed to run real Android applications with deep native desktop integration — *"A Bridge Between Worlds."*
+
+Inspired by Bifröst from Norse mythology and built as a modern, transparent, community-maintained successor to Microsoft's discontinued Windows Subsystem for Android (WSA), BIFRÖST is currently at **Milestone 0 (Research & Feasibility Complete)** and preparing for **Milestone 1 (`bifrost-core` and `mimir` CLI)**.
+
+> [!TIP]
+> **Quick start (Milestone 0)**: No executable Rust binaries exist yet. Start by reviewing the [Technical Feasibility Report](docs/research/feasibility-report.md), [ARCHITECTURE.md](ARCHITECTURE.md), and the next implementation plan in [ROADMAP.md](ROADMAP.md).
+
+---
+
+## 📖 Description
+
+### What problem does it solve?
+Following the discontinuation of Microsoft's Windows Subsystem for Android (WSA), Windows 11 users and developers lack an open-source, actively maintained, auditable way to run Android applications natively on Windows 11 — especially on **Windows 11 Home**, where the full Hyper-V management role is unavailable. Traditional emulators bundle monolithic single-window interfaces, opaque telemetry, or proprietary components.
+
+### What does it do?
+Once implemented across Milestones 1–8, BIFRÖST follows a modular runtime lifecycle:
+1. **System verification (`mimir`)**: `bifrost doctor` inspects Windows 11 edition, CPU virtualization, `HypervisorPlatform` (WHPX), memory, disk space, and GPU capabilities.
+2. **Runtime verification (`bifrost-storage`)**: Cryptographically verifies downloaded AOSP `x86_64` runtime images and attaches a persistent `userdata` virtual disk.
+3. **Supervised VM execution (`heimdall` + `midgard`)**: Starts an unprivileged WHPX-accelerated Android `x86_64` VM with VirtIO storage, networking, `vsock`, and `virtio-gpu` (`gfxstream`) graphics.
+4. **Windows ↔ Android bridge (`bridge`)**: Connects loopback-only ADB, clipboard sync, scoped shared folders, and notifications over authenticated local channels.
+5. **Native package & window integration (`valhalla` + `bifrost-ui`)**: Installs/launches real APKs via Android `PackageManager`, projects independent per-app windows onto Windows 11 (Milestone 6), and provides a Fluent Design 2 management console (Milestone 7).
+
+### Who is it for?
+- **Windows 11 users** (Home, Pro, and Enterprise) who want clean, ad-free, open-source Android app execution.
+- **Android and Rust systems developers** who need an inspectable, ADB-accessible, VirtIO-based Android subsystem on Windows.
+
+---
+
+## 📸 Screenshots
+
+No UI or runtime screenshots exist yet because the project is at **Milestone 0 (Research & Feasibility)**. Screenshots of `mimir` CLI diagnostics, Midgard boot, and `bifrost-ui` will be added to `docs/screenshots/` starting in Milestones 2, 3, and 7.
+
+---
+
+## ✨ Features
+
+- **Modular Rust control plane (Planned M1–M4)**: Core domain models, state machine, daemon supervision (`heimdall`), and CLI (`mimir`) implemented natively in Rust with minimal `unsafe` code.
+- **Windows 11 Home & Pro compatibility (Planned M2–M3)**: Targets Windows Hypervisor Platform (`WHPX`) behind a VMM-agnostic trait (`QEMU-WHPX` bring-up evolving to Rust `crosvm`), avoiding Pro-only Hyper-V dependencies.
+- **Clean-room AOSP x86_64 foundation (Planned M3)**: Runs real, auditable AOSP Android 15/16 images with zero bundled Google Play Services or proprietary ARM translators.
+- **Hardware-accelerated graphics pipeline (Planned M3–M6)**: Designed around `virtio-gpu` + `gfxstream` (with SwiftShader diagnostics fallback) and phased independent per-app Windows desktop windows via Android `VirtualDisplay`.
+- **Security-by-default boundaries (Mandatory)**: Loopback-only ADB, user-SID authenticated Windows Named Pipes for local IPC, strict path traversal protection, and SHA-256 + signature verification for runtime images.
+- **Transparent capability reporting (Mandatory)**: Unimplemented commands explicitly return `Unsupported` rather than simulating success.
+
+---
+
+## 🛠️ Technologies Used
+
+- **Core & Control Plane (Planned M1+)**: Rust, Cargo workspaces, `tokio`, `serde`, `tracing`, `thiserror`, `anyhow`, `clap`, `windows` crate.
+- **Virtualization & Android Guest (Planned M3+)**: Windows Hypervisor Platform (`WHPX`), AOSP `x86_64` (Android 15/16, GKI Linux kernel, VirtIO), `QEMU-WHPX` (Phase 1) → `crosvm` (target Rust VMM), `virtio-gpu` + `gfxstream`.
+- **Desktop Application (Planned M7)**: Tauri 2 (Rust backend + WebView2 Fluent Design 2 UI) for the management shell; lightweight Rust Win32 + D3D12/Vulkan host windows for per-app displays (Milestone 6).
+- **Testing & Quality Gates (Planned M1+)**: `cargo test`, `cargo clippy -- -D warnings`, `cargo fmt --check`.
+- **Distribution (Planned M8)**: Signed Windows installer (MSIX / WiX) and cryptographically verified Midgard image manifests.
+
+---
+
+## 🏗️ Architecture
+
+BIFRÖST separates presentation (`bifrost-ui`, `mimir`), supervision (`heimdall`), Windows ↔ Android communication (`bridge`, `valhalla`), and virtualization (`bifrost-hypervisor`, `midgard`) across strict security boundaries so no UI layer ever owns critical runtime logic.
+
+```mermaid
+graph TD
+    UI[bifrost-ui - Tauri 2 Shell] --> IPC[Authenticated Local IPC - Named Pipes]
+    CLI[mimir - bifrost CLI] --> IPC
+    IPC --> HEIMDALL[Heimdall Daemon & Supervisor]
+    HEIMDALL --> CORE[bifrost-core - Models, Config, State]
+    HEIMDALL --> VALHALLA[Valhalla - APK & Package Manager]
+    HEIMDALL --> BRIDGE[Bridge - ADB, vsock, Files, Clipboard]
+    HEIMDALL --> HYP[bifrost-hypervisor - WHPX VMM Abstraction]
+    HYP --> STORAGE[bifrost-storage - Verified Images & Userdata]
+    HYP --> WHPX[Windows Hypervisor Platform]
+    WHPX --> MIDGARD[Midgard - AOSP x86_64 Guest VM]
+    VALHALLA --> BRIDGE
+    BRIDGE --> MIDGARD
+```
+
+For detailed component contracts, runtime boot sequences, and security boundaries, see [ARCHITECTURE.md](ARCHITECTURE.md).
+
+---
+
+## 📁 Project Structure
+
+Current repository layout (Milestone 0 — no empty placeholder crates created prematurely):
+
+```bash
+BIFRÖST/
+├── .gitignore                                     # Rust, Windows, disk images, logs, and secrets exclusions
+├── ARCHITECTURE.md                                # Baseline system architecture, diagrams, and security boundaries
+├── CHANGELOG.md                                   # Versioned project changelog
+├── CLAUDE.md                                      # Engineering context, Git workflow, and documentation rules
+├── CONTRIBUTING.md                                # Contribution guidelines, Git Flow, and Rust standards
+├── README.md                                      # Project overview and documentation entry point
+├── ROADMAP.md                                     # Incremental milestones (M0 to M8) and M1 vertical slice spec
+├── SECURITY.md                                    # Mandatory security invariants and vulnerability disclosure policy
+├── master_prompt.md                               # Master engineering specification
+└── docs/
+    ├── TECHNICAL_DECISIONS.md                     # Architecture Decision Record (ADR) index
+    ├── decisions/
+    │   ├── ADR-0001-aosp-x86-64-foundation.md     # AOSP x86_64 VirtIO / Cuttlefish alignment
+    │   ├── ADR-0002-whpx-vmm-abstraction.md       # WHPX-first VMM abstraction (QEMU -> crosvm)
+    │   ├── ADR-0003-graphics-and-windowing-strategy.md # virtio-gpu + gfxstream & phased windowing
+    │   └── ADR-0004-arm64-compatibility-policy.md # Clean-room x86_64 policy & proprietary exclusions
+    └── research/
+        └── feasibility-report.md                  # Milestone 0 technical feasibility & host baseline report
+```
+
+---
+
+## 💻 System Requirements
+
+### Target User Host (Windows 11)
+- **OS**: Windows 11 x64 (Home, Pro, or Enterprise).
+- **CPU**: 64-bit x86_64 processor with hardware virtualization (`Intel VT-x` or `AMD-V`) and SLAT enabled in firmware.
+- **Windows Feature**: **Windows Hypervisor Platform** (`HypervisorPlatform`) enabled (required starting in Milestone 3).
+- **RAM**: 16 GB minimum recommended (4–8 GB allocated to Midgard).
+- **GPU**: DirectX 12 / Vulkan-capable GPU (Intel Arc, AMD Radeon, or NVIDIA GeForce) for `gfxstream` hardware acceleration.
+
+### Development Host (Milestone 1+)
+- `git` (verified `2.56.1` on current host).
+- `rustup` with stable `x86_64-pc-windows-msvc` toolchain, `rustfmt`, and `clippy` *(pending installation before Milestone 1)*.
+- Visual Studio C++ Build Tools (MSVC linker + Windows 11 SDK) *(pending installation before Milestone 1)*.
+- *(Milestone 3+)* `qemu-system-x86_64` (or `crosvm` Windows build) and Android `adb` platform-tools.
+- *(Building custom AOSP images)* Dedicated Linux x86_64 build host with 64 GB RAM and 300–400 GB free NVMe SSD.
+
+---
+
+## ⚙️ Installation and Setup
+
+1. **Clone the repository and switch to `develop`**:
+   ```bash
+   git clone <repository-url>
+   cd BIFRÖST
+   git checkout develop
+   ```
+2. **Install Rust and MSVC Build Tools (required before Milestone 1)**:
+   ```powershell
+   winget install Rustlang.Rustup
+   winget install Microsoft.VisualStudio.2022.BuildTools
+   ```
+3. **Enable Windows Hypervisor Platform (required before Milestone 3, elevated PowerShell)**:
+   ```powershell
+   DISM /Online /Enable-Feature /FeatureName:HypervisorPlatform /All
+   ```
+4. **Environment & secrets**: Never commit `.env` files, signing keys (`*.key`, `*.pem`, `*.pfx`), runtime images (`*.img`, `*.qcow2`), or APKs to the repository (enforced in `.gitignore`).
+
+---
+
+## 🚀 Usage and Execution
+
+### Current Stage (Milestone 0 — Documentation & Architecture)
+There is no compiled Cargo workspace yet. All engineering artifacts are located in Markdown under the repository root and `docs/`.
+
+### Planned CLI & Verification Commands (Milestone 1+)
+
+| Command | Description | Status |
+|---|---|---|
+| `cargo fmt --all -- --check` | Verify Rust code formatting across workspace | Planned (M1) |
+| `cargo clippy --workspace --all-targets -- -D warnings` | Run strict Clippy static analysis | Planned (M1) |
+| `cargo test --workspace` | Execute unit and integration test suites | Planned (M1) |
+| `bifrost version` | Display BIFRÖST version and host target metadata | Planned (M1) |
+| `bifrost config validate` | Validate TOML runtime configuration and safe paths | Planned (M1) |
+| `bifrost doctor` | Inspect Windows 11 version, WHPX, RAM, disk, and GPU readiness | Planned (M2) |
+| `bifrost runtime start` | Start Midgard Android VM under Heimdall supervision | Planned (M3–M4) |
+| `bifrost install <app.apk>` | Validate and install an APK via Valhalla | Planned (M5) |
+
+---
+
+## 📦 Deployment and Distribution
+
+Distribution packaging is planned for **Milestone 8**:
+- Host binaries (`bifrost.exe`, `heimdall.exe`, `bifrost-ui`) will ship via a signed Windows installer (MSIX / WiX).
+- Midgard Android `x86_64` runtime images will be built reproducibly on Linux CI runners and published as separate, versioned bundles accompanied by SHA-256 checksums and Ed25519 signatures.
+- No proprietary Google Play Services, GApps, `libhoudini`, or `libndk_translation` binaries will ever be distributed.
+
+---
+
+## 🔬 Technical Architecture & Decisions
+
+### Architecture Decision Records
+
+| ADR | Decision | Status |
+|---|---|---|
+| [ADR-0001](docs/decisions/ADR-0001-aosp-x86-64-foundation.md) | Use AOSP `x86_64` (Android 15/16, VirtIO / Cuttlefish-aligned) built in Linux CI | Accepted |
+| [ADR-0002](docs/decisions/ADR-0002-whpx-vmm-abstraction.md) | Target WHPX behind a Rust `HypervisorBackend` trait (`QEMU-WHPX` → `crosvm`) | Accepted |
+| [ADR-0003](docs/decisions/ADR-0003-graphics-and-windowing-strategy.md) | Use `virtio-gpu` + `gfxstream` and phased windowing (single display → per-app `VirtualDisplay`) | Accepted |
+| [ADR-0004](docs/decisions/ADR-0004-arm64-compatibility-policy.md) | Maintain clean-room `x86_64` baseline; prohibit proprietary ARM translators and GApps | Accepted |
+
+### Capability Matrix
+
+| Area | Status | Notes |
+|---|---|---|
+| Feasibility research, architecture, ADRs | **Implemented** | Completed in Milestone 0 |
+| `bifrost-core` & `mimir` CLI foundation | **Planned** | Next vertical slice (Milestone 1) |
+| Windows 11 compatibility diagnostics (`bifrost doctor`) | **Planned** | Milestone 2 |
+| Midgard Android `x86_64` VM prototype | **Planned** | Milestone 3 |
+| Heimdall daemon, authenticated IPC, loopback ADB | **Planned** | Milestone 4 |
+| Valhalla real APK management | **Planned** | Milestone 5 |
+| Independent per-app Windows desktop windows | **Planned / Experimental** | Milestone 6 |
+| ARM64 binary translation (`arm64-v8a` native APKs) | **Unsupported** | Independent clean-room research only |
+
+---
+
+## 🗺️ Roadmap
+
+- [x] **Milestone 0**: Research, host baseline inspection, feasibility report, architecture, and ADRs.
+- [ ] **Milestone 1**: Cargo workspace, `bifrost-core`, and `mimir` CLI foundation.
+- [ ] **Milestone 2**: Native Windows 11 compatibility diagnostics (`bifrost doctor`).
+- [ ] **Milestone 3**: Minimal functional Midgard Android `x86_64` VM prototype on WHPX.
+- [ ] **Milestone 4**: Heimdall supervisor daemon, authenticated local IPC, and Bridge (ADB / `vsock`).
+- [ ] **Milestone 5**: Valhalla real Android package management (`install`, `uninstall`, `apps list`, launch).
+- [ ] **Milestone 6**: Shared directories, clipboard, notifications, networking, and per-app Windows desktop windows.
+- [ ] **Milestone 7**: Windows 11 Fluent Design desktop application (`bifrost-ui`).
+- [ ] **Milestone 8**: Signed installer, verified runtime image updates, and recovery tooling.
+
+See [ROADMAP.md](ROADMAP.md) for detailed milestone exit criteria.
+
+---
+
+## 🤝 Contributors
+
+| Contributor | Commits |
+|---|---:|
+| Johan Rodríguez | 7 |
+
+---
+
+## 📚 References
+
+<details>
+<summary>Click to expand upstream technical references</summary>
+
+- [Android Open Source Project (AOSP) — Cuttlefish Virtual Device](https://source.android.com/docs/devices/cuttlefish)
+- [Microsoft — Windows Hypervisor Platform (WHPX) API](https://learn.microsoft.com/en-us/virtualization/api/hypervisor-platform/hypervisor-platform)
+- [crosvm — ChromeOS Virtual Machine Monitor (Rust)](https://crosvm.dev/book/)
+- [QEMU — Windows Hypervisor Platform (WHPX) & VirtIO-GPU](https://www.qemu.org/docs/master/)
+- [Waydroid — Container-based Android on Linux (Architectural Reference)](https://waydro.id/)
+- [Bliss OS — Android-x86 Desktop Reference](https://blissos.org/)
+
+</details>
+
+---
+
+## ✍️ Author
+
+Johan Rodríguez
