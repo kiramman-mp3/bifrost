@@ -7,15 +7,15 @@
 
 **BIFRÖST** is an open-source, Rust-powered Android subsystem for Windows 11 designed to run real Android applications with deep native desktop integration — *"A Bridge Between Worlds."*
 
-Inspired by Bifröst from Norse mythology and built as a modern, transparent, community-maintained successor to Microsoft's discontinued Windows Subsystem for Android (WSA), BIFRÖST is currently at **Milestone 1 (`bifrost-core` & `mimir` CLI Foundation Complete)** and preparing for **Milestone 2 (`bifrost doctor` Windows 11 compatibility diagnostics)**.
+Inspired by Bifröst from Norse mythology and built as a modern, transparent, community-maintained successor to Microsoft's discontinued Windows Subsystem for Android (WSA), BIFRÖST is currently at **Milestone 2 (`bifrost doctor` Windows 11 Compatibility Diagnostics Complete)** and preparing for **Milestone 3 (Midgard Android `x86_64` VM Prototype)**.
 
 > [!TIP]
-> **Quick start (Milestone 1)**: Build and inspect the Mimir CLI right away:
+> **Quick start (Milestone 2)**: Run tests and inspect your Windows 11 host compatibility right away:
 > ```powershell
 > $env:CARGO_TARGET_DIR = "C:\Users\johan\Proyectos\bifrost-target" # required with MinGW ld if repo path contains 'Ö'
 > cargo test --workspace
+> cargo run -p mimir -- doctor
 > cargo run -p mimir -- version
-> cargo run -p mimir -- status
 > ```
 
 ---
@@ -92,12 +92,12 @@ For detailed component contracts, runtime boot sequences, and security boundarie
 
 ## 📁 Project Structure
 
-Current repository layout (Milestone 1 — only active crates are created):
+Current repository layout (Milestone 2 — only active crates are created):
 
 ```bash
 BIFRÖST/
 ├── .gitignore                                     # Rust, Windows, disk images, logs, and secrets exclusions
-├── Cargo.toml                                     # Cargo workspace manifest (unsafe_code = "forbid")
+├── Cargo.toml                                     # Cargo workspace manifest (unsafe_code = "deny"; forbid in core/mimir)
 ├── Cargo.lock                                     # Reproducible dependency lockfile
 ├── ARCHITECTURE.md                                # Baseline system architecture, diagrams, and security boundaries
 ├── CHANGELOG.md                                   # Versioned project changelog
@@ -111,19 +111,27 @@ BIFRÖST/
 │   ├── bifrost-core/                              # Shared domain models, state machine, TOML config, path security, logging
 │   │   ├── Cargo.toml
 │   │   └── src/
-│   │       ├── lib.rs
+│   │       ├── lib.rs                             # #![forbid(unsafe_code)]
 │   │       ├── capabilities.rs                    # FeatureStatus and VersionInfo models
 │   │       ├── config.rs                          # Versioned TOML config & security/bounds validation
 │   │       ├── error.rs                           # Structured BifrostError taxonomy
 │   │       ├── logging.rs                         # Tracing subscriber setup
 │   │       ├── paths.rs                           # Directory traversal guards & per-user path layout
 │   │       └── state.rs                           # Deterministic RuntimeStateMachine
+│   ├── bifrost-diagnostics/                       # Native Windows 11 & WHPX compatibility engine (`bifrost doctor`)
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs                             # Public diagnostics entrypoint
+│   │       ├── model.rs                           # Serializable snapshot and doctor report models
+│   │       ├── evaluator.rs                       # Pure compatibility rules & unit tests
+│   │       ├── format.rs                          # Human-readable terminal report renderer
+│   │       └── probe_windows.rs                   # Audited Win32, Registry, CPUID, WHPX, and DXGI probes
 │   └── mimir/                                     # Administrative CLI (`bifrost` binary)
 │       ├── Cargo.toml
 │       └── src/
-│           ├── main.rs                            # Entry point & exit codes (0 ok, 1 error, 2 unsupported)
+│           ├── main.rs                            # #![forbid(unsafe_code)], exit codes (0 ok, 1 error, 2 unsupported)
 │           ├── cli.rs                             # Clap CLI command and flag definitions
-│           └── commands.rs                        # Command handlers & explicit unsupported stubs
+│           └── commands.rs                        # Command handlers (`version`, `status`, `config`, `doctor`, stubs)
 └── docs/
     ├── TECHNICAL_DECISIONS.md                     # Architecture Decision Record (ADR) index
     ├── decisions/
@@ -200,11 +208,11 @@ cargo run -p mimir -- status
 |---|---|---|
 | `cargo fmt --all -- --check` | Verify Rust code formatting across workspace | **Implemented** |
 | `cargo clippy --workspace --all-targets -- -D warnings` | Run strict Clippy static analysis | **Implemented** |
-| `cargo test --workspace` | Execute unit tests (`12` in `bifrost-core`, `5` in `mimir`) | **Implemented** |
+| `cargo test --workspace` | Execute unit tests (`12` core, `4` diagnostics, `6` mimir) | **Implemented** |
 | `bifrost version [--json]` | Display BIFRÖST version, host target, and capability maturity | **Implemented** |
 | `bifrost status [--json]` | Display honest runtime and Heimdall connection status | **Implemented** |
 | `bifrost config init \| show \| validate` | Initialize, inspect, and validate `bifrost.toml` | **Implemented** |
-| `bifrost doctor` | Inspect Windows 11 version, WHPX, RAM, disk, and GPU readiness | Planned (M2) |
+| `bifrost doctor [--strict] [--json]` | Inspect Windows 11 edition, CPU, virtualization, WHPX, RAM, storage, and GPU | **Implemented** |
 | `bifrost runtime start \| stop \| restart` | Manage Midgard Android VM lifecycle | Planned (M3–M4) |
 | `bifrost devices` / `bifrost logs` | List Bridge/ADB devices and inspect runtime logs | Planned (M4) |
 | `bifrost install <app.apk>` / `uninstall` / `apps list` | Validate and manage APKs via Valhalla | Planned (M5) |
@@ -237,9 +245,9 @@ Distribution packaging is planned for **Milestone 8**:
 |---|---|---|
 | Feasibility research, architecture, ADRs | **Implemented** | Completed in Milestone 0 |
 | `bifrost-core` (state, config, paths, errors, logging) | **Implemented** | Completed in Milestone 1 (`12` unit tests passing) |
-| `mimir` CLI (`bifrost version`, `status`, `config`) | **Partially implemented** | Core commands live (`5` unit tests); runtime/app commands return `Unsupported` |
-| Windows 11 compatibility diagnostics (`bifrost doctor`) | **Planned** | Next vertical slice (Milestone 2) |
-| Midgard Android `x86_64` VM prototype | **Planned** | Milestone 3 |
+| `bifrost-diagnostics` (`bifrost doctor`) | **Implemented** | Completed in Milestone 2 (`4` evaluator tests + live Windows 11 Home WHPX verification) |
+| `mimir` CLI (`version`, `status`, `config`, `doctor`) | **Partially implemented** | Core & doctor commands live (`6` tests); runtime/app commands return `Unsupported` |
+| Midgard Android `x86_64` VM prototype | **Planned** | Next vertical slice (Milestone 3) |
 | Heimdall daemon, authenticated IPC, loopback ADB | **Planned** | Milestone 4 |
 | Valhalla real APK management | **Planned** | Milestone 5 |
 | Independent per-app Windows desktop windows | **Planned / Experimental** | Milestone 6 |
@@ -251,7 +259,7 @@ Distribution packaging is planned for **Milestone 8**:
 
 - [x] **Milestone 0**: Research, host baseline inspection, feasibility report, architecture, and ADRs.
 - [x] **Milestone 1**: Cargo workspace, `bifrost-core`, and `mimir` CLI foundation.
-- [ ] **Milestone 2**: Native Windows 11 compatibility diagnostics (`bifrost doctor`).
+- [x] **Milestone 2**: Native Windows 11 compatibility diagnostics (`bifrost doctor`).
 - [ ] **Milestone 3**: Minimal functional Midgard Android `x86_64` VM prototype on WHPX.
 - [ ] **Milestone 4**: Heimdall supervisor daemon, authenticated local IPC, and Bridge (ADB / `vsock`).
 - [ ] **Milestone 5**: Valhalla real Android package management (`install`, `uninstall`, `apps list`, launch).
@@ -267,7 +275,7 @@ See [ROADMAP.md](ROADMAP.md) for detailed milestone exit criteria.
 
 | Contributor | Commits |
 |---|---:|
-| Johan Rodríguez | 13 |
+| Johan Rodríguez | 17 |
 
 ---
 

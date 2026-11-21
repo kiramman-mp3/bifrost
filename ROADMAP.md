@@ -41,17 +41,14 @@ This roadmap tracks BIFRÖST's incremental delivery from feasibility research to
 
 ---
 
-## Milestone 2 — Windows Compatibility (`bifrost doctor`) (`Planned` — **Next Implementation Milestone**)
-- [ ] Implement native Windows 11 diagnostics using the `windows` crate:
-  - Windows version, build number, and edition (Home/Pro/Enterprise).
-  - CPU architecture, core count, and virtualization capability (handling the `HypervisorPresent: True` vs. `VirtualizationFirmwareEnabled: False` WMI quirk accurately).
-  - `HypervisorPlatform` (WHPX) API availability via `WHvGetCapability` (`WinHvPlatform.dll`).
-  - Total/available RAM, target drive free disk space, and GPU/driver detection.
-- [ ] Output human-readable and `--json` compatibility reports with actionable remediation steps.
+## Milestone 2 — Windows Compatibility (`bifrost doctor`) (`Implemented`)
+- [x] Created `crates/bifrost-diagnostics` using native Windows APIs (`windows` crate, `RtlGetVersion`, Registry, CPUID, `WinHvPlatform.dll` `WHvGetCapability` + `WHvCreatePartition`/`WHvDeletePartition`, `GlobalMemoryStatusEx`, `GetDiskFreeSpaceExW`, and DXGI `IDXGIFactory1` + driver version decoding).
+- [x] Handled Windows virtualization quirks accurately (preventing false negatives when `HypervisorPresent: True` hides raw firmware flags, and verifying real WHPX partition creation rather than trusting `HypervisorPresent` alone).
+- [x] Wired `bifrost doctor [--strict] [--json]` into `mimir` with actionable remediation steps and 22 passing workspace unit tests (`4` new evaluator tests + `1` new CLI integration test).
 
 ---
 
-## Milestone 3 — Midgard Prototype (`Planned`)
+## Milestone 3 — Midgard Prototype (`Planned` — **Next Implementation Milestone**)
 - [ ] Create `crates/bifrost-storage`, `crates/bifrost-hypervisor`, and `crates/bifrost-runtime`.
 - [ ] Implement image manifest SHA-256 verification and persistent `userdata` virtual disk management.
 - [ ] Implement `HypervisorBackend` trait + Phase 1 WHPX-accelerated QEMU backend.
