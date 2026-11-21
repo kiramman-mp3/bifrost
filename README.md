@@ -7,15 +7,15 @@
 
 **BIFRÖST** is an open-source, Rust-powered Android subsystem for Windows 11 designed to run real Android applications with deep native desktop integration — *"A Bridge Between Worlds."*
 
-Inspired by Bifröst from Norse mythology and built as a modern, transparent, community-maintained successor to Microsoft's discontinued Windows Subsystem for Android (WSA), BIFRÖST is currently at **Milestone 2 (`bifrost doctor` Windows 11 Compatibility Diagnostics Complete)** and preparing for **Milestone 3 (Midgard Android `x86_64` VM Prototype)**.
+Inspired by Bifröst from Norse mythology and built as a modern, transparent, community-maintained successor to Microsoft's discontinued Windows Subsystem for Android (WSA), BIFRÖST is currently at **Milestone 3 (Midgard Prototype — Host Storage, WHPX Hypervisor & Runtime Stack Implemented; Live Android Boot Verification Pending)** and preparing for **Milestone 4 (Heimdall & Bridge)**.
 
 > [!TIP]
-> **Quick start (Milestone 2)**: Run tests and inspect your Windows 11 host compatibility right away:
+> **Quick start (Milestone 3)**: Run tests, check Windows 11 WHPX readiness, or verify a Midgard image bundle:
 > ```powershell
 > $env:CARGO_TARGET_DIR = "C:\Users\johan\Proyectos\bifrost-target" # required with MinGW ld if repo path contains 'Ö'
 > cargo test --workspace
 > cargo run -p mimir -- doctor
-> cargo run -p mimir -- version
+> cargo run -p mimir -- runtime verify --image path\to\manifest.json
 > ```
 
 ---
@@ -92,12 +92,12 @@ For detailed component contracts, runtime boot sequences, and security boundarie
 
 ## 📁 Project Structure
 
-Current repository layout (Milestone 2 — only active crates are created):
+Current repository layout (Milestone 3 — only active crates are created):
 
 ```bash
 BIFRÖST/
 ├── .gitignore                                     # Rust, Windows, disk images, logs, and secrets exclusions
-├── Cargo.toml                                     # Cargo workspace manifest (unsafe_code = "deny"; forbid in core/mimir)
+├── Cargo.toml                                     # Cargo workspace manifest (unsafe_code = "deny")
 ├── Cargo.lock                                     # Reproducible dependency lockfile
 ├── ARCHITECTURE.md                                # Baseline system architecture, diagrams, and security boundaries
 ├── CHANGELOG.md                                   # Versioned project changelog
@@ -107,6 +107,10 @@ BIFRÖST/
 ├── ROADMAP.md                                     # Incremental milestones (M0 to M8)
 ├── SECURITY.md                                    # Mandatory security invariants and vulnerability disclosure policy
 ├── master_prompt.md                               # Master engineering specification
+├── android/
+│   └── midgard/                                   # Midgard bundle documentation & manifest template
+│       ├── README.md
+│       └── manifest.example.json
 ├── crates/
 │   ├── bifrost-core/                              # Shared domain models, state machine, TOML config, path security, logging
 │   │   ├── Cargo.toml
@@ -126,12 +130,32 @@ BIFRÖST/
 │   │       ├── evaluator.rs                       # Pure compatibility rules & unit tests
 │   │       ├── format.rs                          # Human-readable terminal report renderer
 │   │       └── probe_windows.rs                   # Audited Win32, Registry, CPUID, WHPX, and DXGI probes
+│   ├── bifrost-storage/                           # Verified Midgard image manifests & persistent userdata disks
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs                             # #![forbid(unsafe_code)]
+│   │       ├── manifest.rs                        # Versioned bundle schema (direct_kernel & bootable_image)
+│   │       ├── verify.rs                          # Streaming SHA-256 verification & root containment
+│   │       └── disk.rs                            # Persistent userdata.img creation & guarded wipe
+│   ├── bifrost-hypervisor/                        # VMM-agnostic WHPX abstraction & Phase 1 QEMU-WHPX backend
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs                             # #![forbid(unsafe_code)]
+│   │       ├── backend.rs                         # HypervisorBackend trait, VmSpec, VmLaunchInfo
+│   │       ├── qmp.rs                             # Pure-Rust loopback QMP client (system_powerdown)
+│   │       └── qemu_whpx.rs                       # QEMU-WHPX arg builder, launch, and shutdown
+│   ├── bifrost-runtime/                           # Midgard lifecycle orchestration, state persistence & log reader
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs                             # #![forbid(unsafe_code)]
+│   │       ├── state_store.rs                     # Atomic runtime-state.json persistence
+│   │       └── manager.rs                         # MidgardRuntime start/stop/restart/status/logs
 │   └── mimir/                                     # Administrative CLI (`bifrost` binary)
 │       ├── Cargo.toml
 │       └── src/
 │           ├── main.rs                            # #![forbid(unsafe_code)], exit codes (0 ok, 1 error, 2 unsupported)
 │           ├── cli.rs                             # Clap CLI command and flag definitions
-│           └── commands.rs                        # Command handlers (`version`, `status`, `config`, `doctor`, stubs)
+│           └── commands.rs                        # Command handlers (`version`, `status`, `config`, `doctor`, `runtime`, `logs`, stubs)
 └── docs/
     ├── TECHNICAL_DECISIONS.md                     # Architecture Decision Record (ADR) index
     ├── decisions/
@@ -208,13 +232,14 @@ cargo run -p mimir -- status
 |---|---|---|
 | `cargo fmt --all -- --check` | Verify Rust code formatting across workspace | **Implemented** |
 | `cargo clippy --workspace --all-targets -- -D warnings` | Run strict Clippy static analysis | **Implemented** |
-| `cargo test --workspace` | Execute unit tests (`12` core, `4` diagnostics, `6` mimir) | **Implemented** |
+| `cargo test --workspace` | Execute unit tests (`31` tests across 6 workspace crates) | **Implemented** |
 | `bifrost version [--json]` | Display BIFRÖST version, host target, and capability maturity | **Implemented** |
-| `bifrost status [--json]` | Display honest runtime and Heimdall connection status | **Implemented** |
+| `bifrost status [--json]` | Display reconciled Midgard runtime state and Heimdall connection status | **Implemented** |
 | `bifrost config init \| show \| validate` | Initialize, inspect, and validate `bifrost.toml` | **Implemented** |
 | `bifrost doctor [--strict] [--json]` | Inspect Windows 11 edition, CPU, virtualization, WHPX, RAM, storage, and GPU | **Implemented** |
-| `bifrost runtime start \| stop \| restart` | Manage Midgard Android VM lifecycle | Planned (M3–M4) |
-| `bifrost devices` / `bifrost logs` | List Bridge/ADB devices and inspect runtime logs | Planned (M4) |
+| `bifrost runtime start \| stop \| restart \| verify` | Verify image SHA-256 digests and manage Midgard WHPX VM lifecycle | **Partially implemented** |
+| `bifrost logs [--tail N]` | Inspect Midgard serial console and VMM stderr logs | **Implemented** |
+| `bifrost devices` | List Bridge/ADB devices | Planned (M4) |
 | `bifrost install <app.apk>` / `uninstall` / `apps list` | Validate and manage APKs via Valhalla | Planned (M5) |
 
 ---
@@ -246,8 +271,8 @@ Distribution packaging is planned for **Milestone 8**:
 | Feasibility research, architecture, ADRs | **Implemented** | Completed in Milestone 0 |
 | `bifrost-core` (state, config, paths, errors, logging) | **Implemented** | Completed in Milestone 1 (`12` unit tests passing) |
 | `bifrost-diagnostics` (`bifrost doctor`) | **Implemented** | Completed in Milestone 2 (`4` evaluator tests + live Windows 11 Home WHPX verification) |
-| `mimir` CLI (`version`, `status`, `config`, `doctor`) | **Partially implemented** | Core & doctor commands live (`6` tests); runtime/app commands return `Unsupported` |
-| Midgard Android `x86_64` VM prototype | **Planned** | Next vertical slice (Milestone 3) |
+| `bifrost-storage`, `bifrost-hypervisor`, `bifrost-runtime` | **Partially implemented** | Host stack & `9` unit tests passing; live Android `x86_64` WHPX boot gate pending QEMU UAC install + verified bundle |
+| `mimir` CLI (`version`, `status`, `config`, `doctor`, `runtime`, `logs`) | **Partially implemented** | Core, doctor, runtime, and log commands live (`6` tests); Bridge/Valhalla commands return `Unsupported` |
 | Heimdall daemon, authenticated IPC, loopback ADB | **Planned** | Milestone 4 |
 | Valhalla real APK management | **Planned** | Milestone 5 |
 | Independent per-app Windows desktop windows | **Planned / Experimental** | Milestone 6 |
@@ -275,7 +300,7 @@ See [ROADMAP.md](ROADMAP.md) for detailed milestone exit criteria.
 
 | Contributor | Commits |
 |---|---:|
-| Johan Rodríguez | 17 |
+| Johan Rodríguez | 23 |
 
 ---
 
