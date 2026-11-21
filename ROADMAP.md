@@ -20,33 +20,28 @@ This roadmap tracks BIFRÖST's incremental delivery from feasibility research to
 
 ---
 
-## Milestone 1 — Bifrost Core & Mimir CLI Foundation (`Planned` — **Next Small Implementation Milestone**)
+## Milestone 1 — Bifrost Core & Mimir CLI Foundation (`Implemented`)
 
-### Prerequisites on Development Host
-1. Install Rust stable toolchain (`x86_64-pc-windows-msvc`) via `rustup`, including `rustfmt` and `clippy`.
-2. Install Visual Studio C++ Build Tools (MSVC linker + Windows 11 SDK).
-
-### Concrete Deliverables (First Small Vertical Slice)
-- [ ] Initialize Cargo workspace (`Cargo.toml`) with two focused crates only (no empty placeholders):
+### Completed Deliverables
+- [x] Initialized Cargo workspace (`Cargo.toml`, `Cargo.lock`) with `unsafe_code = "forbid"` and two focused crates (no empty placeholders):
   - `crates/bifrost-core`
   - `crates/mimir` (binary name: `bifrost`)
-- [ ] Implement in `bifrost-core`:
+- [x] Implemented in `bifrost-core`:
   - Typed runtime state machine (`Stopped`, `Starting`, `Booting`, `Running`, `Degraded`, `Stopping`, `Failed`) with validated transitions.
-  - Versioned TOML configuration loader/validator (CPU cores, RAM MB, storage GB, display resolution/DPI, log level, safe canonical paths with traversal protection).
+  - Versioned TOML configuration loader/validator (CPU cores, RAM MB, storage GB, display resolution/DPI, log level, loopback-only ADB guard, safe path validation).
   - Structured error types (`thiserror`) including explicit `Unsupported` variant.
   - Structured logging bootstrap (`tracing` + `tracing-subscriber`).
-  - Domain models for system capabilities and version metadata.
-- [ ] Implement in `mimir` (`bifrost` CLI via `clap`):
-  - `bifrost version` — prints version and platform metadata.
-  - `bifrost config show` / `bifrost config validate` — loads and validates config safely.
-  - `bifrost status` — reports honest unstarted/no-daemon state (never fakes a running runtime).
-  - Stubbed future commands (`doctor`, `runtime start/stop/restart`, `devices`, `apps list`, `install`, `uninstall`, `logs`) returning explicit exit code & `Unsupported (Planned in Milestone X)` messages.
-- [ ] Unit tests for state transitions, config bounds validation, path traversal rejection, and CLI exit behavior.
-- [ ] Verify cleanly with `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace`.
+  - Domain models for capability maturity and version metadata.
+- [x] Implemented in `mimir` (`bifrost` CLI via `clap`):
+  - `bifrost version` (`--json` supported) — prints version, platform target, and honest component maturity.
+  - `bifrost config init | show | validate` — initializes, displays, and validates `bifrost.toml` safely.
+  - `bifrost status` (`--json` supported) — reports honest stopped/disconnected state.
+  - Stubbed future commands (`doctor`, `runtime start/stop/restart`, `devices`, `apps list`, `install`, `uninstall`, `logs`) returning exit code `2` and explicit `Unsupported` messages.
+- [x] Verified with 17 unit tests (`12` in `bifrost-core`, `5` in `mimir`), `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo build --workspace`, and live `bifrost.exe` CLI smoke checks.
 
 ---
 
-## Milestone 2 — Windows Compatibility (`bifrost doctor`) (`Planned`)
+## Milestone 2 — Windows Compatibility (`bifrost doctor`) (`Planned` — **Next Implementation Milestone**)
 - [ ] Implement native Windows 11 diagnostics using the `windows` crate:
   - Windows version, build number, and edition (Home/Pro/Enterprise).
   - CPU architecture, core count, and virtualization capability (handling the `HypervisorPresent: True` vs. `VirtualizationFirmwareEnabled: False` WMI quirk accurately).
