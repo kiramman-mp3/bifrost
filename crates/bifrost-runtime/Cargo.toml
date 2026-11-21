@@ -1,0 +1,21 @@
+[package]
+name = "bifrost-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+description = "Midgard Android runtime lifecycle orchestration, state persistence, and log inspection for BIFRÖST."
+
+[lints]
+workspace = true
+
+[dependencies]
+bifrost-core = { path = "../bifrost-core" }
+bifrost-hypervisor = { path = "../bifrost-hypervisor" }
+bifrost-storage = { path = "../bifrost-storage" }
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
