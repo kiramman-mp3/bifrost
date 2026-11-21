@@ -66,8 +66,12 @@ pub enum Command {
         action: ConfigAction,
     },
 
-    /// Inspect Windows 11 compatibility and virtualization readiness (Planned: Milestone 2).
-    Doctor,
+    /// Inspect Windows 11 compatibility, virtualization, WHPX, RAM, storage, and GPU readiness.
+    Doctor {
+        /// Exit with non-zero status if any compatibility check fails.
+        #[arg(long)]
+        strict: bool,
+    },
 
     /// Manage the Midgard Android runtime lifecycle (Planned: Milestones 3-4).
     Runtime {

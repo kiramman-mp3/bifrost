@@ -62,7 +62,7 @@ impl VersionInfo {
             version: VERSION.to_string(),
             target_os: std::env::consts::OS.to_string(),
             target_arch: std::env::consts::ARCH.to_string(),
-            current_milestone: "Milestone 1 — Bifrost Core & Mimir CLI Foundation".to_string(),
+            current_milestone: "Milestone 2 — Windows Compatibility (`bifrost doctor`)".to_string(),
             capabilities: vec![
                 ComponentCapability {
                     name: "bifrost-core".to_string(),
@@ -73,14 +73,16 @@ impl VersionInfo {
                 ComponentCapability {
                     name: "mimir".to_string(),
                     status: FeatureStatus::PartiallyImplemented,
-                    summary: "CLI foundation (version, status, config); runtime commands pending"
-                        .to_string(),
+                    summary:
+                        "CLI active (version, status, config, doctor); runtime commands pending"
+                            .to_string(),
                 },
                 ComponentCapability {
                     name: "windows-doctor".to_string(),
-                    status: FeatureStatus::Planned,
-                    summary: "Milestone 2 — Native Windows 11 & WHPX compatibility diagnostics"
-                        .to_string(),
+                    status: FeatureStatus::Implemented,
+                    summary:
+                        "Native Windows 11, virtualization, WHPX, RAM, storage, and GPU checks"
+                            .to_string(),
                 },
                 ComponentCapability {
                     name: "midgard".to_string(),

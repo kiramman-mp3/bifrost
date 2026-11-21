@@ -1,5 +1,7 @@
 //! Mimir (`bifrost`) binary entry point.
 
+#![forbid(unsafe_code)]
+
 mod cli;
 mod commands;
 
@@ -27,8 +29,8 @@ fn main() -> ExitCode {
 
     match commands::execute(&cli) {
         Ok(output) => {
-            println!("{output}");
-            ExitCode::SUCCESS
+            println!("{}", output.stdout);
+            ExitCode::from(output.exit_code)
         }
         Err(err) if err.is_unsupported() => {
             eprintln!("error: {err}");

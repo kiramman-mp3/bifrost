@@ -1,0 +1,26 @@
+[package]
+name = "bifrost-diagnostics"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+description = "Native Windows 11 compatibility and virtualization diagnostics for BIFRÖST (`bifrost doctor`)."
+
+[lints]
+workspace = true
+
+[dependencies]
+bifrost-core = { path = "../bifrost-core" }
+serde.workspace = true
+tracing.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Dxgi",
+    "Win32_Storage_FileSystem",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Registry",
+    "Win32_System_SystemInformation",
+    "Win32_System_Threading",
+] }

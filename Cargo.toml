@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/bifrost-core",
+    "crates/bifrost-diagnostics",
     "crates/mimir",
 ]
 
@@ -12,7 +13,7 @@ rust-version = "1.80"
 authors = ["Johan Rodríguez"]
 
 [workspace.lints.rust]
-unsafe_code = "forbid"
+unsafe_code = "deny"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
@@ -27,3 +28,4 @@ thiserror = "2.0"
 toml = "0.8"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
+windows = "0.58"

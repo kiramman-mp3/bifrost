@@ -9,6 +9,7 @@ use bifrost_core::{
     validate_host_file_path, BifrostConfig, BifrostError, BifrostPaths, Result, RuntimeState,
     VersionInfo,
 };
+use bifrost_diagnostics::{render_human_report, run_doctor, OverallReadiness};
 use serde::Serialize;
 
 use crate::cli::{AppsAction, Cli, Command, ConfigAction, RuntimeAction};
@@ -23,16 +24,31 @@ pub struct StatusReport {
     pub note: String,
 }
 
-/// Dispatches a parsed CLI command and returns formatted stdout output on success.
-pub fn execute(cli: &Cli) -> Result<String> {
+/// Structured output returned by a Mimir CLI command.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommandOutput {
+    pub stdout: String,
+    pub exit_code: u8,
+}
+
+impl CommandOutput {
+    fn ok(stdout: String) -> Self {
+        Self {
+            stdout,
+            exit_code: 0,
+        }
+    }
+}
+
+/// Dispatches a parsed CLI command and returns formatted stdout output and exit code on completion.
+pub fn execute(cli: &Cli) -> Result<CommandOutput> {
     match &cli.command {
-        Command::Version => handle_version(cli.json),
-        Command::Status => handle_status(cli.config.as_ref(), cli.json),
-        Command::Config { action } => handle_config(action, cli.config.as_ref(), cli.json),
-        Command::Doctor => Err(BifrostError::Unsupported {
-            feature: "bifrost doctor".to_string(),
-            planned_milestone: "Planned in Milestone 2 — Windows Compatibility".to_string(),
-        }),
+        Command::Version => handle_version(cli.json).map(CommandOutput::ok),
+        Command::Status => handle_status(cli.config.as_ref(), cli.json).map(CommandOutput::ok),
+        Command::Config { action } => {
+            handle_config(action, cli.config.as_ref(), cli.json).map(CommandOutput::ok)
+        }
+        Command::Doctor { strict } => handle_doctor(cli.config.as_ref(), cli.json, *strict),
         Command::Runtime { action } => {
             let sub = match action {
                 RuntimeAction::Start => "bifrost runtime start",
@@ -208,6 +224,41 @@ fn handle_config(
     }
 }
 
+fn handle_doctor(
+    explicit_config: Option<&PathBuf>,
+    as_json: bool,
+    strict: bool,
+) -> Result<CommandOutput> {
+    let config_path = resolve_config_path(explicit_config)?;
+    let config = if config_path.exists() {
+        BifrostConfig::load_from_file(&config_path)?
+    } else {
+        BifrostConfig::default()
+    };
+
+    let target_storage_path = if let Some(ref custom_dir) = config.runtime.data_dir {
+        custom_dir.clone()
+    } else {
+        BifrostPaths::discover()?.data_dir
+    };
+
+    let report = run_doctor(&config, &target_storage_path);
+    let exit_code = if strict && report.overall == OverallReadiness::NotReady {
+        1
+    } else {
+        0
+    };
+
+    let stdout = if as_json {
+        serde_json::to_string_pretty(&report)
+            .map_err(|err| BifrostError::ConfigSerialize(err.to_string()))?
+    } else {
+        render_human_report(&report)
+    };
+
+    Ok(CommandOutput { stdout, exit_code })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -217,13 +268,14 @@ mod tests {
     #[test]
     fn version_command_returns_json_and_text() {
         let cli = Cli::try_parse_from(["bifrost", "version"]).unwrap();
-        let text = execute(&cli).unwrap();
-        assert!(text.contains("BIFRÖST"));
-        assert!(text.contains("arm64-translation"));
+        let out = execute(&cli).unwrap();
+        assert_eq!(out.exit_code, 0);
+        assert!(out.stdout.contains("BIFRÖST"));
+        assert!(out.stdout.contains("arm64-translation"));
 
         let cli_json = Cli::try_parse_from(["bifrost", "--json", "version"]).unwrap();
         let json = execute(&cli_json).unwrap();
-        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json.stdout).unwrap();
         assert_eq!(parsed["identifier"], "bifrost");
     }
 
@@ -239,13 +291,13 @@ mod tests {
 
         let validate_cli =
             Cli::try_parse_from(["bifrost", "--config", cfg_str, "config", "validate"]).unwrap();
-        let validation_msg = execute(&validate_cli).unwrap();
-        assert!(validation_msg.contains("is valid"));
+        let validation = execute(&validate_cli).unwrap();
+        assert!(validation.stdout.contains("is valid"));
 
         let show_cli =
             Cli::try_parse_from(["bifrost", "--config", cfg_str, "config", "show"]).unwrap();
         let shown = execute(&show_cli).unwrap();
-        assert!(shown.contains("adb_bind_address = \"127.0.0.1\""));
+        assert!(shown.stdout.contains("adb_bind_address = \"127.0.0.1\""));
     }
 
     #[test]
@@ -261,18 +313,27 @@ mod tests {
         ])
         .unwrap();
         let out = execute(&cli).unwrap();
-        let parsed: serde_json::Value = serde_json::from_str(&out).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&out.stdout).unwrap();
         assert_eq!(parsed["runtime_state"], "stopped");
         assert_eq!(parsed["heimdall_connected"], false);
     }
 
     #[test]
-    fn unimplemented_commands_explicitly_return_unsupported() {
-        let doctor = Cli::try_parse_from(["bifrost", "doctor"]).unwrap();
-        assert!(execute(&doctor).unwrap_err().is_unsupported());
+    fn doctor_emits_structured_compatibility_report() {
+        let cli = Cli::try_parse_from(["bifrost", "--json", "doctor"]).unwrap();
+        let out = execute(&cli).unwrap();
+        assert_eq!(out.exit_code, 0);
+        let parsed: serde_json::Value = serde_json::from_str(&out.stdout).unwrap();
+        assert_eq!(parsed["checks"].as_array().unwrap().len(), 7);
+    }
 
+    #[test]
+    fn unimplemented_commands_explicitly_return_unsupported() {
         let start = Cli::try_parse_from(["bifrost", "runtime", "start"]).unwrap();
         assert!(execute(&start).unwrap_err().is_unsupported());
+
+        let devices = Cli::try_parse_from(["bifrost", "devices"]).unwrap();
+        assert!(execute(&devices).unwrap_err().is_unsupported());
 
         let install = Cli::try_parse_from(["bifrost", "install", "app.apk"]).unwrap();
         assert!(execute(&install).unwrap_err().is_unsupported());
