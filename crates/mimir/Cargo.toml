@@ -15,6 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 bifrost-core = { path = "../bifrost-core" }
+bifrost-diagnostics = { path = "../bifrost-diagnostics" }
 clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
