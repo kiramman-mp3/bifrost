@@ -7,10 +7,16 @@
 
 **BIFRÖST** is an open-source, Rust-powered Android subsystem for Windows 11 designed to run real Android applications with deep native desktop integration — *"A Bridge Between Worlds."*
 
-Inspired by Bifröst from Norse mythology and built as a modern, transparent, community-maintained successor to Microsoft's discontinued Windows Subsystem for Android (WSA), BIFRÖST is currently at **Milestone 0 (Research & Feasibility Complete)** and preparing for **Milestone 1 (`bifrost-core` and `mimir` CLI)**.
+Inspired by Bifröst from Norse mythology and built as a modern, transparent, community-maintained successor to Microsoft's discontinued Windows Subsystem for Android (WSA), BIFRÖST is currently at **Milestone 1 (`bifrost-core` & `mimir` CLI Foundation Complete)** and preparing for **Milestone 2 (`bifrost doctor` Windows 11 compatibility diagnostics)**.
 
 > [!TIP]
-> **Quick start (Milestone 0)**: No executable Rust binaries exist yet. Start by reviewing the [Technical Feasibility Report](docs/research/feasibility-report.md), [ARCHITECTURE.md](ARCHITECTURE.md), and the next implementation plan in [ROADMAP.md](ROADMAP.md).
+> **Quick start (Milestone 1)**: Build and inspect the Mimir CLI right away:
+> ```powershell
+> $env:CARGO_TARGET_DIR = "C:\Users\johan\Proyectos\bifrost-target" # required with MinGW ld if repo path contains 'Ö'
+> cargo test --workspace
+> cargo run -p mimir -- version
+> cargo run -p mimir -- status
+> ```
 
 ---
 
@@ -35,7 +41,7 @@ Once implemented across Milestones 1–8, BIFRÖST follows a modular runtime lif
 
 ## 📸 Screenshots
 
-No UI or runtime screenshots exist yet because the project is at **Milestone 0 (Research & Feasibility)**. Screenshots of `mimir` CLI diagnostics, Midgard boot, and `bifrost-ui` will be added to `docs/screenshots/` starting in Milestones 2, 3, and 7.
+No UI screenshots exist yet because the project is at **Milestone 1 (`bifrost-core` & `mimir` CLI)**. Screenshots of `bifrost doctor`, Midgard boot, and `bifrost-ui` will be added to `docs/screenshots/` starting in Milestones 2, 3, and 7.
 
 ---
 
@@ -86,19 +92,38 @@ For detailed component contracts, runtime boot sequences, and security boundarie
 
 ## 📁 Project Structure
 
-Current repository layout (Milestone 0 — no empty placeholder crates created prematurely):
+Current repository layout (Milestone 1 — only active crates are created):
 
 ```bash
 BIFRÖST/
 ├── .gitignore                                     # Rust, Windows, disk images, logs, and secrets exclusions
+├── Cargo.toml                                     # Cargo workspace manifest (unsafe_code = "forbid")
+├── Cargo.lock                                     # Reproducible dependency lockfile
 ├── ARCHITECTURE.md                                # Baseline system architecture, diagrams, and security boundaries
 ├── CHANGELOG.md                                   # Versioned project changelog
 ├── CLAUDE.md                                      # Engineering context, Git workflow, and documentation rules
 ├── CONTRIBUTING.md                                # Contribution guidelines, Git Flow, and Rust standards
 ├── README.md                                      # Project overview and documentation entry point
-├── ROADMAP.md                                     # Incremental milestones (M0 to M8) and M1 vertical slice spec
+├── ROADMAP.md                                     # Incremental milestones (M0 to M8)
 ├── SECURITY.md                                    # Mandatory security invariants and vulnerability disclosure policy
 ├── master_prompt.md                               # Master engineering specification
+├── crates/
+│   ├── bifrost-core/                              # Shared domain models, state machine, TOML config, path security, logging
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── capabilities.rs                    # FeatureStatus and VersionInfo models
+│   │       ├── config.rs                          # Versioned TOML config & security/bounds validation
+│   │       ├── error.rs                           # Structured BifrostError taxonomy
+│   │       ├── logging.rs                         # Tracing subscriber setup
+│   │       ├── paths.rs                           # Directory traversal guards & per-user path layout
+│   │       └── state.rs                           # Deterministic RuntimeStateMachine
+│   └── mimir/                                     # Administrative CLI (`bifrost` binary)
+│       ├── Cargo.toml
+│       └── src/
+│           ├── main.rs                            # Entry point & exit codes (0 ok, 1 error, 2 unsupported)
+│           ├── cli.rs                             # Clap CLI command and flag definitions
+│           └── commands.rs                        # Command handlers & explicit unsupported stubs
 └── docs/
     ├── TECHNICAL_DECISIONS.md                     # Architecture Decision Record (ADR) index
     ├── decisions/
@@ -122,9 +147,9 @@ BIFRÖST/
 - **GPU**: DirectX 12 / Vulkan-capable GPU (Intel Arc, AMD Radeon, or NVIDIA GeForce) for `gfxstream` hardware acceleration.
 
 ### Development Host (Milestone 1+)
-- `git` (verified `2.56.1` on current host).
-- `rustup` with stable `x86_64-pc-windows-msvc` toolchain, `rustfmt`, and `clippy` *(pending installation before Milestone 1)*.
-- Visual Studio C++ Build Tools (MSVC linker + Windows 11 SDK) *(pending installation before Milestone 1)*.
+- `git` (`2.56.1` verified on host).
+- `rustup` (`1.29.3`) with `rustc 1.100.0`, `cargo 1.100.0`, `rustfmt`, and `clippy`.
+- Linker toolchain: either **WinLibs MinGW-w64 UCRT** (`stable-x86_64-pc-windows-gnu`, portable user-space install) or **Visual Studio 2022 C++ Build Tools** (`stable-x86_64-pc-windows-msvc`, requires elevated installer).
 - *(Milestone 3+)* `qemu-system-x86_64` (or `crosvm` Windows build) and Android `adb` platform-tools.
 - *(Building custom AOSP images)* Dedicated Linux x86_64 build host with 64 GB RAM and 300–400 GB free NVMe SSD.
 
@@ -138,10 +163,14 @@ BIFRÖST/
    cd BIFRÖST
    git checkout develop
    ```
-2. **Install Rust and MSVC Build Tools (required before Milestone 1)**:
+2. **Install Rust and a Windows C/linker toolchain**:
    ```powershell
    winget install Rustlang.Rustup
-   winget install Microsoft.VisualStudio.2022.BuildTools
+   # Option A (no admin required — GNU UCRT toolchain):
+   winget install BrechtSanders.WinLibs.POSIX.UCRT
+   rustup default stable-x86_64-pc-windows-gnu
+   # Option B (elevated PowerShell — MSVC toolchain):
+   # winget install Microsoft.VisualStudio.2022.BuildTools
    ```
 3. **Enable Windows Hypervisor Platform (required before Milestone 3, elevated PowerShell)**:
    ```powershell
@@ -153,21 +182,32 @@ BIFRÖST/
 
 ## 🚀 Usage and Execution
 
-### Current Stage (Milestone 0 — Documentation & Architecture)
-There is no compiled Cargo workspace yet. All engineering artifacts are located in Markdown under the repository root and `docs/`.
+### Development & Local Execution (Milestone 1)
+When building with MinGW (`stable-x86_64-pc-windows-gnu`) inside a folder containing non-ASCII characters (`BIFRÖST`), point `CARGO_TARGET_DIR` to an ASCII path:
 
-### Planned CLI & Verification Commands (Milestone 1+)
+```powershell
+$env:CARGO_TARGET_DIR = "C:\Users\johan\Proyectos\bifrost-target"
+cargo test --workspace
+cargo run -p mimir -- version
+cargo run -p mimir -- config init
+cargo run -p mimir -- config validate
+cargo run -p mimir -- status
+```
+
+### CLI & Verification Commands
 
 | Command | Description | Status |
 |---|---|---|
-| `cargo fmt --all -- --check` | Verify Rust code formatting across workspace | Planned (M1) |
-| `cargo clippy --workspace --all-targets -- -D warnings` | Run strict Clippy static analysis | Planned (M1) |
-| `cargo test --workspace` | Execute unit and integration test suites | Planned (M1) |
-| `bifrost version` | Display BIFRÖST version and host target metadata | Planned (M1) |
-| `bifrost config validate` | Validate TOML runtime configuration and safe paths | Planned (M1) |
+| `cargo fmt --all -- --check` | Verify Rust code formatting across workspace | **Implemented** |
+| `cargo clippy --workspace --all-targets -- -D warnings` | Run strict Clippy static analysis | **Implemented** |
+| `cargo test --workspace` | Execute unit tests (`12` in `bifrost-core`, `5` in `mimir`) | **Implemented** |
+| `bifrost version [--json]` | Display BIFRÖST version, host target, and capability maturity | **Implemented** |
+| `bifrost status [--json]` | Display honest runtime and Heimdall connection status | **Implemented** |
+| `bifrost config init \| show \| validate` | Initialize, inspect, and validate `bifrost.toml` | **Implemented** |
 | `bifrost doctor` | Inspect Windows 11 version, WHPX, RAM, disk, and GPU readiness | Planned (M2) |
-| `bifrost runtime start` | Start Midgard Android VM under Heimdall supervision | Planned (M3–M4) |
-| `bifrost install <app.apk>` | Validate and install an APK via Valhalla | Planned (M5) |
+| `bifrost runtime start \| stop \| restart` | Manage Midgard Android VM lifecycle | Planned (M3–M4) |
+| `bifrost devices` / `bifrost logs` | List Bridge/ADB devices and inspect runtime logs | Planned (M4) |
+| `bifrost install <app.apk>` / `uninstall` / `apps list` | Validate and manage APKs via Valhalla | Planned (M5) |
 
 ---
 
@@ -196,8 +236,9 @@ Distribution packaging is planned for **Milestone 8**:
 | Area | Status | Notes |
 |---|---|---|
 | Feasibility research, architecture, ADRs | **Implemented** | Completed in Milestone 0 |
-| `bifrost-core` & `mimir` CLI foundation | **Planned** | Next vertical slice (Milestone 1) |
-| Windows 11 compatibility diagnostics (`bifrost doctor`) | **Planned** | Milestone 2 |
+| `bifrost-core` (state, config, paths, errors, logging) | **Implemented** | Completed in Milestone 1 (`12` unit tests passing) |
+| `mimir` CLI (`bifrost version`, `status`, `config`) | **Partially implemented** | Core commands live (`5` unit tests); runtime/app commands return `Unsupported` |
+| Windows 11 compatibility diagnostics (`bifrost doctor`) | **Planned** | Next vertical slice (Milestone 2) |
 | Midgard Android `x86_64` VM prototype | **Planned** | Milestone 3 |
 | Heimdall daemon, authenticated IPC, loopback ADB | **Planned** | Milestone 4 |
 | Valhalla real APK management | **Planned** | Milestone 5 |
@@ -209,7 +250,7 @@ Distribution packaging is planned for **Milestone 8**:
 ## 🗺️ Roadmap
 
 - [x] **Milestone 0**: Research, host baseline inspection, feasibility report, architecture, and ADRs.
-- [ ] **Milestone 1**: Cargo workspace, `bifrost-core`, and `mimir` CLI foundation.
+- [x] **Milestone 1**: Cargo workspace, `bifrost-core`, and `mimir` CLI foundation.
 - [ ] **Milestone 2**: Native Windows 11 compatibility diagnostics (`bifrost doctor`).
 - [ ] **Milestone 3**: Minimal functional Midgard Android `x86_64` VM prototype on WHPX.
 - [ ] **Milestone 4**: Heimdall supervisor daemon, authenticated local IPC, and Bridge (ADB / `vsock`).
@@ -226,7 +267,7 @@ See [ROADMAP.md](ROADMAP.md) for detailed milestone exit criteria.
 
 | Contributor | Commits |
 |---|---:|
-| Johan Rodríguez | 7 |
+| Johan Rodríguez | 13 |
 
 ---
 
