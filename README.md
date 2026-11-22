@@ -200,13 +200,14 @@ BIFRÖST/
 │   ├── bifrost-network/                           # Unprivileged loopback-only TCP port forwarding
 │   │   ├── Cargo.toml
 │   │   └── src/lib.rs                             # #![forbid(unsafe_code)]
-│   ├── valhalla/                                  # Real Android application & APK management (`pm`, `am`, `dumpsys`)
+│   ├── valhalla/                                  # Real Android application & APK management (`pm`, `am`, `dumpsys`, Windows shortcuts)
 │   │   ├── Cargo.toml
 │   │   └── src/
 │   │       ├── lib.rs                             # #![forbid(unsafe_code)]
-│   │       ├── apk.rs                             # Pure-Rust APK ZIP, Zip-Slip, SHA-256 & ADR-0004 ABI inspection
+│   │       ├── apk.rs                             # Pure-Rust APK ZIP, AXML package, PNG->ICO icon, SHA-256 & ADR-0004 ABI inspection
 │   │       ├── package.rs                         # Strict package ID validation & pm/dumpsys parsers
-│   │       └── manager.rs                         # ValhallaManager (list, info, install, uninstall, launch, stop)
+│   │       ├── shortcuts.rs                       # Automatic Windows Desktop & Start Menu `.lnk` + `.ico` shortcut manager
+│   │       └── manager.rs                         # ValhallaManager (list, info, install+shortcuts, uninstall+cleanup, launch, stop)
 │   ├── heimdall/                                  # Background supervisor daemon (`heimdall` binary)
 │   │   ├── Cargo.toml
 │   │   └── src/
@@ -331,8 +332,8 @@ cargo build --workspace
 | `bifrost runtime start \| stop \| restart \| verify` | Verify image SHA-256 digests and manage Midgard WHPX VM lifecycle | **Implemented** |
 | `bifrost logs [--tail N]` | Inspect Midgard serial console and VMM stderr logs | **Implemented** |
 | `bifrost devices [--json]` | List connected Android devices via Heimdall Bridge / loopback ADB | **Implemented** |
-| `bifrost apps list \| info \| launch [--window] \| stop` | Discover, inspect, launch (including per-app `VirtualDisplay` window), and stop Android packages | **Implemented** |
-| `bifrost install <app.apk> [--inspect-only]` | Inspect ZIP/SHA-256/`x86_64` ABI and install APKs via Android `pm` | **Implemented** |
+| `bifrost apps list \| info \| launch [--window] \| stop \| shortcut` | Discover, inspect, launch (WSA-style flex window), stop, and manage Desktop/Start Menu shortcuts | **Implemented** |
+| `bifrost install <app.apk> [--inspect-only]` | Inspect ZIP/AXML/SHA-256/`x86_64` ABI, install APK via Android `pm`, and create Desktop + Start Menu icons | **Implemented** |
 | `bifrost uninstall <pkg> [--keep-data]` | Uninstall an Android package via Android `pm` | **Implemented** |
 | `bifrost share list \| push \| pull` | Manage scoped Windows ↔ Android shared files (`/sdcard/BifrostShare`) | **Implemented** |
 | `bifrost clipboard get \| sync-to-android` | Read native Win32 Unicode clipboard and sync text to Android | **Implemented** |
@@ -403,7 +404,7 @@ See [ROADMAP.md](ROADMAP.md) for detailed milestone exit criteria.
 
 | Contributor | Commits |
 |---|---:|
-| Johan Rodríguez | 87 |
+| Johan Rodríguez | 91 |
 
 ---
 

@@ -1,17 +1,19 @@
 //! Valhalla real Android package manager orchestrator backed by `bifrost-bridge`.
 
+use std::collections::BTreeSet;
 use std::path::Path;
 
 use bifrost_bridge::AdbClient;
 use bifrost_core::{BifrostError, Result};
 use serde::{Deserialize, Serialize};
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::apk::{inspect_apk, ApkInspection};
 use crate::package::{
     parse_dumpsys_package, parse_pm_list_packages, parse_resolved_activity, validate_package_name,
     InstalledPackage, PackageDetails,
 };
+use crate::shortcuts::{ShortcutManager, ShortcutRecord};
 
 /// Result returned after a real APK installation via Android `PackageManager`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -19,6 +21,10 @@ pub struct InstallOutcome {
     pub serial: String,
     pub inspection: ApkInspection,
     pub pm_output: String,
+    #[serde(default)]
+    pub package_name: Option<String>,
+    #[serde(default)]
+    pub shortcuts: Option<ShortcutRecord>,
 }
 
 /// Result returned after launching an Android application.
@@ -56,12 +62,24 @@ impl ValhallaManager {
         if let Some(serial) = explicit {
             return Ok(serial.to_string());
         }
-        let online: Vec<_> = self
+        let mut online: Vec<_> = self
             .adb
             .list_devices()?
             .into_iter()
             .filter(|d| d.state == "device")
             .collect();
+
+        // If no device is currently online, opportunistically reconnect to Midgard's
+        // loopback ADB endpoint so Desktop/Start Menu app shortcuts work seamlessly.
+        if online.is_empty() && self.adb.connect_loopback("127.0.0.1:5555").is_ok() {
+            online = self
+                .adb
+                .list_devices()
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|d| d.state == "device")
+                .collect();
+        }
 
         match online.len() {
             0 => Err(BifrostError::Package(
@@ -143,6 +161,16 @@ impl ValhallaManager {
         }
 
         let target = self.resolve_target_serial(serial)?;
+        let before_pkgs: BTreeSet<String> = if inspection.package_name.is_none() {
+            self.list_packages(Some(&target), true)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|p| p.package_name)
+                .collect()
+        } else {
+            BTreeSet::new()
+        };
+
         let apk_str = inspection.path.to_string_lossy().to_string();
         info!(
             serial = %target,
@@ -161,14 +189,42 @@ impl ValhallaManager {
             )));
         }
 
+        let resolved_package = inspection.package_name.clone().or_else(|| {
+            self.list_packages(Some(&target), true)
+                .ok()?
+                .into_iter()
+                .map(|p| p.package_name)
+                .find(|pkg| !before_pkgs.contains(pkg))
+        });
+
+        let shortcuts = if let Some(ref pkg) = resolved_package {
+            match ShortcutManager::discover()
+                .and_then(|mgr| mgr.create_for_app(pkg, None, Some(&inspection.path)))
+            {
+                Ok(rec) => Some(rec),
+                Err(err) => {
+                    warn!(
+                        package = %pkg,
+                        error = %err,
+                        "APK installed on Android, but Windows shortcut creation failed"
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         Ok(InstallOutcome {
             serial: target,
             inspection,
             pm_output: pm_output.trim().to_string(),
+            package_name: resolved_package,
+            shortcuts,
         })
     }
 
-    /// Uninstalls an Android package via `adb uninstall`.
+    /// Uninstalls an Android package via `adb uninstall` and removes its Windows shortcuts.
     pub fn uninstall_package(
         &self,
         serial: Option<&str>,
@@ -196,6 +252,9 @@ impl ValhallaManager {
                 "failed to uninstall '{package}': {}",
                 out.trim()
             )));
+        }
+        if let Ok(mgr) = ShortcutManager::discover() {
+            let _ = mgr.remove_for_app(package);
         }
         Ok(out.trim().to_string())
     }
