@@ -17,7 +17,8 @@ use crate::cli::Cli;
 /// Exit code reserved for explicitly unsupported (planned) commands.
 const EXIT_UNSUPPORTED: u8 = 2;
 
-fn main() -> ExitCode {
+#[tokio::main]
+async fn main() -> ExitCode {
     let cli = Cli::parse();
 
     let logging_cfg = LoggingConfig {
@@ -27,7 +28,7 @@ fn main() -> ExitCode {
     init_logging(&logging_cfg);
     debug!(command = ?cli.command, "dispatching mimir command");
 
-    match commands::execute(&cli) {
+    match commands::execute(&cli).await {
         Ok(output) => {
             println!("{}", output.stdout);
             ExitCode::from(output.exit_code)

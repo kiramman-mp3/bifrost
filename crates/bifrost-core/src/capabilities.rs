@@ -62,7 +62,7 @@ impl VersionInfo {
             version: VERSION.to_string(),
             target_os: std::env::consts::OS.to_string(),
             target_arch: std::env::consts::ARCH.to_string(),
-            current_milestone: "Milestone 3 — Midgard Prototype (WHPX VM, Storage & Logs)"
+            current_milestone: "Milestone 4 — Heimdall Daemon & Bridge (Authenticated IPC & ADB)"
                 .to_string(),
             capabilities: vec![
                 ComponentCapability {
@@ -75,7 +75,7 @@ impl VersionInfo {
                     name: "mimir".to_string(),
                     status: FeatureStatus::PartiallyImplemented,
                     summary:
-                        "CLI active (version, status, config, doctor, runtime, logs); Bridge/Valhalla pending"
+                        "CLI active (version, status, config, doctor, runtime, logs, devices, daemon); Valhalla pending"
                             .to_string(),
                 },
                 ComponentCapability {
@@ -89,14 +89,15 @@ impl VersionInfo {
                     name: "midgard".to_string(),
                     status: FeatureStatus::Experimental,
                     summary:
-                        "Verified image manifests, userdata disks, QEMU-WHPX launch, QMP shutdown & logs"
+                        "Verified image manifests, userdata disks, QEMU-WHPX launch, QMP shutdown & logs (live boot pending QEMU)"
                             .to_string(),
                 },
                 ComponentCapability {
                     name: "heimdall-bridge".to_string(),
-                    status: FeatureStatus::Planned,
-                    summary: "Milestone 4 — Supervisor daemon, authenticated IPC, loopback ADB"
-                        .to_string(),
+                    status: FeatureStatus::Implemented,
+                    summary:
+                        "Heimdall daemon, owner-DACL Named Pipe IPC with auth token, health monitor & loopback ADB"
+                            .to_string(),
                 },
                 ComponentCapability {
                     name: "valhalla".to_string(),

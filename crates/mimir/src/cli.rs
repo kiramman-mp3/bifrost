@@ -79,8 +79,14 @@ pub enum Command {
         action: RuntimeAction,
     },
 
-    /// List connected Android devices over Bridge/ADB (Planned: Milestone 4).
+    /// List connected Android devices over Bridge/ADB.
     Devices,
+
+    /// Inspect or stop the Heimdall background supervisor daemon over authenticated IPC.
+    Daemon {
+        #[command(subcommand)]
+        action: DaemonAction,
+    },
 
     /// Manage installed Android applications via Valhalla (Planned: Milestone 5).
     Apps {
@@ -172,4 +178,12 @@ pub enum RuntimeAction {
 pub enum AppsAction {
     /// List installed Android applications.
     List,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum DaemonAction {
+    /// Query live Heimdall daemon health and IPC status.
+    Status,
+    /// Request a graceful Heimdall daemon shutdown over authenticated IPC.
+    Stop,
 }
