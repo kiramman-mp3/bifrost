@@ -82,6 +82,17 @@ pub enum BifrostError {
     /// Authenticated local IPC transport or protocol error.
     #[error("IPC error: {0}")]
     Ipc(String),
+
+    /// APK validation, ABI compatibility, or Android package management error.
+    #[error("package error: {0}")]
+    Package(String),
+
+    /// APK contains only unsupported native ABIs (e.g., ARM64 without x86_64; ADR-0004).
+    #[error("unsupported APK ABI for '{path}': detected [{detected_abis}] without x86_64 native libraries (ARM64 translation is unsupported)")]
+    UnsupportedAbi {
+        path: PathBuf,
+        detected_abis: String,
+    },
 }
 
 impl BifrostError {

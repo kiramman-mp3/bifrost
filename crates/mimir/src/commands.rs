@@ -15,6 +15,8 @@ use bifrost_core::{
 use bifrost_diagnostics::{render_human_report, run_doctor, OverallReadiness};
 use bifrost_runtime::{MidgardRuntime, RuntimeLogs, RuntimeRecord, StartOptions};
 use serde::Serialize;
+use valhalla::manager::{InstallOutcome, LaunchOutcome};
+use valhalla::{inspect_apk, AbiCompatibility, InstalledPackage, PackageDetails, ValhallaManager};
 
 use crate::cli::{AppsAction, Cli, Command, ConfigAction, DaemonAction, RuntimeAction};
 
@@ -66,34 +68,35 @@ pub async fn execute(cli: &Cli) -> Result<CommandOutput> {
         Command::Daemon { action } => handle_daemon(action, cli.config.as_ref(), cli.json)
             .await
             .map(CommandOutput::ok),
-        Command::Apps { action } => {
-            let sub = match action {
-                AppsAction::List => "bifrost apps list",
-            };
-            Err(BifrostError::Unsupported {
-                feature: sub.to_string(),
-                planned_milestone: "Planned in Milestone 5 — Valhalla".to_string(),
-            })
-        }
-        Command::Install { apk } => {
-            validate_host_file_path(apk, Some("apk"))?;
-            Err(BifrostError::Unsupported {
-                feature: "bifrost install".to_string(),
-                planned_milestone: "Planned in Milestone 5 — Valhalla".to_string(),
-            })
-        }
-        Command::Uninstall { package } => {
-            if package.trim().is_empty() {
-                return Err(BifrostError::ConfigValidation {
-                    field: "package".to_string(),
-                    reason: "package name must not be empty".to_string(),
-                });
-            }
-            Err(BifrostError::Unsupported {
-                feature: "bifrost uninstall".to_string(),
-                planned_milestone: "Planned in Milestone 5 — Valhalla".to_string(),
-            })
-        }
+        Command::Apps { action } => handle_apps(action, cli.config.as_ref(), cli.json)
+            .await
+            .map(CommandOutput::ok),
+        Command::Install {
+            apk,
+            serial,
+            inspect_only,
+        } => handle_install(
+            apk,
+            serial.as_deref(),
+            *inspect_only,
+            cli.config.as_ref(),
+            cli.json,
+        )
+        .await
+        .map(CommandOutput::ok),
+        Command::Uninstall {
+            package,
+            serial,
+            keep_data,
+        } => handle_uninstall(
+            package,
+            serial.as_deref(),
+            *keep_data,
+            cli.config.as_ref(),
+            cli.json,
+        )
+        .await
+        .map(CommandOutput::ok),
         Command::Logs { tail } => handle_logs(cli.config.as_ref(), *tail, cli.json)
             .await
             .map(CommandOutput::ok),
@@ -543,6 +546,211 @@ fn handle_config(
     }
 }
 
+async fn handle_apps(
+    action: &AppsAction,
+    explicit_config: Option<&PathBuf>,
+    as_json: bool,
+) -> Result<String> {
+    let (_, _, _, paths) = load_effective_config_and_paths(explicit_config)?;
+    let client = heimdall_client_for(&paths);
+    let heimdall_up = client.health().await.is_ok();
+    let valhalla = ValhallaManager::new();
+
+    match action {
+        AppsAction::List {
+            third_party,
+            serial,
+        } => {
+            let packages = if heimdall_up {
+                client
+                    .send::<Vec<InstalledPackage>>(IpcRequest::AppsList {
+                        serial: serial.clone(),
+                        third_party_only: *third_party,
+                    })
+                    .await?
+            } else {
+                valhalla.list_packages(serial.as_deref(), *third_party)?
+            };
+
+            if as_json {
+                return serde_json::to_string_pretty(&packages)
+                    .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
+            }
+            if packages.is_empty() {
+                return Ok("No installed Android packages found.".to_string());
+            }
+            let mut out = format!("Installed Android Packages ({}):\n", packages.len());
+            for pkg in &packages {
+                let kind = if pkg.is_system { "system" } else { "user" };
+                out.push_str(&format!("  - {:<40} [{}]\n", pkg.package_name, kind));
+            }
+            Ok(out.trim_end().to_string())
+        }
+        AppsAction::Info { package, serial } => {
+            let details = if heimdall_up {
+                client
+                    .send::<PackageDetails>(IpcRequest::AppInfo {
+                        serial: serial.clone(),
+                        package: package.clone(),
+                    })
+                    .await?
+            } else {
+                valhalla.package_info(serial.as_deref(), package)?
+            };
+
+            if as_json {
+                return serde_json::to_string_pretty(&details)
+                    .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
+            }
+            Ok(format!(
+                "Package:          {}\nVersion Name:     {}\nVersion Code:     {}\nPrimary CPU ABI:  {}\nLauncher:         {}\nCode Path:        {}",
+                details.package_name,
+                details.version_name.as_deref().unwrap_or("unknown"),
+                details.version_code.as_deref().unwrap_or("unknown"),
+                details.primary_cpu_abi.as_deref().unwrap_or("pure ART / none"),
+                details.launcher_component.as_deref().unwrap_or("none"),
+                details.code_path.as_deref().unwrap_or("unknown")
+            ))
+        }
+        AppsAction::Launch { package, serial } => {
+            let outcome = if heimdall_up {
+                client
+                    .send::<LaunchOutcome>(IpcRequest::AppLaunch {
+                        serial: serial.clone(),
+                        package: package.clone(),
+                    })
+                    .await?
+            } else {
+                valhalla.launch_app(serial.as_deref(), package)?
+            };
+
+            if as_json {
+                return serde_json::to_string_pretty(&outcome)
+                    .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
+            }
+            Ok(format!(
+                "Launched '{}' on '{}' (component: {}).",
+                outcome.package_name,
+                outcome.serial,
+                outcome.component.as_deref().unwrap_or("launcher intent")
+            ))
+        }
+        AppsAction::Stop { package, serial } => {
+            if heimdall_up {
+                let _: serde_json::Value = client
+                    .send(IpcRequest::AppStop {
+                        serial: serial.clone(),
+                        package: package.clone(),
+                    })
+                    .await?;
+            } else {
+                valhalla.force_stop(serial.as_deref(), package)?;
+            }
+
+            if as_json {
+                let payload = serde_json::json!({ "package": package, "stopped": true });
+                return serde_json::to_string_pretty(&payload)
+                    .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
+            }
+            Ok(format!("Force-stopped Android package '{package}'."))
+        }
+    }
+}
+
+async fn handle_install(
+    apk: &PathBuf,
+    serial: Option<&str>,
+    inspect_only: bool,
+    explicit_config: Option<&PathBuf>,
+    as_json: bool,
+) -> Result<String> {
+    if inspect_only {
+        let info = inspect_apk(apk)?;
+        if as_json {
+            return serde_json::to_string_pretty(&info)
+                .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
+        }
+        let abi_summary = match &info.abi_compatibility {
+            AbiCompatibility::PureArt => "SUPPORTED (Pure ART / DEX — no native .so libraries)".to_string(),
+            AbiCompatibility::NativeX86_64 { abis } => {
+                format!("SUPPORTED (x86_64 native libs present; all ABIs: {})", abis.join(", "))
+            }
+            AbiCompatibility::UnsupportedNativeAbi { abis } => format!(
+                "UNSUPPORTED (only [{}] native libs; ARM64 translation is unsupported per ADR-0004)",
+                abis.join(", ")
+            ),
+        };
+        return Ok(format!(
+            "APK Path:          {}\nSize:              {} bytes\nSHA-256:           {}\nZIP Entries:       {}\nAndroidManifest:   {}\nDEX Bytecode:      {}\nABI Compatibility: {}",
+            info.path.display(),
+            info.size_bytes,
+            info.sha256,
+            info.entry_count,
+            info.has_android_manifest,
+            info.has_dex,
+            abi_summary
+        ));
+    }
+
+    let (_, _, _, paths) = load_effective_config_and_paths(explicit_config)?;
+    let client = heimdall_client_for(&paths);
+    let outcome = if client.health().await.is_ok() {
+        client
+            .send::<InstallOutcome>(IpcRequest::AppInstall {
+                serial: serial.map(ToOwned::to_owned),
+                apk_path: apk.clone(),
+            })
+            .await?
+    } else {
+        ValhallaManager::new().install_apk(serial, apk)?
+    };
+
+    if as_json {
+        return serde_json::to_string_pretty(&outcome)
+            .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
+    }
+    Ok(format!(
+        "Installed '{}' onto '{}' (SHA-256: {}).",
+        outcome.inspection.path.display(),
+        outcome.serial,
+        outcome.inspection.sha256
+    ))
+}
+
+async fn handle_uninstall(
+    package: &str,
+    serial: Option<&str>,
+    keep_data: bool,
+    explicit_config: Option<&PathBuf>,
+    as_json: bool,
+) -> Result<String> {
+    let (_, _, _, paths) = load_effective_config_and_paths(explicit_config)?;
+    let client = heimdall_client_for(&paths);
+    let output = if client.health().await.is_ok() {
+        let resp: serde_json::Value = client
+            .send(IpcRequest::AppUninstall {
+                serial: serial.map(ToOwned::to_owned),
+                package: package.to_string(),
+                keep_data,
+            })
+            .await?;
+        resp["output"].as_str().unwrap_or("Success").to_string()
+    } else {
+        ValhallaManager::new().uninstall_package(serial, package, keep_data)?
+    };
+
+    if as_json {
+        let payload = serde_json::json!({
+            "package": package,
+            "keep_data": keep_data,
+            "output": output,
+        });
+        return serde_json::to_string_pretty(&payload)
+            .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
+    }
+    Ok(format!("Uninstalled '{package}' ({output})."))
+}
+
 fn handle_doctor(
     explicit_config: Option<&PathBuf>,
     as_json: bool,
@@ -640,18 +848,46 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn unimplemented_commands_explicitly_return_unsupported() {
-        let apps = Cli::try_parse_from(["bifrost", "apps", "list"]).unwrap();
-        assert!(execute(&apps).await.unwrap_err().is_unsupported());
-
-        let install = Cli::try_parse_from(["bifrost", "install", "app.apk"]).unwrap();
-        assert!(execute(&install).await.unwrap_err().is_unsupported());
-    }
-
-    #[tokio::test]
-    async fn install_rejects_path_traversal_before_unsupported() {
+    async fn install_rejects_path_traversal_and_invalid_package_on_uninstall() {
         let bad = Cli::try_parse_from(["bifrost", "install", "../evil.apk"]).unwrap();
         let err = execute(&bad).await.unwrap_err();
         assert!(matches!(err, BifrostError::UnsafePath { .. }));
+
+        let bad_pkg = Cli::try_parse_from(["bifrost", "uninstall", "com.bad;whoami"]).unwrap();
+        let pkg_err = execute(&bad_pkg).await.unwrap_err();
+        assert!(matches!(pkg_err, BifrostError::Package(_)));
+    }
+
+    #[tokio::test]
+    async fn install_inspect_only_reports_pure_art_apk_offline() {
+        use std::io::Write;
+        let tmp = TempDir::new().unwrap();
+        let apk_path = tmp.path().join("sample.apk");
+        let file = std::fs::File::create(&apk_path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        writer
+            .start_file(
+                "AndroidManifest.xml",
+                zip::write::SimpleFileOptions::default(),
+            )
+            .unwrap();
+        writer.write_all(b"xml").unwrap();
+        writer
+            .start_file("classes.dex", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(b"dex").unwrap();
+        writer.finish().unwrap();
+
+        let cli = Cli::try_parse_from([
+            "bifrost",
+            "--json",
+            "install",
+            "--inspect-only",
+            apk_path.to_str().unwrap(),
+        ])
+        .unwrap();
+        let out = execute(&cli).await.unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&out.stdout).unwrap();
+        assert_eq!(parsed["abi_compatibility"]["kind"], "pure_art");
     }
 }

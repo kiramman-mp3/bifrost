@@ -203,6 +203,43 @@ async fn dispatch_request(
             .adb
             .list_devices()
             .and_then(|d| serde_json::to_value(d).map_err(|e| BifrostError::Ipc(e.to_string()))),
+        IpcRequest::AppsList {
+            serial,
+            third_party_only,
+        } => {
+            let mgr = valhalla::ValhallaManager::with_adb(state.adb.clone());
+            mgr.list_packages(serial.as_deref(), *third_party_only)
+                .and_then(|p| serde_json::to_value(p).map_err(|e| BifrostError::Ipc(e.to_string())))
+        }
+        IpcRequest::AppInfo { serial, package } => {
+            let mgr = valhalla::ValhallaManager::with_adb(state.adb.clone());
+            mgr.package_info(serial.as_deref(), package)
+                .and_then(|p| serde_json::to_value(p).map_err(|e| BifrostError::Ipc(e.to_string())))
+        }
+        IpcRequest::AppInstall { serial, apk_path } => {
+            let mgr = valhalla::ValhallaManager::with_adb(state.adb.clone());
+            mgr.install_apk(serial.as_deref(), apk_path)
+                .and_then(|o| serde_json::to_value(o).map_err(|e| BifrostError::Ipc(e.to_string())))
+        }
+        IpcRequest::AppUninstall {
+            serial,
+            package,
+            keep_data,
+        } => {
+            let mgr = valhalla::ValhallaManager::with_adb(state.adb.clone());
+            mgr.uninstall_package(serial.as_deref(), package, *keep_data)
+                .map(|msg| serde_json::json!({ "package": package, "output": msg }))
+        }
+        IpcRequest::AppLaunch { serial, package } => {
+            let mgr = valhalla::ValhallaManager::with_adb(state.adb.clone());
+            mgr.launch_app(serial.as_deref(), package)
+                .and_then(|o| serde_json::to_value(o).map_err(|e| BifrostError::Ipc(e.to_string())))
+        }
+        IpcRequest::AppStop { serial, package } => {
+            let mgr = valhalla::ValhallaManager::with_adb(state.adb.clone());
+            mgr.force_stop(serial.as_deref(), package)
+                .map(|()| serde_json::json!({ "package": package, "stopped": true }))
+        }
         IpcRequest::DaemonShutdown => {
             let _ = shutdown_tx.send(true);
             Ok(serde_json::json!({ "shutting_down": true }))
