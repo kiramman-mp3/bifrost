@@ -7,6 +7,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Added
+- **Milestone 7 — Desktop Application (`apps/bifrost-ui`)**:
+  - Built `apps/bifrost-ui/src-tauri` (`#![forbid(unsafe_code)]`) using Tauri 2 with a pure-Rust `service.rs` backend integrating Heimdall IPC, Midgard runtime, Valhalla APK/package management, native `bifrost-diagnostics`, shared directories, Win32 clipboard, processes, and networking (`2` service tests).
+  - Built `apps/bifrost-ui/ui/` with Windows 11 Fluent Design 2 styling, Dark/Light themes, accessible navigation, strict CSP, and all 5 required sections (Dashboard, Application Manager, Runtime Configuration, Diagnostics, Settings).
+  - Added ASCII `OUT_DIR` icon staging in `build.rs` for GNU `windres` compatibility and verified `bifrost-ui.exe` build with `50` passing tests across 12 workspace crates.
 - **Milestone 6 — Deep Windows Integration (Partially Implemented)**:
   - Extended `crates/bifrost-bridge` with scoped host ↔ Android shared directories (`files.rs`, anti-traversal + guest path validation), native Win32 Unicode clipboard integration (`clipboard.rs`, audited Win32 `CF_UNICODETEXT` bounded to 1 MiB), and Android notification parser + XML-escaped Windows 11 Toast XML builder (`notifications.rs`) (`5` new unit tests).
   - Created `crates/bifrost-process` (`#![forbid(unsafe_code)]`, Android `ps -A` parser sorted by RSS) and `crates/bifrost-network` (`#![forbid(unsafe_code)]`, unprivileged loopback-only TCP port-forwarding rules) (`2` new unit tests).

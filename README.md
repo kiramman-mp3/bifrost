@@ -7,16 +7,15 @@
 
 **BIFRÖST** is an open-source, Rust-powered Android subsystem for Windows 11 designed to run real Android applications with deep native desktop integration — *"A Bridge Between Worlds."*
 
-Inspired by Bifröst from Norse mythology and built as a modern, transparent, community-maintained successor to Microsoft's discontinued Windows Subsystem for Android (WSA), BIFRÖST is currently at **Milestone 6 (Windows Integration — Shared Directories, Win32 Clipboard, Notifications, Processes & Loopback Networking Implemented)** and preparing for **Milestone 7 (`bifrost-ui` Desktop Application)**.
+Inspired by Bifröst from Norse mythology and built as a modern, transparent, community-maintained successor to Microsoft's discontinued Windows Subsystem for Android (WSA), BIFRÖST is currently at **Milestone 7 (`apps/bifrost-ui` Windows 11 Fluent Design Desktop App Complete)** and preparing for **Milestone 8 (Distribution, Verified Updates & Recovery)**.
 
 > [!TIP]
-> **Quick start (Milestone 6)**: Run the workspace test suite, check Windows 11 WHPX readiness, or inspect shared files and clipboard integration:
+> **Quick start (Milestone 7)**: Run the full test suite, run diagnostics, or launch the Windows 11 desktop app:
 > ```powershell
 > $env:CARGO_TARGET_DIR = "C:\Users\johan\Proyectos\bifrost-target" # required with MinGW ld if repo path contains 'Ö'
 > cargo test --workspace
 > cargo run -p mimir -- doctor
-> cargo run -p mimir -- share list
-> cargo run -p mimir -- network forwards
+> cargo run -p bifrost-ui
 > ```
 
 ---
@@ -112,6 +111,21 @@ BIFRÖST/
 │   └── midgard/                                   # Midgard bundle documentation & manifest template
 │       ├── README.md
 │       └── manifest.example.json
+├── apps/
+│   └── bifrost-ui/                                # Windows 11 Fluent Design 2 desktop application (Tauri 2)
+│       ├── ui/                                    # Offline-first HTML/CSS/ES frontend (Dark & Light themes, 5 sections)
+│       │   ├── index.html
+│       │   ├── styles.css
+│       │   └── app.js
+│       └── src-tauri/                             # Pure-Rust backend (`#![forbid(unsafe_code)]`)
+│           ├── Cargo.toml
+│           ├── tauri.conf.json
+│           ├── build.rs                           # ASCII OUT_DIR icon staging for GNU windres
+│           ├── capabilities/default.json          # Least-privilege Tauri 2 capability
+│           ├── icons/                             # App icon assets (icon.png, icon.ico)
+│           └── src/
+│               ├── main.rs                        # Thin `#[tauri::command]` bindings
+│               └── service.rs                     # Testable Rust service integrating all crates
 ├── crates/
 │   ├── bifrost-core/                              # Shared domain models, state machine, TOML config, path security, logging
 │   │   ├── Cargo.toml
@@ -263,7 +277,8 @@ cargo run -p mimir -- status
 |---|---|---|
 | `cargo fmt --all -- --check` | Verify Rust code formatting across workspace | **Implemented** |
 | `cargo clippy --workspace --all-targets -- -D warnings` | Run strict Clippy static analysis | **Implemented** |
-| `cargo test --workspace` | Execute unit & IPC tests (`48` tests across 11 workspace crates) | **Implemented** |
+| `cargo test --workspace` | Execute unit & IPC tests (`50` tests across 12 workspace crates) | **Implemented** |
+| `cargo run -p bifrost-ui` | Launch BIFRÖST Windows 11 Fluent Design desktop application | **Implemented** |
 | `heimdall run` | Start background Heimdall supervisor on owner-DACL Windows Named Pipe | **Implemented** |
 | `bifrost version [--json]` | Display BIFRÖST version, host target, and capability maturity | **Implemented** |
 | `bifrost status [--json]` | Display reconciled Midgard runtime state and live Heimdall IPC status | **Implemented** |
@@ -315,6 +330,7 @@ Distribution packaging is planned for **Milestone 8**:
 | `bifrost-bridge`, `bifrost-process`, `bifrost-network` | **Implemented** | Shared dirs, Win32 clipboard, notifications, processes, loopback port forwards (`10` unit tests) |
 | `valhalla` (APK/ABI inspection & `pm`/`am` manager) | **Implemented** | Completed in Milestone 5 (`6` tests; enforces ADR-0004 `x86_64` ABI check & Zip Slip rejection) |
 | `mimir` CLI (`bifrost.exe`) | **Implemented** | Full administrative command set live (`6` tests) |
+| `bifrost-ui` (Tauri 2 Fluent desktop app) | **Implemented** | Completed in Milestone 7 (Dashboard, Apps, Config, Diagnostics, Settings; `2` backend service tests) |
 | Independent per-app Windows desktop windows | **Planned / Experimental** | Pending live Midgard `VirtualDisplay` frame stream |
 | ARM64 binary translation (`arm64-v8a` native APKs) | **Unsupported** | Independent clean-room research only |
 
@@ -329,7 +345,7 @@ Distribution packaging is planned for **Milestone 8**:
 - [x] **Milestone 4**: Heimdall supervisor daemon, authenticated local IPC, and Bridge (ADB / health checks).
 - [x] **Milestone 5**: Valhalla real Android package management (`install`, `uninstall`, `apps list|info|launch|stop`).
 - [ ] **Milestone 6**: Windows integration *(shared dirs, Win32 clipboard, notifications, processes & loopback networking complete; per-app desktop windows pending live display stream)*.
-- [ ] **Milestone 7**: Windows 11 Fluent Design desktop application (`bifrost-ui`).
+- [x] **Milestone 7**: Windows 11 Fluent Design desktop application (`apps/bifrost-ui`).
 - [ ] **Milestone 8**: Signed installer, verified runtime image updates, and recovery tooling.
 
 See [ROADMAP.md](ROADMAP.md) for detailed milestone exit criteria.
@@ -340,7 +356,7 @@ See [ROADMAP.md](ROADMAP.md) for detailed milestone exit criteria.
 
 | Contributor | Commits |
 |---|---:|
-| Johan Rodríguez | 38 |
+| Johan Rodríguez | 42 |
 
 ---
 
