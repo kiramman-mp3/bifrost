@@ -118,6 +118,17 @@ pub struct GpuAdapterInfo {
     pub is_software: bool,
 }
 
+/// Host runtime tooling and registered Midgard image availability.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HostToolingInfo {
+    pub qemu_path: Option<PathBuf>,
+    pub edk2_firmware_path: Option<PathBuf>,
+    pub adb_path: Option<PathBuf>,
+    pub scrcpy_path: Option<PathBuf>,
+    pub registered_images_count: usize,
+    pub active_image_id: Option<String>,
+}
+
 /// Raw snapshot collected from the host prior to compatibility evaluation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SystemSnapshot {
@@ -127,6 +138,7 @@ pub struct SystemSnapshot {
     pub memory: MemoryInfo,
     pub storage: StorageInfo,
     pub gpus: Vec<GpuAdapterInfo>,
+    pub tooling: HostToolingInfo,
 }
 
 /// Complete report emitted by `bifrost doctor`.
