@@ -194,6 +194,7 @@ version = "0.3.0"
 dependencies = [
  "bifrost-core",
  "serde",
+ "serde_json",
  "tracing",
  "windows 0.58.0",
 ]
