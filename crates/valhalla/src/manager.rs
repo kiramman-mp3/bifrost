@@ -8,7 +8,7 @@ use bifrost_core::{BifrostError, Result};
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
-use crate::apk::{inspect_apk, ApkInspection};
+use crate::apk::{extract_compatible_apkm_splits, inspect_apk, ApkInspection};
 use crate::package::{
     parse_dumpsys_package, parse_pm_list_packages, parse_resolved_activity, validate_package_name,
     InstalledPackage, PackageDetails,
@@ -171,17 +171,41 @@ impl ValhallaManager {
             BTreeSet::new()
         };
 
-        let apk_str = inspection.path.to_string_lossy().to_string();
-        info!(
-            serial = %target,
-            apk = %inspection.path.display(),
-            sha256 = %inspection.sha256,
-            "installing verified APK via Android PackageManager"
-        );
-
-        let pm_output = self
-            .adb
-            .run_adb(&["-s", &target, "install", "-r", &apk_str])?;
+        let pm_output = if inspection.is_split_bundle {
+            let stage_dir = tempfile::TempDir::new().map_err(|source| BifrostError::Io {
+                context: "creating staging dir for .apkm split installation".to_string(),
+                source,
+            })?;
+            let splits = extract_compatible_apkm_splits(&inspection.path, stage_dir.path())?;
+            info!(
+                serial = %target,
+                apkm = %inspection.path.display(),
+                splits = splits.len(),
+                sha256 = %inspection.sha256,
+                "installing verified .apkm split bundle via Android PackageManager (install-multiple)"
+            );
+            let mut owned_args = vec![
+                "-s".to_string(),
+                target.clone(),
+                "install-multiple".to_string(),
+                "-r".to_string(),
+            ];
+            for split in &splits {
+                owned_args.push(split.to_string_lossy().to_string());
+            }
+            let arg_refs: Vec<&str> = owned_args.iter().map(String::as_str).collect();
+            self.adb.run_adb(&arg_refs)?
+        } else {
+            let apk_str = inspection.path.to_string_lossy().to_string();
+            info!(
+                serial = %target,
+                apk = %inspection.path.display(),
+                sha256 = %inspection.sha256,
+                "installing verified APK via Android PackageManager"
+            );
+            self.adb
+                .run_adb(&["-s", &target, "install", "-r", &apk_str])?
+        };
         if !pm_output.contains("Success") {
             return Err(BifrostError::Package(format!(
                 "Android PackageManager rejected APK installation: {}",

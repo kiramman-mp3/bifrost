@@ -159,18 +159,21 @@ Set-ItemProperty -Path "$progRoot\shell\open" -Name '(Default)' -Value 'Install 
 Set-ItemProperty -Path "$progRoot\shell\open" -Name 'Icon' -Value $icon
 Set-ItemProperty -Path "$progRoot\shell\open\command" -Name '(Default)' -Value $cmd
 
-$ctxRoot = 'HKCU:\Software\Classes\SystemFileAssociations\.apk\shell\BifrostInstall'
-New-Item -Path "$ctxRoot\command" -Force | Out-Null
-Set-ItemProperty -Path $ctxRoot -Name '(Default)' -Value 'Install with BIFRÖST'
-Set-ItemProperty -Path $ctxRoot -Name 'Icon' -Value $icon
-Set-ItemProperty -Path "$ctxRoot\command" -Name '(Default)' -Value $cmd
+foreach ($ext in @('.apk', '.apkm')) {
+    $ctxRoot = "HKCU:\Software\Classes\SystemFileAssociations\$ext\shell\BifrostInstall"
+    New-Item -Path "$ctxRoot\command" -Force | Out-Null
+    Set-ItemProperty -Path $ctxRoot -Name '(Default)' -Value 'Install with BIFRÖST'
+    Set-ItemProperty -Path $ctxRoot -Name 'Icon' -Value $icon
+    Set-ItemProperty -Path "$ctxRoot\command" -Name '(Default)' -Value $cmd
 
-$extRoot = 'HKCU:\Software\Classes\.apk'
-New-Item -Path "$extRoot\OpenWithProgids" -Force | Out-Null
-New-ItemProperty -Path "$extRoot\OpenWithProgids" -Name $progId -PropertyType String -Value '' -Force | Out-Null
-if ($setDefault) {
-    Set-ItemProperty -Path $extRoot -Name '(Default)' -Value $progId
+    $extRoot = "HKCU:\Software\Classes\$ext"
+    New-Item -Path "$extRoot\OpenWithProgids" -Force | Out-Null
+    New-ItemProperty -Path "$extRoot\OpenWithProgids" -Name $progId -PropertyType String -Value '' -Force | Out-Null
+    if ($setDefault) {
+        Set-ItemProperty -Path $extRoot -Name '(Default)' -Value $progId
+    }
 }
+exit 0
 "#;
 
     let output = Command::new("powershell.exe")
@@ -211,17 +214,19 @@ $progId = $env:BIFROST_APK_PROGID
 $progRoot = "HKCU:\Software\Classes\$progId"
 if (Test-Path $progRoot) { Remove-Item -Path $progRoot -Recurse -Force }
 
-$ctxRoot = 'HKCU:\Software\Classes\SystemFileAssociations\.apk\shell\BifrostInstall'
-if (Test-Path $ctxRoot) { Remove-Item -Path $ctxRoot -Recurse -Force }
+foreach ($ext in @('.apk', '.apkm')) {
+    $ctxRoot = "HKCU:\Software\Classes\SystemFileAssociations\$ext\shell\BifrostInstall"
+    if (Test-Path $ctxRoot) { Remove-Item -Path $ctxRoot -Recurse -Force }
 
-$extRoot = 'HKCU:\Software\Classes\.apk'
-if (Test-Path "$extRoot\OpenWithProgids") {
-    Remove-ItemProperty -Path "$extRoot\OpenWithProgids" -Name $progId -ErrorAction SilentlyContinue
-}
-if (Test-Path $extRoot) {
-    $current = (Get-ItemProperty -Path $extRoot -Name '(Default)' -ErrorAction SilentlyContinue).'(Default)'
-    if ($current -eq $progId) {
-        Remove-ItemProperty -Path $extRoot -Name '(Default)' -ErrorAction SilentlyContinue
+    $extRoot = "HKCU:\Software\Classes\$ext"
+    if (Test-Path "$extRoot\OpenWithProgids") {
+        Remove-ItemProperty -Path "$extRoot\OpenWithProgids" -Name $progId -ErrorAction SilentlyContinue
+    }
+    if (Test-Path $extRoot) {
+        $current = (Get-ItemProperty -Path $extRoot -Name '(Default)' -ErrorAction SilentlyContinue).'(Default)'
+        if ($current -eq $progId) {
+            Remove-ItemProperty -Path $extRoot -Name '(Default)' -ErrorAction SilentlyContinue
+        }
     }
 }
 exit 0
