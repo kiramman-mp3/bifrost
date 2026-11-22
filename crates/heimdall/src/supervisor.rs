@@ -124,6 +124,7 @@ impl SupervisorState {
         let effective_state = if runtime_state == RuntimeState::Booting
             && guest_health.as_ref().is_some_and(|g| g.boot_completed)
         {
+            let _ = self.runtime.mark_running();
             RuntimeState::Running
         } else {
             runtime_state

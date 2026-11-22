@@ -22,6 +22,7 @@ bifrost-display = { path = "../../../crates/bifrost-display" }
 bifrost-network = { path = "../../../crates/bifrost-network" }
 bifrost-process = { path = "../../../crates/bifrost-process" }
 bifrost-runtime = { path = "../../../crates/bifrost-runtime" }
+bifrost-storage = { path = "../../../crates/bifrost-storage" }
 serde.workspace = true
 serde_json.workspace = true
 tauri = { version = "2", features = [] }

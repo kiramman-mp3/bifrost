@@ -11,7 +11,9 @@ mod service;
 
 use std::path::PathBuf;
 
-use bifrost_bridge::SharedFileEntry;
+use bifrost_bridge::{
+    dispatch_windows_toast, AndroidNotification, DaemonHealthReport, SharedFileEntry,
+};
 use bifrost_core::config::LoggingConfig;
 use bifrost_core::logging::init_logging;
 use bifrost_core::BifrostConfig;
@@ -32,6 +34,16 @@ fn map_err<T>(res: bifrost_core::Result<T>) -> Result<T, String> {
 #[tauri::command]
 async fn get_dashboard() -> Result<DashboardSnapshot, String> {
     map_err(service::get_dashboard_snapshot().await)
+}
+
+#[tauri::command]
+async fn start_heimdall() -> Result<DaemonHealthReport, String> {
+    map_err(service::start_heimdall().await)
+}
+
+#[tauri::command]
+async fn stop_heimdall() -> Result<(), String> {
+    map_err(service::stop_heimdall().await)
 }
 
 #[tauri::command]
@@ -149,9 +161,38 @@ fn list_network_forwards() -> Result<Vec<PortForwardRule>, String> {
 fn main() {
     init_logging(&LoggingConfig::default());
 
+    // Silent GUI shortcut launcher mode (`bifrost-ui.exe --launch-app <pkg>`):
+    // launches an Android app directly in its WSA-style resizable Windows 11 window
+    // without flashing any console window or opening the management dashboard.
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() >= 3 && args[1] == "--launch-app" {
+        let package = args[2].clone();
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("failed creating tokio runtime for app launcher");
+        if let Err(err) = rt.block_on(service::launch_app_window(
+            package.clone(),
+            None,
+            None,
+            None,
+        )) {
+            let _ = dispatch_windows_toast(&AndroidNotification {
+                key: format!("bifrost-launch-err-{package}"),
+                package_name: package,
+                title: Some("BIFRÖST could not launch app".to_string()),
+                text: Some(err.to_string()),
+            });
+            std::process::exit(1);
+        }
+        return;
+    }
+
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             get_dashboard,
+            start_heimdall,
+            stop_heimdall,
             get_doctor_report,
             save_config,
             start_runtime,

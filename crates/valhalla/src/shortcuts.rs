@@ -119,18 +119,18 @@ impl ShortcutManager {
 
         let display_name = derive_display_name(package_name, explicit_name, apk_path);
         let bifrost_exe = locate_bifrost_cli()?;
-        let work_dir = bifrost_exe
+        let (target_exe, args) = resolve_shortcut_launcher(&bifrost_exe, package_name);
+        let work_dir = target_exe
             .parent()
             .map(Path::to_path_buf)
             .unwrap_or_else(|| self.data_dir.clone());
 
         let (icon_file, icon_location) = self.prepare_icon(package_name, apk_path, &bifrost_exe);
-        let args = format!("apps launch {package_name} --window");
         let description = format!("Launch {display_name} ({package_name}) via BIFRÖST");
 
         let (desktop_shortcut, start_menu_shortcut) = create_windows_shortcuts_via_com(
             &display_name,
-            &bifrost_exe,
+            &target_exe,
             &args,
             &work_dir,
             &icon_location,
@@ -318,6 +318,23 @@ pub fn sanitize_shortcut_name(raw: &str) -> Option<String> {
     }
 
     Some(trimmed)
+}
+
+/// Selects the cleanest launcher executable for Windows `.lnk` shortcuts.
+///
+/// Prefers `bifrost-ui.exe --launch-app <pkg>` (pure GUI subsystem, zero console flash)
+/// when installed alongside `bifrost.exe`, falling back to `bifrost.exe apps launch <pkg> --window`.
+fn resolve_shortcut_launcher(bifrost_exe: &Path, package_name: &str) -> (PathBuf, String) {
+    if let Some(dir) = bifrost_exe.parent() {
+        let ui_exe = dir.join("bifrost-ui.exe");
+        if ui_exe.is_file() {
+            return (ui_exe, format!("--launch-app {package_name}"));
+        }
+    }
+    (
+        bifrost_exe.to_path_buf(),
+        format!("apps launch {package_name} --window"),
+    )
 }
 
 pub(crate) fn locate_bifrost_cli() -> Result<PathBuf> {
