@@ -52,8 +52,8 @@
       <main class="content">
         <div id="drop-overlay" class="drop-overlay hidden" aria-hidden="true">
           <div class="drop-overlay-card">
-            <strong>Drop <code>.apk</code> or <code>manifest.json</code> here</strong>
-            <span class="muted small-text">BIFRÖST will inspect the APK offline for x86_64 compatibility before installing.</span>
+            <strong>Drop <code>.apk</code>, <code>.apkm</code>, or <code>manifest.json</code> here</strong>
+            <span class="muted small-text">BIFRÖST will inspect the package offline for x86_64 compatibility before installing.</span>
           </div>
         </div>
         <div id="toast-banner" class="toast hidden" role="status" aria-live="polite"></div>
@@ -157,13 +157,13 @@
 
           <article class="card">
             <div class="card-header-inline">
-              <h3>Inspect or Install APK</h3>
-              <span class="muted small-text">Tip: drag &amp; drop an <code>.apk</code> anywhere on this window</span>
+              <h3>Inspect or Install APK / APKM</h3>
+              <span class="muted small-text">Tip: drag &amp; drop an <code>.apk</code> or <code>.apkm</code> anywhere on this window</span>
             </div>
             <div class="form-row">
-              <label for="apk-path-input">Local <code>.apk</code> path</label>
+              <label for="apk-path-input">Local <code>.apk</code> or <code>.apkm</code> path</label>
               <div class="input-with-btn">
-                <input id="apk-path-input" type="text" placeholder="C:\path\to\application.apk" />
+                <input id="apk-path-input" type="text" placeholder="C:\path\to\application.apk or .apkm" />
                 <button class="btn" id="btn-browse-apk" type="button">Browse…</button>
               </div>
             </div>

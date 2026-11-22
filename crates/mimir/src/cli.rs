@@ -94,9 +94,9 @@ pub enum Command {
         action: AppsAction,
     },
 
-    /// Inspect and install an Android APK package into Midgard via Valhalla.
+    /// Inspect and install an Android `.apk` or `.apkm` split-APK bundle into Midgard via Valhalla.
     Install {
-        /// Path to the `.apk` file to inspect or install.
+        /// Path to the `.apk` or `.apkm` file to inspect or install.
         apk: PathBuf,
 
         /// Target Android device serial (optional when a single device is online).
@@ -468,12 +468,12 @@ pub enum RecoveryAction {
 
 #[derive(Debug, Subcommand)]
 pub enum DesktopAction {
-    /// Register Windows Explorer "Install with BIFRÖST" context menu and default `.apk` handler (HKCU, no admin).
+    /// Register Windows Explorer "Install with BIFRÖST" context menu and default `.apk` / `.apkm` handler (HKCU, no admin).
     RegisterApkHandler {
-        /// Only register the right-click context menu without setting BIFRÖST as the default `.apk` double-click app.
+        /// Only register the right-click context menu without setting BIFRÖST as the default `.apk`/`.apkm` double-click app.
         #[arg(long)]
         context_menu_only: bool,
     },
-    /// Remove BIFRÖST's user-space `.apk` file association and context menu keys from HKCU.
+    /// Remove BIFRÖST's user-space `.apk` / `.apkm` file association and context menu keys from HKCU.
     UnregisterApkHandler,
 }
