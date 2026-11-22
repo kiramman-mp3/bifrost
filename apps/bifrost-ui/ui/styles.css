@@ -474,3 +474,40 @@ button:focus-visible {
 .hidden {
   display: none !important;
 }
+
+.input-with-btn {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.input-with-btn input {
+  flex: 1;
+  min-width: 0;
+}
+
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: rgba(15, 23, 42, 0.72);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.drop-overlay-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 28px 36px;
+  border-radius: 12px;
+  background: var(--bg-card);
+  border: 2px dashed var(--accent);
+  box-shadow: var(--shadow);
+  text-align: center;
+  font-size: 16px;
+}
