@@ -170,6 +170,12 @@ pub enum Command {
         #[command(subcommand)]
         action: RecoveryAction,
     },
+
+    /// Manage Windows 11 desktop integration (.apk file association & Explorer context menu).
+    Desktop {
+        #[command(subcommand)]
+        action: DesktopAction,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -447,4 +453,16 @@ pub enum RecoveryAction {
         #[arg(long)]
         output: PathBuf,
     },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum DesktopAction {
+    /// Register Windows Explorer "Install with BIFRÖST" context menu and default `.apk` handler (HKCU, no admin).
+    RegisterApkHandler {
+        /// Only register the right-click context menu without setting BIFRÖST as the default `.apk` double-click app.
+        #[arg(long)]
+        context_menu_only: bool,
+    },
+    /// Remove BIFRÖST's user-space `.apk` file association and context menu keys from HKCU.
+    UnregisterApkHandler,
 }
