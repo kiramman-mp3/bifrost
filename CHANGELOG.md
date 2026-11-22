@@ -6,6 +6,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-22
+
+### Added
+- **WSA-Style Dedicated & Dynamically Resizable Per-App Windows (`bifrost-display`)**:
+  - Dedicated single-app Android `VirtualDisplay` mode using `--no-vd-system-decorations`, `--display-ime-policy=local`, `--mouse-bind=b+++`, `--start-app=+<pkg>`, and automatic `VirtualDisplay` cleanup on window close (no Android Home launcher, status bar, or navigation bar inside app windows).
+  - Real-time dynamic resizing (`--flex-display` + `--no-window-aspect-ratio-lock`) so dragging window borders, maximizing, or using Windows 11 Snap Layouts (`Win+Left` / `Win+Right`) continuously resizes the Android `VirtualDisplay` with native responsive app reflow and `D3D11VA` hardware decoding.
+  - Added automatic fallback discovery of `%LOCALAPPDATA%\Programs\scrcpy\scrcpy.exe`.
+- **Canonical Apache-2.0 Licensing & Workspace Metadata**:
+  - Added canonical [LICENSE](LICENSE) (Apache License 2.0) and inherited `license.workspace = true` and `repository.workspace = true` across all 13 workspace crates.
+
+### Fixed
+- **Full Graphical Android 17 / LineageOS 24.0 Boot on Windows 11 Home WHPX (`qemu_whpx.rs`)**:
+  - Disabled legacy Bochs VGA (`-vga none`), attached a real DRM/KMS VirtIO GPU (`-device virtio-gpu-pci,xres=1280,yres=720`), and added `+cx16` CPU feature so Android's `virtgpu_detect`, `drm_hwcomposer`, `surfaceflinger`, and `system_server` complete full graphical boot (`bootanim` finishes cleanly in ~28s).
+  - Switched Windows graphical QEMU display from `-display sdl` to `-display gtk,zoom-to-fit=on` with `CREATE_NEW_PROCESS_GROUP` detachment to eliminate the Windows SDL "Not Responding" deadlock.
+
 ## [0.1.0] - 2026-11-22
 
 ### Added
