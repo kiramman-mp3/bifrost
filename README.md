@@ -404,7 +404,7 @@ See [ROADMAP.md](ROADMAP.md) for detailed milestone exit criteria.
 
 | Contributor | Commits |
 |---|---:|
-| Johan Rodríguez | 91 |
+| Johan Rodríguez | 94 |
 
 ---
 
