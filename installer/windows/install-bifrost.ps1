@@ -71,4 +71,15 @@ if (Test-Path $uiExe) {
     Write-Host "Created Start Menu shortcut at '$shortcutPath'."
 }
 
+# Register user-space .apk Explorer context menu & default double-click handler (HKCU, no admin).
+$bifrostExe = Join-Path $InstallDir "bifrost.exe"
+if (Test-Path $bifrostExe) {
+    try {
+        & $bifrostExe desktop register-apk-handler | Out-Null
+        Write-Host "Registered Windows 11 .apk context menu and default handler (HKCU)."
+    } catch {
+        Write-Warning "Could not register .apk file association: $_"
+    }
+}
+
 Write-Host "BIFRÖST installed cleanly to '$InstallDir'. Existing Android userdata was preserved."

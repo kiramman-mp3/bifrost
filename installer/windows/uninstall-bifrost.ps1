@@ -16,9 +16,10 @@ if ($PurgeUserData -and -not $ConfirmPurge) {
     throw "Refusing to purge Android userdata without explicit -ConfirmPurge switch."
 }
 
-# Attempt graceful Heimdall stop if installed.
+# Attempt graceful Heimdall stop and remove HKCU .apk file association if installed.
 $bifrostExe = Join-Path $InstallDir "bifrost.exe"
 if (Test-Path $bifrostExe) {
+    try { & $bifrostExe desktop unregister-apk-handler 2>$null | Out-Null } catch {}
     try { & $bifrostExe daemon stop 2>$null | Out-Null } catch {}
 }
 
