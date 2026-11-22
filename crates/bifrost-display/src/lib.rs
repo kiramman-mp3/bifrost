@@ -136,7 +136,11 @@ impl DisplayController {
 
         let display_spec = format!("{}x{}/{}", spec.width, spec.height, spec.dpi);
         let title = format!("BIFRÖST — {package}");
-        // Dedicated single-app VirtualDisplay flags:
+        // Dedicated single-app VirtualDisplay flags (WSA-grade windowing):
+        // - `--flex-display`: continuously resizes the Android VirtualDisplay to match
+        //   the Windows 11 window in real time so Android apps reflow natively (no bars).
+        // - `--no-window-aspect-ratio-lock`: allows free horizontal/vertical resizing
+        //   and Windows 11 Snap Layouts (`Win+Left`/`Win+Right`, maximize, phone/tablet).
         // - `--no-vd-system-decorations`: removes Android Home launcher, status bar,
         //   and navigation bar so the window belongs strictly to this app.
         // - `--display-ime-policy=local`: keeps keyboard/IME input inside this window.
@@ -148,6 +152,8 @@ impl DisplayController {
             "-s".to_string(),
             serial.to_string(),
             format!("--new-display={display_spec}"),
+            "--flex-display".to_string(),
+            "--no-window-aspect-ratio-lock".to_string(),
             "--no-vd-system-decorations".to_string(),
             "--display-ime-policy=local".to_string(),
             "--mouse-bind=b+++".to_string(),
@@ -236,6 +242,8 @@ mod tests {
             )
             .unwrap();
         assert!(args.contains(&"--new-display=1280x800/240".to_string()));
+        assert!(args.contains(&"--flex-display".to_string()));
+        assert!(args.contains(&"--no-window-aspect-ratio-lock".to_string()));
         assert!(args.contains(&"--no-vd-system-decorations".to_string()));
         assert!(args.contains(&"--display-ime-policy=local".to_string()));
         assert!(args.contains(&"--mouse-bind=b+++".to_string()));
