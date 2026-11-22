@@ -344,7 +344,7 @@ Distribution tooling is implemented under [installer/](installer/README.md) and 
 | Feasibility research, architecture, ADRs | **Implemented** | Completed in Milestone 0 |
 | `bifrost-core` (state, config, paths, errors, logging) | **Implemented** | Completed in Milestone 1 (`12` unit tests passing) |
 | `bifrost-diagnostics` (`bifrost doctor`) | **Implemented** | Completed in Milestone 2 (`4` evaluator tests + live Windows 11 Home WHPX verification) |
-| `bifrost-storage`, `bifrost-hypervisor`, `bifrost-runtime` | **Partially implemented** | Host stack & `9` unit tests passing; live Android `x86_64` WHPX boot gate pending QEMU UAC install + verified bundle |
+| `bifrost-storage`, `bifrost-hypervisor`, `bifrost-runtime` | **Implemented** | Completed in Milestone 3 (`11` unit tests; verified live LineageOS 24.0 `x86_64` boot + QMP shutdown on Windows 11 Home WHPX) |
 | `bifrost-bridge`, `bifrost-process`, `bifrost-network` | **Implemented** | Shared dirs, Win32 clipboard, notifications, processes, loopback port forwards (`10` unit tests) |
 | `valhalla` (APK/ABI inspection & `pm`/`am` manager) | **Implemented** | Completed in Milestone 5 (`6` tests; enforces ADR-0004 `x86_64` ABI check & Zip Slip rejection) |
 | `mimir` CLI (`bifrost.exe`) | **Implemented** | Full administrative command set live (`6` tests) |
@@ -360,7 +360,7 @@ Distribution tooling is implemented under [installer/](installer/README.md) and 
 - [x] **Milestone 0**: Research, host baseline inspection, feasibility report, architecture, and ADRs.
 - [x] **Milestone 1**: Cargo workspace, `bifrost-core`, and `mimir` CLI foundation.
 - [x] **Milestone 2**: Native Windows 11 compatibility diagnostics (`bifrost doctor`).
-- [ ] **Milestone 3**: Minimal functional Midgard Android `x86_64` VM prototype on WHPX *(host stack + LineageOS 24.0 `virtio_x86_64` bundle verified; live boot awaits user UAC approval of QEMU installer)*.
+- [x] **Milestone 3**: Minimal functional Midgard Android `x86_64` VM prototype on WHPX *(verified live on Windows 11 Home 25H2 with QEMU 11.1.0 + LineageOS 24.0 `virtio_x86_64`, serial logs & clean QMP shutdown)*.
 - [x] **Milestone 4**: Heimdall supervisor daemon, authenticated local IPC, and Bridge (ADB / health checks).
 - [x] **Milestone 5**: Valhalla real Android package management (`install`, `uninstall`, `apps list|info|launch|stop`).
 - [x] **Milestone 6**: Windows integration (shared dirs, Win32 clipboard, notifications, processes, loopback networking, `crosvm-whpx` backend, and per-app `VirtualDisplay` windows).
@@ -375,7 +375,7 @@ See [ROADMAP.md](ROADMAP.md) for detailed milestone exit criteria.
 
 | Contributor | Commits |
 |---|---:|
-| Johan Rodríguez | 54 |
+| Johan Rodríguez | 57 |
 
 ---
 

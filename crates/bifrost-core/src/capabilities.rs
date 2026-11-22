@@ -88,9 +88,9 @@ impl VersionInfo {
                 },
                 ComponentCapability {
                     name: "midgard".to_string(),
-                    status: FeatureStatus::Experimental,
+                    status: FeatureStatus::Implemented,
                     summary:
-                        "Direct-kernel, ISO & UEFI VirtIO disk boot (QEMU-WHPX + crosvm-WHPX backends), verified manifests & QMP shutdown (live boot awaits QEMU UAC install)"
+                        "Direct-kernel, ISO & UEFI VirtIO disk boot (QEMU-WHPX + crosvm-WHPX backends), verified manifests & QMP shutdown — live LineageOS 24.0 x86_64 boot verified on Windows 11 WHPX"
                             .to_string(),
                 },
                 ComponentCapability {

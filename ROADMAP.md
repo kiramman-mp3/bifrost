@@ -48,12 +48,12 @@ This roadmap tracks BIFRÖST's incremental delivery from feasibility research to
 
 ---
 
-## Milestone 3 — Midgard Prototype (`Partially implemented` — **LineageOS 24.0 Bundle Verified; Live Boot Awaits QEMU UAC Install**)
+## Milestone 3 — Midgard Prototype (`Implemented` — **Verified Live on Windows 11 Home WHPX**)
 - [x] Created `crates/bifrost-storage` (`MidgardImageManifest` schema v1 supporting `direct_kernel`, `bootable_image`, and `uefi_disks` + Windows UTF-8 BOM tolerance, streaming SHA-256 verification, path traversal guards, and persistent sparse `userdata.img` management).
-- [x] Created `crates/bifrost-hypervisor` (VMM-agnostic `HypervisorBackend` trait, pure-Rust loopback QMP client, Phase 1 `QemuWhpxBackend` with UEFI `pflash` EDK2 + VirtIO disk staging, and target-evolution `CrosvmWhpxBackend` with WHPX + `gfxstream`).
+- [x] Created `crates/bifrost-hypervisor` (VMM-agnostic `HypervisorBackend` trait, pure-Rust loopback QMP client, Phase 1 `QemuWhpxBackend` with UEFI `pflash` EDK2 + auto-detected `qcow2`/`raw` NVRAM + VirtIO disk staging + immediate crash detection, and target-evolution `CrosvmWhpxBackend` with WHPX + `gfxstream`).
 - [x] Created `crates/bifrost-runtime` (`MidgardRuntime` lifecycle coordinator, atomic `runtime-state.json` persistence with live PID reconciliation, and serial/VMM log reading).
-- [x] Wired `bifrost runtime start|stop|restart|verify`, live `bifrost status`, and `bifrost logs` into `mimir`, and downloaded/verified a real 2.31 GB open-source LineageOS 24.0 `virtio_x86_64` bundle locally (`manifest.json` SHA-256 verified).
-- [ ] **Remaining host step**: Approve QEMU 11.1.0 UAC installation (`winget install --id SoftwareFreedomConservancy.QEMU -e`) and execute `bifrost runtime start` to verify live WHPX boot output.
+- [x] Wired `bifrost runtime start|stop|restart|verify`, live `bifrost status`, and `bifrost logs` into `mimir`.
+- [x] **Live Windows 11 WHPX Verification**: Verified 2.31 GB open-source LineageOS 24.0 (`virtio_x86_64`) SHA-256 manifest, booted real Android kernel + `init` + SELinux + `apexd` (50 preinstalled APEXes) on QEMU 11.1.0 + WHPX (`bifrost runtime start`), inspected live serial console (`bifrost logs`), and verified clean ACPI/QMP shutdown (`bifrost runtime stop`).
 
 ---
 

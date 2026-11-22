@@ -7,6 +7,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Added
+- **Live Windows 11 Home WHPX Android Boot Verified (Milestone 3 Complete)**:
+  - Added automatic `qcow2` (`QFI\xfb`) vs. `raw` UEFI NVRAM (`efi_vars`) format detection, default QEMU `edk2-i386-vars.fd` fallback, Intel WHPX `-svm` CPU flag cleanup, and post-spawn crash detection in `crates/bifrost-hypervisor/src/qemu_whpx.rs` (`56` total passing workspace tests across 13 crates).
+  - Verified live end-to-end boot of real open-source LineageOS 24.0 (`virtio_x86_64`, Android 17, zero GApps) over QEMU 11.1.0 + WHPX via `bifrost runtime start`, inspected real Android `init`/SELinux/`apexd` serial console logs via `bifrost logs`, and verified clean QMP/ACPI shutdown via `bifrost runtime stop`.
 - **UEFI VirtIO Boot, `crosvm-whpx` Backend & Per-App VirtualDisplay Windowing**:
   - Added `BootMode::UefiDisks` (EDK2 `pflash` + per-instance writable `efi_vars.fd`/`qcow2` staging) and Windows UTF-8 BOM tolerance to `crates/bifrost-storage` and `crates/bifrost-hypervisor`.
   - Implemented `CrosvmWhpxBackend` (`crosvm run --hypervisor whpx --gpu backend=gfxstream,...`) in `crates/bifrost-hypervisor/src/crosvm_whpx.rs` per ADR-0002 / ADR-0003 (`1` unit test).
