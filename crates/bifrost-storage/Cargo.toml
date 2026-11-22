@@ -4,6 +4,8 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
+license.workspace = true
+repository.workspace = true
 description = "Verified Midgard runtime image manifests, SHA-256 integrity checks, and persistent virtual disk management for BIFRÖST."
 
 [lints]
