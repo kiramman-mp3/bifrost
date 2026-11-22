@@ -141,7 +141,7 @@ fn handle_desktop(action: &DesktopAction, as_json: bool) -> Result<String> {
                     .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
             }
             Ok(format!(
-                "Registered Windows .apk handler (ProgID: {}, context_menu: {}, default_app: {}).\nCommand: {}",
+                "Registered Windows .apk/.apkm handler (ProgID: {}, context_menu: {}, default_app: {}).\nCommand: {}",
                 status.prog_id,
                 status.context_menu_registered,
                 status.default_handler_registered,
@@ -158,7 +158,7 @@ fn handle_desktop(action: &DesktopAction, as_json: bool) -> Result<String> {
                 .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
             }
             Ok(
-                "Removed BIFRÖST .apk file association and Explorer context menu from HKCU."
+                "Removed BIFRÖST .apk/.apkm file association and Explorer context menu from HKCU."
                     .to_string(),
             )
         }
@@ -953,7 +953,7 @@ async fn handle_install(
     as_json: bool,
 ) -> Result<String> {
     // Reject unsafe paths (traversal / wrong extension) locally before touching IPC or ADB.
-    let safe_apk = validate_host_file_path(apk, Some("apk"))?;
+    let safe_apk = valhalla::validate_package_file_path(apk)?;
 
     if inspect_only {
         let info = inspect_apk(&safe_apk)?;
@@ -971,10 +971,19 @@ async fn handle_install(
                 abis.join(", ")
             ),
         };
+        let bundle_line = if info.is_split_bundle {
+            format!(
+                "\nSplit Bundle:      yes ({} split APKs)",
+                info.split_apk_count
+            )
+        } else {
+            String::new()
+        };
         return Ok(format!(
-            "APK Path:          {}\nPackage Name:      {}\nSize:              {} bytes\nSHA-256:           {}\nZIP Entries:       {}\nAndroidManifest:   {}\nDEX Bytecode:      {}\nABI Compatibility: {}",
+            "Package Path:      {}\nPackage Name:      {}{}\nSize:              {} bytes\nSHA-256:           {}\nZIP Entries:       {}\nAndroidManifest:   {}\nDEX Bytecode:      {}\nABI Compatibility: {}",
             info.path.display(),
             info.package_name.as_deref().unwrap_or("unknown"),
+            bundle_line,
             info.size_bytes,
             info.sha256,
             info.entry_count,
