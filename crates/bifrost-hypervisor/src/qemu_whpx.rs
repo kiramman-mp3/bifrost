@@ -107,7 +107,8 @@ impl HypervisorBackend for QemuWhpxBackend {
             "-no-reboot".to_string(),
         ];
 
-        // Boot media (canonical AOSP direct-kernel or bootable disk/ISO prototype).
+        // Boot media (canonical AOSP direct-kernel, bootable disk/ISO, or UEFI VirtIO disks).
+        let mut attach_separate_userdata = true;
         match &spec.bundle.boot {
             VerifiedBootMedia::DirectKernel {
                 kernel,
@@ -163,17 +164,79 @@ impl HypervisorBackend for QemuWhpxBackend {
                     DiskMedia::Disk => "c".to_string(),
                 });
             }
+            VerifiedBootMedia::UefiDisks {
+                efi_code,
+                efi_vars,
+                disks,
+                bundle_includes_userdata,
+            } => {
+                attach_separate_userdata = !*bundle_includes_userdata;
+
+                let resolved_code = match efi_code {
+                    Some(p) => p.clone(),
+                    None => locate_qemu_edk2_code(self.locate_vmm().ok().as_deref())?,
+                };
+                args.push("-drive".to_string());
+                args.push(format!(
+                    "if=pflash,unit=0,file={},format=raw,readonly=on",
+                    path_to_arg(&resolved_code)?
+                ));
+
+                if let Some(vars_template) = efi_vars {
+                    let staged_vars = stage_writable_copy(
+                        vars_template,
+                        spec.userdata_disk.parent(),
+                        "efi_vars.fd",
+                    )?;
+                    args.push("-drive".to_string());
+                    args.push(format!(
+                        "if=pflash,unit=1,file={},format=raw",
+                        path_to_arg(&staged_vars)?
+                    ));
+                }
+
+                for (idx, disk) in disks.iter().enumerate() {
+                    let effective_path = if disk.read_only {
+                        disk.path.clone()
+                    } else {
+                        let staged_name = format!("{}.{}", disk.id, disk.format.as_qemu_format());
+                        stage_writable_copy(&disk.path, spec.userdata_disk.parent(), &staged_name)?
+                    };
+                    let ro = if disk.read_only { "on" } else { "off" };
+                    args.push("-drive".to_string());
+                    args.push(format!(
+                        "if=none,id={},file={},format={},readonly={ro},discard=unmap,detect-zeroes=unmap",
+                        disk.id,
+                        path_to_arg(&effective_path)?,
+                        disk.format.as_qemu_format()
+                    ));
+                    args.push("-device".to_string());
+                    args.push(format!("virtio-blk-pci,drive={},bootindex={idx}", disk.id));
+                }
+
+                // VirtIO serial + USB HID peripherals expected by LineageOS virtio_x86_64.
+                args.push("-device".to_string());
+                args.push("virtio-serial".to_string());
+                args.push("-device".to_string());
+                args.push("qemu-xhci,id=usb-bus".to_string());
+                args.push("-device".to_string());
+                args.push("usb-tablet,bus=usb-bus.0".to_string());
+                args.push("-device".to_string());
+                args.push("usb-kbd,bus=usb-bus.0".to_string());
+            }
         }
 
-        // Persistent Android userdata disk.
-        args.push("-drive".to_string());
-        args.push(format!(
-            "if=none,id=userdata,file={},format={}",
-            path_to_arg(&spec.userdata_disk)?,
-            spec.userdata_format.as_qemu_format()
-        ));
-        args.push("-device".to_string());
-        args.push("virtio-blk-pci,drive=userdata".to_string());
+        // Persistent Android userdata disk (unless bundle already carries its own VirtIO userdata).
+        if attach_separate_userdata {
+            args.push("-drive".to_string());
+            args.push(format!(
+                "if=none,id=userdata,file={},format={}",
+                path_to_arg(&spec.userdata_disk)?,
+                spec.userdata_format.as_qemu_format()
+            ));
+            args.push("-device".to_string());
+            args.push("virtio-blk-pci,drive=userdata".to_string());
+        }
 
         // Networking with strictly scoped ADB port forwarding.
         args.push("-netdev".to_string());
@@ -406,6 +469,67 @@ fn ensure_parent_dir(path: &Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn locate_qemu_edk2_code(qemu_bin: Option<&Path>) -> Result<PathBuf> {
+    let mut candidates = Vec::new();
+    if let Some(bin) = qemu_bin {
+        if let Some(dir) = bin.parent() {
+            candidates.push(dir.join("share").join("edk2-x86_64-code.fd"));
+            candidates.push(dir.join("edk2-x86_64-code.fd"));
+        }
+    }
+    candidates.push(PathBuf::from(
+        r"C:\Program Files\qemu\share\edk2-x86_64-code.fd",
+    ));
+    if let Ok(local) = std::env::var("LOCALAPPDATA") {
+        candidates.push(
+            PathBuf::from(local)
+                .join("Programs")
+                .join("qemu")
+                .join("share")
+                .join("edk2-x86_64-code.fd"),
+        );
+    }
+
+    for c in candidates {
+        if c.is_file() {
+            return Ok(c);
+        }
+    }
+
+    Err(BifrostError::Hypervisor(
+        "UEFI firmware 'edk2-x86_64-code.fd' not found next to QEMU; install QEMU or include efi_code in manifest.json"
+            .to_string(),
+    ))
+}
+
+/// Copies a mutable template artifact (such as `efi_vars.fd` or a writable `qcow2` disk)
+/// into the per-instance directory once so the SHA-256-verified bundle remains immutable.
+fn stage_writable_copy(
+    source: &Path,
+    instance_dir: Option<&Path>,
+    filename: &str,
+) -> Result<PathBuf> {
+    let Some(dir) = instance_dir else {
+        return Ok(source.to_path_buf());
+    };
+    fs::create_dir_all(dir).map_err(|err| BifrostError::Io {
+        context: format!("creating instance directory '{}'", dir.display()),
+        source: err,
+    })?;
+    let staged = dir.join(filename);
+    if !staged.exists() && source.is_file() {
+        fs::copy(source, &staged).map_err(|err| BifrostError::Io {
+            context: format!(
+                "staging writable copy '{}' -> '{}'",
+                source.display(),
+                staged.display()
+            ),
+            source: err,
+        })?;
+    }
+    Ok(staged)
 }
 
 fn path_to_arg(path: &Path) -> Result<String> {
