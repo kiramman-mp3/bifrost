@@ -63,7 +63,7 @@ impl VersionInfo {
             target_os: std::env::consts::OS.to_string(),
             target_arch: std::env::consts::ARCH.to_string(),
             current_milestone:
-                "Milestone 7 — Desktop Application (`bifrost-ui` Tauri 2 Fluent Design)"
+                "Milestone 8 — Distribution, Signed Updates, Upgrade Safety & Recovery"
                     .to_string(),
             capabilities: vec![
                 ComponentCapability {
@@ -76,7 +76,7 @@ impl VersionInfo {
                     name: "mimir".to_string(),
                     status: FeatureStatus::Implemented,
                     summary:
-                        "Full CLI (version, status, config, doctor, runtime, logs, devices, daemon, apps, install, share, clipboard, notifications, processes, network)"
+                        "Full CLI (version, status, config, doctor, runtime, logs, devices, daemon, apps, install, share, clipboard, notifications, processes, network, images, recovery)"
                             .to_string(),
                 },
                 ComponentCapability {
@@ -119,6 +119,13 @@ impl VersionInfo {
                     status: FeatureStatus::Implemented,
                     summary:
                         "Windows 11 Fluent Design 2 Tauri 2 desktop app with pure-Rust backend (Dashboard, Apps, Runtime Config, Diagnostics, Settings)"
+                            .to_string(),
+                },
+                ComponentCapability {
+                    name: "distribution-recovery".to_string(),
+                    status: FeatureStatus::Implemented,
+                    summary:
+                        "Ed25519 manifest signatures, image registry & upgrade compatibility, verified userdata backup/restore, user-space Windows installer/uninstaller & CI"
                             .to_string(),
                 },
                 ComponentCapability {
