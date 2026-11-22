@@ -9,11 +9,13 @@
 
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
 
 use bifrost_bridge::AdbClient;
 use bifrost_core::{BifrostError, Result};
 use serde::{Deserialize, Serialize};
-use tracing::info;
+use tracing::{debug, info};
 use valhalla::validate_package_name;
 
 /// Dimensions and pixel density for an independent per-app Android `VirtualDisplay`.
@@ -108,6 +110,35 @@ impl DisplayController {
             }
         }
         None
+    }
+
+    /// Polls `endpoint` over loopback ADB until the Android guest reports `device` state
+    /// and completes system boot (`sys.boot_completed=1`), or until `timeout` elapses.
+    pub fn wait_for_device_ready(&self, endpoint: &str, timeout: Duration) -> Result<String> {
+        let deadline = Instant::now() + timeout;
+        while Instant::now() < deadline {
+            let _ = self.adb.connect_loopback(endpoint);
+            if let Ok(devices) = self.adb.list_devices() {
+                if devices
+                    .iter()
+                    .any(|d| d.serial == endpoint && d.state == "device")
+                {
+                    if let Ok(health) = self.adb.probe_guest_health(endpoint) {
+                        if health.boot_completed {
+                            info!(endpoint, "Android guest boot completed and ADB is ready");
+                            return Ok(endpoint.to_string());
+                        }
+                        debug!(endpoint, "ADB online; waiting for sys.boot_completed=1");
+                    }
+                }
+            }
+            thread::sleep(Duration::from_secs(2));
+        }
+
+        Err(BifrostError::Bridge(format!(
+            "timed out after {}s waiting for Android guest at '{endpoint}' to finish booting and authorize ADB",
+            timeout.as_secs()
+        )))
     }
 
     /// Enables Android freeform and resizable-activity settings required for clean independent windows.

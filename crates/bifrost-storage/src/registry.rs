@@ -96,6 +96,17 @@ impl ImageRegistry {
         images_dir.join("registry.json")
     }
 
+    /// Returns the currently active registered image, or the first registered image if none is marked active.
+    #[must_use]
+    pub fn active_image(&self) -> Option<&InstalledImageRecord> {
+        if let Some(ref active_id) = self.active_image_id {
+            if let Some(found) = self.images.iter().find(|img| img.id == *active_id) {
+                return Some(found);
+            }
+        }
+        self.images.first()
+    }
+
     /// Registers (or updates) a verified Midgard bundle in the catalog.
     pub fn register_bundle(
         &mut self,
