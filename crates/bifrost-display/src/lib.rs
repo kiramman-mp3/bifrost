@@ -95,7 +95,19 @@ impl DisplayController {
                 return Some(p);
             }
         }
-        find_on_path("scrcpy.exe").or_else(|| find_on_path("scrcpy"))
+        if let Some(on_path) = find_on_path("scrcpy.exe").or_else(|| find_on_path("scrcpy")) {
+            return Some(on_path);
+        }
+        if let Ok(local) = std::env::var("LOCALAPPDATA") {
+            let user_install = PathBuf::from(local)
+                .join("Programs")
+                .join("scrcpy")
+                .join("scrcpy.exe");
+            if user_install.is_file() {
+                return Some(user_install);
+            }
+        }
+        None
     }
 
     /// Enables Android freeform and resizable-activity settings required for clean independent windows.
@@ -124,13 +136,23 @@ impl DisplayController {
 
         let display_spec = format!("{}x{}/{}", spec.width, spec.height, spec.dpi);
         let title = format!("BIFRÖST — {package}");
+        // Dedicated single-app VirtualDisplay flags:
+        // - `--no-vd-system-decorations`: removes Android Home launcher, status bar,
+        //   and navigation bar so the window belongs strictly to this app.
+        // - `--display-ime-policy=local`: keeps keyboard/IME input inside this window.
+        // - `--mouse-bind=b+++`: maps right-click to Back and disables Home/Recents clicks.
+        // - `--start-app=+{package}`: force-restarts the app cleanly inside this display.
+        // - Omit `--no-vd-destroy-content`: closing the Windows 11 window destroys the
+        //   VirtualDisplay content cleanly instead of moving it to Display 0.
         Ok(vec![
             "-s".to_string(),
             serial.to_string(),
             format!("--new-display={display_spec}"),
-            format!("--start-app={package}"),
+            "--no-vd-system-decorations".to_string(),
+            "--display-ime-policy=local".to_string(),
+            "--mouse-bind=b+++".to_string(),
+            format!("--start-app=+{package}"),
             format!("--window-title={title}"),
-            "--no-vd-destroy-content".to_string(),
         ])
     }
 
@@ -214,7 +236,11 @@ mod tests {
             )
             .unwrap();
         assert!(args.contains(&"--new-display=1280x800/240".to_string()));
-        assert!(args.contains(&"--start-app=org.fdroid.fdroid".to_string()));
+        assert!(args.contains(&"--no-vd-system-decorations".to_string()));
+        assert!(args.contains(&"--display-ime-policy=local".to_string()));
+        assert!(args.contains(&"--mouse-bind=b+++".to_string()));
+        assert!(args.contains(&"--start-app=+org.fdroid.fdroid".to_string()));
+        assert!(!args.contains(&"--no-vd-destroy-content".to_string()));
 
         // Invalid package or out-of-range DPI rejected.
         assert!(ctrl
