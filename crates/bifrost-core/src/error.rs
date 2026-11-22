@@ -74,6 +74,14 @@ pub enum BifrostError {
     /// Destructive action requires explicit user confirmation.
     #[error("destructive operation '{operation}' requires explicit confirmation")]
     ConfirmationRequired { operation: String },
+
+    /// Bridge or ADB communication error.
+    #[error("bridge error: {0}")]
+    Bridge(String),
+
+    /// Authenticated local IPC transport or protocol error.
+    #[error("IPC error: {0}")]
+    Ipc(String),
 }
 
 impl BifrostError {

@@ -7,15 +7,17 @@
 
 **BIFRÖST** is an open-source, Rust-powered Android subsystem for Windows 11 designed to run real Android applications with deep native desktop integration — *"A Bridge Between Worlds."*
 
-Inspired by Bifröst from Norse mythology and built as a modern, transparent, community-maintained successor to Microsoft's discontinued Windows Subsystem for Android (WSA), BIFRÖST is currently at **Milestone 3 (Midgard Prototype — Host Storage, WHPX Hypervisor & Runtime Stack Implemented; Live Android Boot Verification Pending)** and preparing for **Milestone 4 (Heimdall & Bridge)**.
+Inspired by Bifröst from Norse mythology and built as a modern, transparent, community-maintained successor to Microsoft's discontinued Windows Subsystem for Android (WSA), BIFRÖST is currently at **Milestone 4 (Heimdall Supervisor Daemon & Bridge Authenticated IPC/ADB Complete)** and preparing for **Milestone 5 (Valhalla Android Application Management)**.
 
 > [!TIP]
-> **Quick start (Milestone 3)**: Run tests, check Windows 11 WHPX readiness, or verify a Midgard image bundle:
+> **Quick start (Milestone 4)**: Run tests, check Windows 11 WHPX readiness, or start Heimdall and query it via Mimir:
 > ```powershell
 > $env:CARGO_TARGET_DIR = "C:\Users\johan\Proyectos\bifrost-target" # required with MinGW ld if repo path contains 'Ö'
 > cargo test --workspace
 > cargo run -p mimir -- doctor
-> cargo run -p mimir -- runtime verify --image path\to\manifest.json
+> # In terminal 1: cargo run -p heimdall -- run
+> # In terminal 2: cargo run -p mimir -- daemon status
+> #                cargo run -p mimir -- devices
 > ```
 
 ---
@@ -150,12 +152,26 @@ BIFRÖST/
 │   │       ├── lib.rs                             # #![forbid(unsafe_code)]
 │   │       ├── state_store.rs                     # Atomic runtime-state.json persistence
 │   │       └── manager.rs                         # MidgardRuntime start/stop/restart/status/logs
+│   ├── bifrost-bridge/                            # Loopback ADB orchestration, guest health & authenticated IPC protocol
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs                             # #![forbid(unsafe_code)]
+│   │       ├── adb.rs                             # Safe ADB wrapper, device parser & guest health probes
+│   │       ├── ipc.rs                             # Bounded JSON frames, 256-bit auth tokens & IPC schemas
+│   │       └── client.rs                          # Async Named Pipe HeimdallClient
+│   ├── heimdall/                                  # Background supervisor daemon (`heimdall` binary)
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── main.rs                            # Tokio daemon CLI (`heimdall run`)
+│   │       ├── pipe_security.rs                   # Audited Windows SDDL owner-only Named Pipe DACL (`D:(A;;GA;;;OW)`)
+│   │       ├── supervisor.rs                      # Periodic runtime & ADB health monitoring
+│   │       └── server.rs                          # Authenticated Named Pipe server & live IPC tests
 │   └── mimir/                                     # Administrative CLI (`bifrost` binary)
 │       ├── Cargo.toml
 │       └── src/
-│           ├── main.rs                            # #![forbid(unsafe_code)], exit codes (0 ok, 1 error, 2 unsupported)
+│           ├── main.rs                            # #![forbid(unsafe_code)], Tokio entrypoint & exit codes
 │           ├── cli.rs                             # Clap CLI command and flag definitions
-│           └── commands.rs                        # Command handlers (`version`, `status`, `config`, `doctor`, `runtime`, `logs`, stubs)
+│           └── commands.rs                        # Command handlers (`version`, `status`, `config`, `doctor`, `runtime`, `logs`, `devices`, `daemon`, stubs)
 └── docs/
     ├── TECHNICAL_DECISIONS.md                     # Architecture Decision Record (ADR) index
     ├── decisions/
@@ -232,14 +248,16 @@ cargo run -p mimir -- status
 |---|---|---|
 | `cargo fmt --all -- --check` | Verify Rust code formatting across workspace | **Implemented** |
 | `cargo clippy --workspace --all-targets -- -D warnings` | Run strict Clippy static analysis | **Implemented** |
-| `cargo test --workspace` | Execute unit tests (`31` tests across 6 workspace crates) | **Implemented** |
+| `cargo test --workspace` | Execute unit & IPC tests (`35` tests across 8 workspace crates) | **Implemented** |
+| `heimdall run` | Start background Heimdall supervisor on owner-DACL Windows Named Pipe | **Implemented** |
 | `bifrost version [--json]` | Display BIFRÖST version, host target, and capability maturity | **Implemented** |
-| `bifrost status [--json]` | Display reconciled Midgard runtime state and Heimdall connection status | **Implemented** |
+| `bifrost status [--json]` | Display reconciled Midgard runtime state and live Heimdall IPC status | **Implemented** |
+| `bifrost daemon status \| stop` | Query Heimdall health or request graceful daemon shutdown over IPC | **Implemented** |
 | `bifrost config init \| show \| validate` | Initialize, inspect, and validate `bifrost.toml` | **Implemented** |
 | `bifrost doctor [--strict] [--json]` | Inspect Windows 11 edition, CPU, virtualization, WHPX, RAM, storage, and GPU | **Implemented** |
 | `bifrost runtime start \| stop \| restart \| verify` | Verify image SHA-256 digests and manage Midgard WHPX VM lifecycle | **Partially implemented** |
 | `bifrost logs [--tail N]` | Inspect Midgard serial console and VMM stderr logs | **Implemented** |
-| `bifrost devices` | List Bridge/ADB devices | Planned (M4) |
+| `bifrost devices [--json]` | List connected Android devices via Heimdall Bridge / loopback ADB | **Implemented** |
 | `bifrost install <app.apk>` / `uninstall` / `apps list` | Validate and manage APKs via Valhalla | Planned (M5) |
 
 ---
@@ -272,9 +290,9 @@ Distribution packaging is planned for **Milestone 8**:
 | `bifrost-core` (state, config, paths, errors, logging) | **Implemented** | Completed in Milestone 1 (`12` unit tests passing) |
 | `bifrost-diagnostics` (`bifrost doctor`) | **Implemented** | Completed in Milestone 2 (`4` evaluator tests + live Windows 11 Home WHPX verification) |
 | `bifrost-storage`, `bifrost-hypervisor`, `bifrost-runtime` | **Partially implemented** | Host stack & `9` unit tests passing; live Android `x86_64` WHPX boot gate pending QEMU UAC install + verified bundle |
-| `mimir` CLI (`version`, `status`, `config`, `doctor`, `runtime`, `logs`) | **Partially implemented** | Core, doctor, runtime, and log commands live (`6` tests); Bridge/Valhalla commands return `Unsupported` |
-| Heimdall daemon, authenticated IPC, loopback ADB | **Planned** | Milestone 4 |
-| Valhalla real APK management | **Planned** | Milestone 5 |
+| `bifrost-bridge` & `heimdall` | **Implemented** | Completed in Milestone 4 (`4` tests + live Windows Named Pipe owner-DACL & ADB verification) |
+| `mimir` CLI (`version`, `status`, `config`, `doctor`, `runtime`, `logs`, `devices`, `daemon`) | **Partially implemented** | Core, doctor, runtime, logs, devices, and daemon IPC live (`6` tests); Valhalla commands return `Unsupported` |
+| Valhalla real APK management | **Planned** | Next vertical slice (Milestone 5) |
 | Independent per-app Windows desktop windows | **Planned / Experimental** | Milestone 6 |
 | ARM64 binary translation (`arm64-v8a` native APKs) | **Unsupported** | Independent clean-room research only |
 
@@ -285,8 +303,8 @@ Distribution packaging is planned for **Milestone 8**:
 - [x] **Milestone 0**: Research, host baseline inspection, feasibility report, architecture, and ADRs.
 - [x] **Milestone 1**: Cargo workspace, `bifrost-core`, and `mimir` CLI foundation.
 - [x] **Milestone 2**: Native Windows 11 compatibility diagnostics (`bifrost doctor`).
-- [ ] **Milestone 3**: Minimal functional Midgard Android `x86_64` VM prototype on WHPX.
-- [ ] **Milestone 4**: Heimdall supervisor daemon, authenticated local IPC, and Bridge (ADB / `vsock`).
+- [ ] **Milestone 3**: Minimal functional Midgard Android `x86_64` VM prototype on WHPX *(host stack complete; live boot gate pending QEMU UAC install + verified image bundle)*.
+- [x] **Milestone 4**: Heimdall supervisor daemon, authenticated local IPC, and Bridge (ADB / health checks).
 - [ ] **Milestone 5**: Valhalla real Android package management (`install`, `uninstall`, `apps list`, launch).
 - [ ] **Milestone 6**: Shared directories, clipboard, notifications, networking, and per-app Windows desktop windows.
 - [ ] **Milestone 7**: Windows 11 Fluent Design desktop application (`bifrost-ui`).
@@ -300,7 +318,7 @@ See [ROADMAP.md](ROADMAP.md) for detailed milestone exit criteria.
 
 | Contributor | Commits |
 |---|---:|
-| Johan Rodríguez | 23 |
+| Johan Rodríguez | 28 |
 
 ---
 

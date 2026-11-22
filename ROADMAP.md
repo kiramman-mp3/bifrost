@@ -57,16 +57,15 @@ This roadmap tracks BIFRÖST's incremental delivery from feasibility research to
 
 ---
 
-## Milestone 4 — Heimdall & Bridge (`Planned`)
-- [ ] Create `crates/heimdall` and `crates/bifrost-bridge`.
-- [ ] Implement Heimdall background daemon with runtime supervision, health heartbeats, and crash recovery.
-- [ ] Implement Windows Named Pipe local IPC authenticated via current-user SID DACL + strict message validation.
-- [ ] Implement loopback-only (`127.0.0.1`) ADB orchestration and device discovery.
-- [ ] Wire `mimir` (`bifrost status`, `runtime start|stop|restart`, `devices`, `logs`) to Heimdall IPC.
+## Milestone 4 — Heimdall & Bridge (`Implemented`)
+- [x] Created `crates/bifrost-bridge` (`#![forbid(unsafe_code)]`) with safe loopback-only ADB orchestration, `adb devices -l` parser, Android guest health probing (`sys.boot_completed`, release/ABI/model), 256-bit random session token generation, constant-time token comparison, and bounded 64 KiB length-prefixed JSON IPC framing.
+- [x] Created `crates/heimdall` (`heimdall.exe`) background Tokio supervisor daemon with periodic runtime/ADB health monitoring and Windows Named Pipe server secured by an owner-only SDDL DACL (`D:(A;;GA;;;OW)`) plus mandatory session auth token verification.
+- [x] Wired `bifrost devices`, `bifrost daemon status|stop`, and automatic authenticated Heimdall IPC routing (`status`, `runtime start|stop|restart`, `logs`) into `mimir`.
+- [x] Verified live end-to-end on Windows 11 (`heimdall.exe` ↔ `bifrost.exe` Named Pipe IPC + forged-token rejection test + real `adb.exe` discovery).
 
 ---
 
-## Milestone 5 — Valhalla Application Management (`Planned`)
+## Milestone 5 — Valhalla Application Management (`Planned` — **Next Implementation Milestone**)
 - [ ] Create `crates/valhalla`.
 - [ ] Query real installed packages from Android `PackageManager`.
 - [ ] Implement safe APK validation (canonical path check, zip/manifest inspection, ABI check flagging ARM64-only APKs).

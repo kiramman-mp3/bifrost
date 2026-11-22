@@ -14,12 +14,14 @@ name = "bifrost"
 path = "src/main.rs"
 
 [dependencies]
+bifrost-bridge = { path = "../bifrost-bridge" }
 bifrost-core = { path = "../bifrost-core" }
 bifrost-diagnostics = { path = "../bifrost-diagnostics" }
 bifrost-runtime = { path = "../bifrost-runtime" }
 clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+tokio.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
