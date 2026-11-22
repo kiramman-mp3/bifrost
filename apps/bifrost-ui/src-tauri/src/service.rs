@@ -11,12 +11,16 @@ use bifrost_bridge::{
 };
 use bifrost_core::{BifrostConfig, BifrostPaths, Result, RuntimeState, VersionInfo};
 use bifrost_diagnostics::{run_doctor, DoctorReport};
+use bifrost_display::{AppWindowHandle, AppWindowSpec, DisplayController};
 use bifrost_network::{NetworkManager, PortForwardRule};
 use bifrost_process::{AndroidProcess, ProcessManager};
 use bifrost_runtime::{MidgardRuntime, RuntimeLogs, RuntimeRecord, StartOptions};
 use serde::Serialize;
 use valhalla::manager::{InstallOutcome, LaunchOutcome};
-use valhalla::{inspect_apk, ApkInspection, InstalledPackage, PackageDetails, ValhallaManager};
+use valhalla::{
+    inspect_apk, ApkInspection, InstalledPackage, PackageDetails, ShortcutManager, ShortcutRecord,
+    ValhallaManager,
+};
 
 /// Aggregated Dashboard snapshot served to the UI.
 #[derive(Debug, Serialize)]
@@ -274,6 +278,79 @@ pub async fn launch_app(package: String) -> Result<LaunchOutcome> {
             .await;
     }
     ValhallaManager::new().launch_app(None, &package)
+}
+
+/// Launches an Android app in a dedicated WSA-style resizable Windows 11 window,
+/// automatically starting Midgard headlessly if it is currently stopped.
+pub async fn launch_app_window(
+    package: String,
+    width: Option<u32>,
+    height: Option<u32>,
+    dpi: Option<u32>,
+) -> Result<AppWindowHandle> {
+    let (_, config, paths) = load_config_and_paths()?;
+    let ctrl = DisplayController::new();
+    let valhalla = ValhallaManager::new();
+    let target = match valhalla.resolve_target_serial(None) {
+        Ok(serial) => serial,
+        Err(_) => {
+            let adb_endpoint = format!(
+                "{}:{}",
+                config.network.adb_bind_address, config.network.adb_port
+            );
+            let rt = MidgardRuntime::with_default_backend(config.clone(), paths.clone());
+            if !rt.status()?.state.is_active() {
+                let manifest = rt.resolve_default_manifest()?;
+                let client = heimdall_client(&paths);
+                if client.health().await.is_ok() {
+                    let _: RuntimeRecord = client
+                        .send(IpcRequest::RuntimeStart {
+                            manifest_path: manifest,
+                            headless: true,
+                        })
+                        .await?;
+                } else {
+                    let _ = rt.ensure_started_headless()?;
+                }
+            }
+            ctrl.wait_for_device_ready(&adb_endpoint, std::time::Duration::from_secs(90))?
+        }
+    };
+
+    let spec = AppWindowSpec {
+        width: width.unwrap_or(config.display.width),
+        height: height.unwrap_or(config.display.height),
+        dpi: dpi.unwrap_or(config.display.dpi),
+    };
+    ctrl.launch_in_independent_window(&target, &package, spec)
+}
+
+/// Lists all recorded Windows Desktop / Start Menu shortcuts for BIFRÖST Android apps.
+pub fn list_app_shortcuts() -> Result<Vec<ShortcutRecord>> {
+    let (_, _, paths) = load_config_and_paths()?;
+    ShortcutManager::new(paths.data_dir).list_shortcuts()
+}
+
+/// Creates Windows Desktop and Start Menu shortcuts for an installed Android package.
+pub fn create_app_shortcut(
+    package: String,
+    name: Option<String>,
+    apk_path: Option<PathBuf>,
+) -> Result<ShortcutRecord> {
+    let (_, _, paths) = load_config_and_paths()?;
+    ShortcutManager::new(paths.data_dir).create_for_app(
+        &package,
+        name.as_deref(),
+        apk_path.as_deref(),
+    )
+}
+
+/// Removes Windows Desktop and Start Menu shortcuts for an Android package.
+pub fn remove_app_shortcut(package: String) -> Result<bool> {
+    let (_, _, paths) = load_config_and_paths()?;
+    Ok(ShortcutManager::new(paths.data_dir)
+        .remove_for_app(&package)?
+        .is_some())
 }
 
 /// Force-stops an Android application via Valhalla.
