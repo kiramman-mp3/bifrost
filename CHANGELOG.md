@@ -7,6 +7,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Added
+- **Milestone 6 — Deep Windows Integration (Partially Implemented)**:
+  - Extended `crates/bifrost-bridge` with scoped host ↔ Android shared directories (`files.rs`, anti-traversal + guest path validation), native Win32 Unicode clipboard integration (`clipboard.rs`, audited Win32 `CF_UNICODETEXT` bounded to 1 MiB), and Android notification parser + XML-escaped Windows 11 Toast XML builder (`notifications.rs`) (`5` new unit tests).
+  - Created `crates/bifrost-process` (`#![forbid(unsafe_code)]`, Android `ps -A` parser sorted by RSS) and `crates/bifrost-network` (`#![forbid(unsafe_code)]`, unprivileged loopback-only TCP port-forwarding rules) (`2` new unit tests).
+  - Wired `bifrost share`, `bifrost clipboard`, `bifrost notifications`, `bifrost processes`, and `bifrost network` commands into `crates/mimir` (`48` total passing workspace tests across 11 crates).
+  - Independent per-app Windows desktop windows remain explicitly classified as `Planned / Experimental` pending live Android `VirtualDisplay` streaming.
 - **Milestone 5 — Valhalla Application Management**:
   - Created `crates/valhalla` (`#![forbid(unsafe_code)]`) with pure-Rust APK ZIP/`AndroidManifest.xml`/Zip-Slip inspection, SHA-256 hashing, ADR-0004 `x86_64` ABI enforcement (rejecting ARM64-only APKs with `UnsupportedAbi`), strict package ID validation, and real `pm`/`dumpsys`/`am` orchestration (`6` unit tests).
   - Extended Heimdall's authenticated Named Pipe IPC with `AppsList`, `AppInfo`, `AppInstall`, `AppUninstall`, `AppLaunch`, and `AppStop`.

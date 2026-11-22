@@ -72,16 +72,16 @@ This roadmap tracks BIFRÖST's incremental delivery from feasibility research to
 
 ---
 
-## Milestone 6 — Deep Windows Integration (`Planned` / `Experimental` — **Next Implementation Milestone**)
-- [ ] Evaluate and migrate/add `crosvm` WHPX + `gfxstream` backend in `bifrost-hypervisor`.
-- [ ] Implement scoped host ↔ guest directory sharing with strict path traversal guards.
-- [ ] Implement bidirectional clipboard sync and Android → Windows native toast notifications.
-- [ ] Implement **independent per-app Windows desktop windows** (Android `VirtualDisplay` + freeform + `vsock` frame/input bridge → lightweight Rust Win32 host windows).
-- [ ] Audio routing and touch/mouse/DPI scaling integration.
+## Milestone 6 — Deep Windows Integration (`Partially implemented` — **Host/Bridge Modules Complete; Per-App Windows Pending Live Display Stream**)
+- [x] Implemented scoped host ↔ Android shared directory bridge (`bifrost-bridge::files`) with root containment, guest path validation, and `bifrost share list|push|pull`.
+- [x] Implemented native Win32 Unicode clipboard integration (`bifrost-bridge::clipboard` via `OpenClipboard`/`CF_UNICODETEXT`, bounded to 1 MiB) and Android clipboard sync (`bifrost clipboard get|sync-to-android`).
+- [x] Implemented Android active notification parsing (`dumpsys notification --noredact`) and XML-escaped Windows 11 Toast payload rendering (`bifrost notifications list`).
+- [x] Created `crates/bifrost-process` (`ps -A` discovery sorted by RSS) and `crates/bifrost-network` (unprivileged loopback-only TCP port forwarding) wired into `bifrost processes list` and `bifrost network forwards|forward|unforward`.
+- [ ] **Remaining (Experimental / Pending Live VM)**: Independent per-app Windows desktop windows (`VirtualDisplay` + `vsock` frame/input stream → Win32 D3D12/Vulkan host windows) and `crosvm` + `gfxstream` backend evaluation.
 
 ---
 
-## Milestone 7 — Desktop Application (`apps/bifrost-ui`) (`Planned`)
+## Milestone 7 — Desktop Application (`apps/bifrost-ui`) (`Planned` — **Next Implementation Milestone**)
 - [ ] Build Windows 11 Fluent Design 2 desktop application (Tauri 2 with Rust backend talking strictly to Heimdall IPC).
 - [ ] Sections: Dashboard, Application Manager, Runtime Configuration, Diagnostics, and Settings (light/dark themes, accessible layout, zero ads).
 
