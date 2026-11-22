@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-22
+
 ### Added
 - **Live Windows 11 Home WHPX Android Boot Verified (Milestone 3 Complete)**:
   - Added automatic `qcow2` (`QFI\xfb`) vs. `raw` UEFI NVRAM (`efi_vars`) format detection, default QEMU `edk2-i386-vars.fd` fallback, Intel WHPX `-svm` CPU flag cleanup, and post-spawn crash detection in `crates/bifrost-hypervisor/src/qemu_whpx.rs` (`56` total passing workspace tests across 13 crates).
