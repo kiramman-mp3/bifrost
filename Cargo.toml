@@ -21,6 +21,8 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.80"
 authors = ["Johan Rodríguez"]
+license = "Apache-2.0"
+repository = "https://github.com/kiramman-mp3/bifrost"
 
 [workspace.lints.rust]
 unsafe_code = "deny"
