@@ -18,7 +18,11 @@ use bifrost_display::{AppWindowHandle, AppWindowSpec, DisplayController};
 use bifrost_network::{NetworkManager, PortForwardRule};
 use bifrost_process::{AndroidProcess, ProcessManager};
 use bifrost_runtime::{MidgardRuntime, RuntimeLogs, RuntimeRecord, StartOptions};
-use bifrost_storage::ImageRegistry;
+use bifrost_storage::registry::DEFAULT_USERDATA_COMPAT_VERSION;
+use bifrost_storage::{
+    backup_userdata, restore_userdata, verify_manifest_file, BackupMetadata, ImageRegistry,
+    InstalledImageRecord,
+};
 use serde::Serialize;
 use valhalla::manager::{InstallOutcome, LaunchOutcome};
 use valhalla::{
@@ -528,6 +532,166 @@ pub fn list_network_forwards() -> Result<Vec<PortForwardRule>> {
     NetworkManager::new().list_forwards(None)
 }
 
+/// Lists all registered Midgard runtime image bundles and the active image ID.
+pub fn list_images() -> Result<ImageRegistry> {
+    let (_, _, paths) = load_config_and_paths()?;
+    ImageRegistry::load(&paths.images_dir)
+}
+
+/// Verifies a Midgard `manifest.json` bundle (SHA-256) and registers it in the local catalog.
+pub fn register_image(manifest_path: PathBuf) -> Result<InstalledImageRecord> {
+    let (_, _, paths) = load_config_and_paths()?;
+    let safe_manifest = validate_host_file_path(&manifest_path, Some("json"))?;
+    let bundle = verify_manifest_file(&safe_manifest)?;
+    let mut registry = ImageRegistry::load(&paths.images_dir)?;
+    let record = registry.register_bundle(&bundle, false, DEFAULT_USERDATA_COMPAT_VERSION)?;
+    registry.save(&paths.images_dir)?;
+    Ok(record)
+}
+
+/// Switches the active Midgard runtime version after verifying upgrade compatibility.
+pub fn activate_image(image_id: String) -> Result<InstalledImageRecord> {
+    let (_, _, paths) = load_config_and_paths()?;
+    let mut registry = ImageRegistry::load(&paths.images_dir)?;
+    let activated = registry.activate(&image_id)?;
+    registry.save(&paths.images_dir)?;
+    Ok(activated)
+}
+
+fn default_userdata_path(paths: &BifrostPaths) -> PathBuf {
+    paths
+        .data_dir
+        .join("instances")
+        .join("default")
+        .join("userdata.img")
+}
+
+/// Creates a SHA-256-verified backup of persistent `userdata.img` inside `output_dir`.
+pub fn backup_userdata_to(output_dir: PathBuf) -> Result<BackupMetadata> {
+    let (_, _, paths) = load_config_and_paths()?;
+    let userdata_path = default_userdata_path(&paths);
+    backup_userdata(&userdata_path, &output_dir)
+}
+
+/// Verifies backup SHA-256 and restores `userdata.img` from `from_dir`.
+///
+/// Refuses to overwrite live `userdata.img` while Midgard VM is actively running.
+pub fn restore_userdata_from(from_dir: PathBuf) -> Result<BackupMetadata> {
+    let (_, config, paths) = load_config_and_paths()?;
+    let rt = MidgardRuntime::with_default_backend(config, paths.clone());
+    if rt.status()?.state.is_active() {
+        return Err(BifrostError::Runtime(
+            "stop the running Midgard VM before restoring a userdata backup".to_string(),
+        ));
+    }
+    let userdata_path = default_userdata_path(&paths);
+    restore_userdata(&from_dir, &userdata_path, true)
+}
+
+/// Opens a native Windows file picker dialog without blocking the async runtime.
+pub async fn pick_file_dialog(title: String, filter: String) -> Result<Option<PathBuf>> {
+    tokio::task::spawn_blocking(move || run_native_file_dialog(&title, &filter))
+        .await
+        .map_err(|err| BifrostError::Runtime(format!("file picker task failed: {err}")))?
+}
+
+/// Opens a native Windows folder picker dialog without blocking the async runtime.
+pub async fn pick_folder_dialog(title: String) -> Result<Option<PathBuf>> {
+    tokio::task::spawn_blocking(move || run_native_folder_dialog(&title))
+        .await
+        .map_err(|err| BifrostError::Runtime(format!("folder picker task failed: {err}")))?
+}
+
+#[cfg(windows)]
+fn run_native_file_dialog(title: &str, filter: &str) -> Result<Option<PathBuf>> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    const SCRIPT: &str = r#"
+$OutputEncoding = [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+Add-Type -AssemblyName System.Windows.Forms
+$dlg = New-Object System.Windows.Forms.OpenFileDialog
+$dlg.Title = $env:BIFROST_DLG_TITLE
+$dlg.Filter = $env:BIFROST_DLG_FILTER
+$dlg.Multiselect = $false
+$dlg.RestoreDirectory = $true
+if ($dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+    Write-Output $dlg.FileName
+}
+exit 0
+"#;
+    let output = std::process::Command::new("powershell.exe")
+        .args(["-NoProfile", "-NonInteractive", "-STA", "-Command", SCRIPT])
+        .env("BIFROST_DLG_TITLE", title)
+        .env("BIFROST_DLG_FILTER", filter)
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .map_err(|source| BifrostError::Io {
+            context: "opening Windows file picker dialog".to_string(),
+            source,
+        })?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(BifrostError::Runtime(format!(
+            "file picker failed: {stderr}"
+        )));
+    }
+    let selected = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if selected.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(PathBuf::from(selected)))
+    }
+}
+
+#[cfg(not(windows))]
+fn run_native_file_dialog(_title: &str, _filter: &str) -> Result<Option<PathBuf>> {
+    Ok(None)
+}
+
+#[cfg(windows)]
+fn run_native_folder_dialog(title: &str) -> Result<Option<PathBuf>> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    const SCRIPT: &str = r#"
+$OutputEncoding = [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+Add-Type -AssemblyName System.Windows.Forms
+$dlg = New-Object System.Windows.Forms.FolderBrowserDialog
+$dlg.Description = $env:BIFROST_DLG_TITLE
+$dlg.UseDescriptionForTitle = $true
+$dlg.ShowNewFolderButton = $true
+if ($dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+    Write-Output $dlg.SelectedPath
+}
+exit 0
+"#;
+    let output = std::process::Command::new("powershell.exe")
+        .args(["-NoProfile", "-NonInteractive", "-STA", "-Command", SCRIPT])
+        .env("BIFROST_DLG_TITLE", title)
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .map_err(|source| BifrostError::Io {
+            context: "opening Windows folder picker dialog".to_string(),
+            source,
+        })?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(BifrostError::Runtime(format!(
+            "folder picker failed: {stderr}"
+        )));
+    }
+    let selected = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if selected.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(PathBuf::from(selected)))
+    }
+}
+
+#[cfg(not(windows))]
+fn run_native_folder_dialog(_title: &str) -> Result<Option<PathBuf>> {
+    Ok(None)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -545,5 +709,11 @@ mod tests {
         let mut bad = BifrostConfig::default();
         bad.network.adb_bind_address = "0.0.0.0".to_string();
         assert!(save_config(bad).is_err());
+    }
+
+    #[test]
+    fn list_images_loads_registry_cleanly() {
+        let registry = list_images().unwrap();
+        assert!(registry.images.len() < 10_000);
     }
 }
