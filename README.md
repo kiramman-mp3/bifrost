@@ -10,10 +10,10 @@
 
 **BIFRÖST** is an open-source, Rust-powered Android subsystem for Windows 11 x64 designed to run real Android applications with deep native desktop integration — *"A Bridge Between Worlds."*
 
-Inspired by Bifröst from Norse mythology and engineered as a modern, auditable, community-maintained successor to Microsoft's discontinued Windows Subsystem for Android (WSA), BIFRÖST v0.3.0 delivers **Milestones 0 through 8 plus full WSA-grade desktop integration** across a modular Rust workspace (`13` crates, `67` passing tests): native Windows 11 / WHPX + host tooling diagnostics, invisible headless auto-boot on app launch or APK install, QEMU-WHPX with DirectSound audio + `virtio-gpu-pci` / experimental headless `virtio-gpu-gl-pci` + `crosvm-WHPX` backend, Heimdall authenticated Named Pipe daemon with optional silent Windows login autostart + automatic in-Android shortcut sync + real-time Windows 11 Toast notifications + auto clipboard sync, unprivileged `HKCU` `.apk` Explorer double-click & context menu handler, Valhalla APK/ABI manager, WSA-style dedicated dynamically resizable per-app windows (`--flex-display`), Windows 11 Fluent Design 2 Tauri 2 desktop app (with native file/folder pickers, APK drag-and-drop, and Midgard Images & Recovery management), and unprivileged Windows installer.
+Inspired by Bifröst from Norse mythology and engineered as a modern, auditable, community-maintained successor to Microsoft's discontinued Windows Subsystem for Android (WSA), BIFRÖST v0.3.1 delivers **Milestones 0 through 8 plus full WSA-grade desktop integration** across a modular Rust workspace (`13` crates, `67` passing tests): native Windows 11 / WHPX + host tooling diagnostics, invisible headless auto-boot on app launch or APK install, QEMU-WHPX with DirectSound audio + `virtio-gpu-pci` / experimental headless `virtio-gpu-gl-pci` + `crosvm-WHPX` backend, Heimdall authenticated Named Pipe daemon with optional silent Windows login autostart + automatic in-Android shortcut sync + real-time Windows 11 Toast notifications + auto clipboard sync, unprivileged `HKCU` `.apk` Explorer double-click & context menu handler, Valhalla APK/ABI manager, WSA-style dedicated dynamically resizable per-app windows (`--flex-display`), Windows 11 Fluent Design 2 Tauri 2 desktop app (with native file/folder pickers, APK drag-and-drop, and Midgard Images & Recovery management), and unprivileged Windows installer.
 
 > [!TIP]
-> **Quick start (`v0.3.0`)**: Download the latest Windows x64 release bundle or run directly from source:
+> **Quick start (`v0.3.1`)**: Download the latest Windows x64 release bundle or run directly from source:
 > ```powershell
 > $env:CARGO_TARGET_DIR = "$env:TEMP\bifrost-target" # required with MinGW ld if repo path contains non-ASCII characters
 > cargo test --workspace
@@ -410,7 +410,7 @@ See [ROADMAP.md](ROADMAP.md) for detailed milestone exit criteria.
 
 | Contributor | Commits |
 |---|---:|
-| Johan Rodríguez | 127 |
+| Johan Rodríguez | 129 |
 
 ---
 

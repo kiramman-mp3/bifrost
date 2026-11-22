@@ -6,6 +6,29 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-22
+
+### Added
+- **Silent GUI Shortcut & Login Launchers (`bifrost-ui`, `valhalla`)**:
+  - Desktop and Start Menu app shortcuts now invoke `bifrost-ui.exe --launch-app <pkg>` (Windows GUI subsystem, zero console flash on double-click, with Windows Toast fallback on launch failure).
+  - Unprivileged Windows login autostart for Heimdall under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\BifrostHeimdall` (`bifrost-ui.exe --start-heimdall`), manageable via `bifrost daemon autostart [--enable | --disable]` and `bifrost-ui` Settings, and cleaned automatically by `uninstall-bifrost.ps1`.
+  - Added `bifrost daemon start` (detached background supervisor start with 5s IPC readiness poll) and **Start / Stop Heimdall** toggle in `bifrost-ui` Dashboard.
+- **Host Runtime Tooling Diagnostics (`bifrost-diagnostics`)**:
+  - Extended `bifrost doctor` to 8 checks with **Host Runtime Tooling**, verifying `qemu-system-x86_64`, EDK2 UEFI firmware (`edk2-x86_64-code.fd`), `adb`, `scrcpy`, and registered Midgard images with exact remediation commands.
+- **Windows 11 Desktop UX Polish (`apps/bifrost-ui`)**:
+  - Native Windows file and folder pickers (`Browse…`) for `manifest.json`, `.apk` packages, and backup/restore directories (zero `unsafe`, zero extra crate dependencies).
+  - Native window-wide `.apk` and `manifest.json` drag-and-drop overlay (`tauri://drag-drop`) with automatic offline SHA-256 & ADR-0004 `x86_64` ABI inspection.
+  - New **Images & Recovery** view in `bifrost-ui` for listing/registering/activating verified Midgard bundles and creating/restoring SHA-256-verified `userdata.img` backups.
+  - Added headless Midgard auto-boot to GUI APK installation (`install_apk_file`) and automatic active-manifest autofill on Dashboard.
+
+### Fixed
+- **Runtime State Reconciliation (`bifrost-runtime`, `heimdall`, `mimir`, `bifrost-ui`)**:
+  - Reconciled `Booting` → `Running` automatically once the Android guest reports `sys.boot_completed=1` over loopback ADB (both with and without Heimdall running).
+- **Pre-IPC Input Validation & Test Determinism (`mimir`)**:
+  - Validated host `.apk` paths and Android package identifiers locally before dispatching over Heimdall IPC, strengthening defense-in-depth and making `cargo test --workspace` (`67` passing tests across 13 crates) fully deterministic even while Heimdall is active.
+- **PowerShell 5.1 Registry Query Exit Code (`valhalla`)**:
+  - Added explicit `exit 0` guards to HKCU registry helper scripts so missing optional properties never leak a non-zero PowerShell exit code.
+
 ## [0.3.0] - 2026-11-22
 
 ### Added
