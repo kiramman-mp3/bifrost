@@ -1,5 +1,6 @@
-# Rust / Cargo / Tauri generated schemas
+# Rust / Cargo / Tauri generated schemas & release bundles
 /target/
+/dist/
 **/*.rs.bk
 Cargo.lock.bak
 /apps/bifrost-ui/src-tauri/gen/
