@@ -97,7 +97,7 @@ impl HypervisorBackend for QemuWhpxBackend {
             "-machine".to_string(),
             "q35,accel=whpx,kernel-irqchip=off".to_string(),
             "-cpu".to_string(),
-            "qemu64,+ssse3,+sse4.1,+sse4.2,+popcnt,+x2apic,-svm".to_string(),
+            "qemu64,+ssse3,+sse4.1,+sse4.2,+popcnt,+cx16,+x2apic,-svm".to_string(),
             "-m".to_string(),
             spec.memory_mb.to_string(),
             "-smp".to_string(),
@@ -275,16 +275,24 @@ impl HypervisorBackend for QemuWhpxBackend {
         ));
 
         // Display / graphics configuration.
+        // Disable legacy Bochs VGA (`-vga none`) and always attach a real DRM/KMS
+        // VirtIO GPU so Android's `virtgpu_detect`, `drm_hwcomposer`, and
+        // `surfaceflinger` initialize cleanly in both graphical and headless modes.
+        let gpu_device = match spec.graphics_mode {
+            GraphicsMode::Auto | GraphicsMode::SwiftShader => "virtio-gpu-pci,xres=1280,yres=720",
+            GraphicsMode::Gfxstream => "virtio-gpu-pci,xres=1280,yres=720",
+        };
+        args.push("-vga".to_string());
+        args.push("none".to_string());
+        args.push("-device".to_string());
+        args.push(gpu_device.to_string());
+
         if spec.headless {
             args.push("-display".to_string());
             args.push("none".to_string());
         } else {
-            let gpu_device = match spec.graphics_mode {
-                GraphicsMode::Auto | GraphicsMode::SwiftShader => "virtio-vga",
-                GraphicsMode::Gfxstream => "virtio-vga",
-            };
-            args.push("-device".to_string());
-            args.push(gpu_device.to_string());
+            args.push("-display".to_string());
+            args.push("sdl".to_string());
         }
 
         // Serial console capture (file-backed log or interactive stdio).
@@ -648,6 +656,8 @@ mod tests {
         assert!(joined.contains("virtio-blk-pci,drive=userdata"));
         assert!(joined.contains("hostfwd=tcp:127.0.0.1:5555-:5555"));
         assert!(joined.contains("tcp:127.0.0.1:4444,server=on,wait=off"));
+        assert!(joined.contains("-vga none"));
+        assert!(joined.contains("-device virtio-gpu-pci,xres=1280,yres=720"));
         assert!(joined.contains("-display none"));
     }
 
