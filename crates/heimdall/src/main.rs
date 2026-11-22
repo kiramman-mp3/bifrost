@@ -1,5 +1,6 @@
 //! Heimdall (`heimdall.exe`) background supervisor daemon entry point.
 
+mod app_sync;
 mod pipe_security;
 mod server;
 mod supervisor;
@@ -119,9 +120,16 @@ async fn run(cli: Cli) -> bifrost_core::Result<()> {
         } => {
             let pipe_name = pipe.unwrap_or_else(default_pipe_name);
             let data_dir = paths.data_dir.clone();
+            let desktop_cfg = config.desktop.clone();
             let runtime = MidgardRuntime::with_default_backend(config, paths);
             let adb = AdbClient::new();
-            let state = Arc::new(SupervisorState::new(runtime, adb, pipe_name.clone()));
+            let state = Arc::new(SupervisorState::with_desktop_config(
+                runtime,
+                adb,
+                pipe_name.clone(),
+                data_dir.clone(),
+                desktop_cfg,
+            ));
 
             let (shutdown_tx, shutdown_rx) = watch::channel(false);
 

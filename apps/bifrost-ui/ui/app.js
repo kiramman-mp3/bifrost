@@ -437,12 +437,18 @@ function wireEvents() {
         memory_mb: Number(document.getElementById("cfg-ram").value),
         storage_gb: Number(document.getElementById("cfg-storage").value),
         graphics_mode: document.getElementById("cfg-graphics").value,
+        audio_enabled: lastDashboard.config.runtime.audio_enabled ?? true,
         data_dir: lastDashboard.config.runtime.data_dir,
       },
       display: {
         width: Number(document.getElementById("cfg-width").value),
         height: Number(document.getElementById("cfg-height").value),
         dpi: Number(document.getElementById("cfg-dpi").value),
+      },
+      desktop: lastDashboard.config.desktop || {
+        auto_sync_shortcuts: true,
+        forward_notifications: true,
+        auto_sync_clipboard: true,
       },
       network: {
         adb_bind_address: document.getElementById("cfg-adb-host").value.trim(),
