@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-11-22
+
+### Added
+- **Full `.apkm` Split-APK Bundle Support (`valhalla`, `mimir`, `bifrost-ui`)**:
+  - Extended Windows Explorer integration (`HKCU\Software\Classes`, zero UAC) to register both **`.apk` and `.apkm`** for the **"Install with BIFRÖST"** right-click context menu and default double-click handler (`Bifrost.ApkPackage`), with clean removal on uninstall.
+  - Added pure-Rust `.apkm` split-bundle inspection in `crates/valhalla/src/apk.rs` with outer + inner Zip-Slip protection, `info.json` + `AndroidManifest.xml` package discovery, high-resolution `icon.png` / `base.apk` icon extraction, and ADR-0004 ABI verification across all split APKs (`69` passing workspace tests).
+  - Automatic multi-ABI split filtering (excludes foreign-architecture-only splits such as `split_config.arm64_v8a.apk` when `x86_64` is present to avoid `INSTALL_FAILED_NO_MATCHING_ABIS`) and real installation via `adb install-multiple -r`.
+  - Updated `bifrost-ui` native **Browse…** file picker and window-wide **Drag & Drop** overlay to accept `.apkm` alongside `.apk`.
+
 ## [0.3.1] - 2026-11-22
 
 ### Added
