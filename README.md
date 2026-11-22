@@ -7,14 +7,15 @@
 
 **BIFRÖST** is an open-source, Rust-powered Android subsystem for Windows 11 designed to run real Android applications with deep native desktop integration — *"A Bridge Between Worlds."*
 
-Inspired by Bifröst from Norse mythology and built as a modern, transparent, community-maintained successor to Microsoft's discontinued Windows Subsystem for Android (WSA), BIFRÖST is currently at **Milestone 7 (`apps/bifrost-ui` Windows 11 Fluent Design Desktop App Complete)** and preparing for **Milestone 8 (Distribution, Verified Updates & Recovery)**.
+Inspired by Bifröst from Norse mythology and built as a modern, transparent, community-maintained successor to Microsoft's discontinued Windows Subsystem for Android (WSA), BIFRÖST has completed **Milestones 0 through 8** across its Rust workspace (`12` crates, `53` passing tests), desktop app, signed image update tooling, recovery suite, and Windows user-space installer (with live WHPX Android boot and per-app desktop window streaming tracked openly as remaining live-VM milestones).
 
 > [!TIP]
-> **Quick start (Milestone 7)**: Run the full test suite, run diagnostics, or launch the Windows 11 desktop app:
+> **Quick start (Milestone 8)**: Run the full workspace test suite, inspect Windows 11 WHPX readiness, export diagnostics, or launch the desktop app:
 > ```powershell
 > $env:CARGO_TARGET_DIR = "C:\Users\johan\Proyectos\bifrost-target" # required with MinGW ld if repo path contains 'Ö'
 > cargo test --workspace
 > cargo run -p mimir -- doctor
+> cargo run -p mimir -- recovery export-diagnostics --output .\diagnostics.json
 > cargo run -p bifrost-ui
 > ```
 
@@ -96,6 +97,7 @@ Current repository layout (Milestone 3 — only active crates are created):
 
 ```bash
 BIFRÖST/
+├── .github/workflows/ci.yml                       # Automated Windows x64 CI (fmt, clippy, test, release build)
 ├── .gitignore                                     # Rust, Windows, disk images, logs, and secrets exclusions
 ├── Cargo.toml                                     # Cargo workspace manifest (unsafe_code = "deny")
 ├── Cargo.lock                                     # Reproducible dependency lockfile
@@ -126,6 +128,12 @@ BIFRÖST/
 │           └── src/
 │               ├── main.rs                        # Thin `#[tauri::command]` bindings
 │               └── service.rs                     # Testable Rust service integrating all crates
+├── installer/
+│   ├── README.md                                  # Distribution, installation, upgrade & recovery runbook
+│   └── windows/
+│       ├── build-release-bundle.ps1               # Reproducible release packager + SHA-256 manifest
+│       ├── install-bifrost.ps1                    # Unprivileged user-space Windows installer (SHA-256 verified)
+│       └── uninstall-bifrost.ps1                  # Clean uninstaller preserving Android userdata by default
 ├── crates/
 │   ├── bifrost-core/                              # Shared domain models, state machine, TOML config, path security, logging
 │   │   ├── Cargo.toml
@@ -145,12 +153,15 @@ BIFRÖST/
 │   │       ├── evaluator.rs                       # Pure compatibility rules & unit tests
 │   │       ├── format.rs                          # Human-readable terminal report renderer
 │   │       └── probe_windows.rs                   # Audited Win32, Registry, CPUID, WHPX, and DXGI probes
-│   ├── bifrost-storage/                           # Verified Midgard image manifests & persistent userdata disks
+│   ├── bifrost-storage/                           # Signed image manifests, version registry, userdata & recovery
 │   │   ├── Cargo.toml
 │   │   └── src/
 │   │       ├── lib.rs                             # #![forbid(unsafe_code)]
 │   │       ├── manifest.rs                        # Versioned bundle schema (direct_kernel & bootable_image)
 │   │       ├── verify.rs                          # Streaming SHA-256 verification & root containment
+│   │       ├── signature.rs                       # Pure-Rust Ed25519 manifest signature verification
+│   │       ├── registry.rs                        # Local Midgard image catalog & upgrade/downgrade safety
+│   │       ├── recovery.rs                        # SHA-256-verified userdata backup & guarded restore
 │   │       └── disk.rs                            # Persistent userdata.img creation & guarded wipe
 │   ├── bifrost-hypervisor/                        # VMM-agnostic WHPX abstraction & Phase 1 QEMU-WHPX backend
 │   │   ├── Cargo.toml
@@ -277,7 +288,7 @@ cargo run -p mimir -- status
 |---|---|---|
 | `cargo fmt --all -- --check` | Verify Rust code formatting across workspace | **Implemented** |
 | `cargo clippy --workspace --all-targets -- -D warnings` | Run strict Clippy static analysis | **Implemented** |
-| `cargo test --workspace` | Execute unit & IPC tests (`50` tests across 12 workspace crates) | **Implemented** |
+| `cargo test --workspace` | Execute unit & IPC tests (`53` tests across 12 workspace crates) | **Implemented** |
 | `cargo run -p bifrost-ui` | Launch BIFRÖST Windows 11 Fluent Design desktop application | **Implemented** |
 | `heimdall run` | Start background Heimdall supervisor on owner-DACL Windows Named Pipe | **Implemented** |
 | `bifrost version [--json]` | Display BIFRÖST version, host target, and capability maturity | **Implemented** |
@@ -296,15 +307,18 @@ cargo run -p mimir -- status
 | `bifrost notifications list` | Inspect active Android notifications via `dumpsys` | **Implemented** |
 | `bifrost processes list [--filter]` | List running Android guest processes sorted by RSS | **Implemented** |
 | `bifrost network forwards \| forward \| unforward` | Manage unprivileged loopback TCP port forwards | **Implemented** |
+| `bifrost images list \| register \| use` | Manage SHA-256 / Ed25519-verified Midgard versions & upgrade compatibility | **Implemented** |
+| `bifrost recovery backup \| restore \| wipe-userdata \| export-diagnostics` | Verified userdata backup/restore, guarded wipe & sanitized diagnostic bundle | **Implemented** |
 
 ---
 
 ## 📦 Deployment and Distribution
 
-Distribution packaging is planned for **Milestone 8**:
-- Host binaries (`bifrost.exe`, `heimdall.exe`, `bifrost-ui`) will ship via a signed Windows installer (MSIX / WiX).
-- Midgard Android `x86_64` runtime images will be built reproducibly on Linux CI runners and published as separate, versioned bundles accompanied by SHA-256 checksums and Ed25519 signatures.
-- No proprietary Google Play Services, GApps, `libhoudini`, or `libndk_translation` binaries will ever be distributed.
+Distribution tooling is implemented under [installer/](installer/README.md) and [.github/workflows/ci.yml](.github/workflows/ci.yml):
+- `installer/windows/build-release-bundle.ps1` builds `bifrost.exe`, `heimdall.exe`, and `bifrost-ui.exe` in release mode and emits `release-checksums.sha256`.
+- `installer/windows/install-bifrost.ps1` verifies every SHA-256 digest before installing unprivileged into `%LOCALAPPDATA%\Programs\BIFRÖST`, updating user `PATH`, and creating a Start Menu shortcut while preserving existing Android `userdata`.
+- `installer/windows/uninstall-bifrost.ps1` cleanly removes binaries and shortcuts while keeping `%LOCALAPPDATA%\bifrost` intact unless `-PurgeUserData -ConfirmPurge` is explicitly specified.
+- Midgard runtime bundles support Ed25519 signature verification alongside SHA-256 digests (`bifrost images register`); no proprietary Google Play Services, GApps, `libhoudini`, or `libndk_translation` binaries are ever distributed.
 
 ---
 
@@ -331,6 +345,7 @@ Distribution packaging is planned for **Milestone 8**:
 | `valhalla` (APK/ABI inspection & `pm`/`am` manager) | **Implemented** | Completed in Milestone 5 (`6` tests; enforces ADR-0004 `x86_64` ABI check & Zip Slip rejection) |
 | `mimir` CLI (`bifrost.exe`) | **Implemented** | Full administrative command set live (`6` tests) |
 | `bifrost-ui` (Tauri 2 Fluent desktop app) | **Implemented** | Completed in Milestone 7 (Dashboard, Apps, Config, Diagnostics, Settings; `2` backend service tests) |
+| Distribution, Ed25519 updates & recovery | **Implemented** | Completed in Milestone 8 (Ed25519 signatures, image registry, userdata backup/restore, Windows installer/uninstaller & CI) |
 | Independent per-app Windows desktop windows | **Planned / Experimental** | Pending live Midgard `VirtualDisplay` frame stream |
 | ARM64 binary translation (`arm64-v8a` native APKs) | **Unsupported** | Independent clean-room research only |
 
@@ -346,7 +361,7 @@ Distribution packaging is planned for **Milestone 8**:
 - [x] **Milestone 5**: Valhalla real Android package management (`install`, `uninstall`, `apps list|info|launch|stop`).
 - [ ] **Milestone 6**: Windows integration *(shared dirs, Win32 clipboard, notifications, processes & loopback networking complete; per-app desktop windows pending live display stream)*.
 - [x] **Milestone 7**: Windows 11 Fluent Design desktop application (`apps/bifrost-ui`).
-- [ ] **Milestone 8**: Signed installer, verified runtime image updates, and recovery tooling.
+- [x] **Milestone 8**: Ed25519 signed image registry, upgrade safety, verified userdata recovery, Windows installer/uninstaller, and CI.
 
 See [ROADMAP.md](ROADMAP.md) for detailed milestone exit criteria.
 
@@ -356,7 +371,7 @@ See [ROADMAP.md](ROADMAP.md) for detailed milestone exit criteria.
 
 | Contributor | Commits |
 |---|---:|
-| Johan Rodríguez | 42 |
+| Johan Rodríguez | 47 |
 
 ---
 

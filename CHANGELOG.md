@@ -7,6 +7,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Added
+- **Milestone 8 — Distribution, Signed Updates & Recovery**:
+  - Extended `crates/bifrost-storage` (`#![forbid(unsafe_code)]`) with Ed25519 cryptographic signature verification (`signature.rs`), local Midgard image version registry & upgrade/downgrade safety (`registry.rs`), and SHA-256-verified userdata backup/restore (`recovery.rs`) (`3` new unit tests).
+  - Wired `bifrost images list|register|use` and `bifrost recovery backup|restore|wipe-userdata|export-diagnostics` into `crates/mimir` (`53` total passing workspace tests across 12 crates).
+  - Added reproducible Windows release bundle script, unprivileged user-space installer/uninstaller preserving `userdata` by default (`installer/windows/`), `installer/README.md`, and `.github/workflows/ci.yml`.
 - **Milestone 7 — Desktop Application (`apps/bifrost-ui`)**:
   - Built `apps/bifrost-ui/src-tauri` (`#![forbid(unsafe_code)]`) using Tauri 2 with a pure-Rust `service.rs` backend integrating Heimdall IPC, Midgard runtime, Valhalla APK/package management, native `bifrost-diagnostics`, shared directories, Win32 clipboard, processes, and networking (`2` service tests).
   - Built `apps/bifrost-ui/ui/` with Windows 11 Fluent Design 2 styling, Dark/Light themes, accessible navigation, strict CSP, and all 5 required sections (Dashboard, Application Manager, Runtime Configuration, Diagnostics, Settings).
