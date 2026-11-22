@@ -11,7 +11,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 if ([string]::IsNullOrWhiteSpace($TargetDir)) {
-    $TargetDir = "C:\Users\johan\Proyectos\bifrost-target"
+    $TargetDir = Join-Path $env:TEMP "bifrost-target"
 }
 $env:CARGO_TARGET_DIR = $TargetDir
 
@@ -42,7 +42,8 @@ if ($wv2) {
     $checksumLines += "$hash  WebView2Loader.dll"
 }
 
-$checksumFile = Join-Path $OutputDir "release-checksums.sha256"
-$checksumLines | Set-Content -Encoding UTF8 $checksumFile
+$checksumFile = Join-Path (Resolve-Path $OutputDir).Path "release-checksums.sha256"
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllLines($checksumFile, [string[]]$checksumLines, $utf8NoBom)
 
 Write-Host "Release bundle staged at '$OutputDir' with verified SHA-256 manifest '$checksumFile'."
