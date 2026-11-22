@@ -287,6 +287,23 @@ pub enum AppsAction {
         #[arg(long)]
         serial: Option<String>,
     },
+    /// Create or remove Windows Desktop and Start Menu shortcuts for an installed app.
+    Shortcut {
+        /// Android package identifier (e.g., org.fdroid.fdroid).
+        package: String,
+
+        /// Optional display name for the Desktop & Start Menu shortcuts.
+        #[arg(long)]
+        name: Option<String>,
+
+        /// Optional local `.apk` path to extract the app's native icon from.
+        #[arg(long)]
+        apk: Option<PathBuf>,
+
+        /// Remove existing Desktop and Start Menu shortcuts instead of creating them.
+        #[arg(long)]
+        remove: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]

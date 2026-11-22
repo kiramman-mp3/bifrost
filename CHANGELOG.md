@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+- **Automatic Windows Desktop & Start Menu App Icons on APK Install (`valhalla`, `mimir`)**:
+  - Added pure-Rust AXML `package` extraction and PNG-to-`.ico` launcher icon extraction in `crates/valhalla/src/apk.rs`.
+  - Created `crates/valhalla/src/shortcuts.rs` (`#![forbid(unsafe_code)]`) to automatically create Windows Desktop (`<Desktop>\<App>.lnk`) and Start Menu (`Start Menu\Programs\BIFRÖST Apps\<App>.lnk`) shortcuts on `bifrost install <app.apk>` (launching the app in a dedicated resizable WSA-style window via `bifrost apps launch <pkg> --window`) and remove them automatically on `bifrost uninstall <pkg>`.
+  - Added `bifrost apps shortcut <pkg> [--name] [--apk] [--remove]` for creating or removing shortcuts for already-installed apps, and automatic loopback ADB reconnection in `ValhallaManager::resolve_target_serial`.
+
 ## [0.2.0] - 2026-11-22
 
 ### Added

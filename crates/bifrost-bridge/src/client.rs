@@ -13,7 +13,19 @@ use crate::ipc::{
     IpcResponseEnvelope, IPC_PROTOCOL_VERSION,
 };
 
-const IPC_IO_TIMEOUT: Duration = Duration::from_secs(5);
+const IPC_FAST_TIMEOUT: Duration = Duration::from_secs(10);
+const IPC_LONG_OP_TIMEOUT: Duration = Duration::from_secs(120);
+
+fn timeout_for_request(req: &IpcRequest) -> Duration {
+    match req {
+        IpcRequest::AppInstall { .. }
+        | IpcRequest::AppUninstall { .. }
+        | IpcRequest::RuntimeStart { .. }
+        | IpcRequest::RuntimeStop { .. }
+        | IpcRequest::RuntimeRestart { .. } => IPC_LONG_OP_TIMEOUT,
+        _ => IPC_FAST_TIMEOUT,
+    }
+}
 
 /// Client speaking the authenticated Heimdall IPC protocol.
 #[derive(Debug, Clone)]
@@ -94,7 +106,8 @@ impl HeimdallClient {
                 ))
             })?;
 
-        timeout(IPC_IO_TIMEOUT, async {
+        let op_timeout = timeout_for_request(&req.request);
+        timeout(op_timeout, async {
             write_frame(&mut pipe, req).await?;
             read_frame::<_, IpcResponseEnvelope>(&mut pipe).await
         })
