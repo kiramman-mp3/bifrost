@@ -324,6 +324,15 @@ pub enum DaemonAction {
     Status,
     /// Request a graceful Heimdall daemon shutdown over authenticated IPC.
     Stop,
+    /// Query or toggle unprivileged Windows login autostart for Heimdall (`HKCU\...\Run`).
+    Autostart {
+        /// Enable silent Heimdall startup at Windows user login.
+        #[arg(long, conflicts_with = "disable")]
+        enable: bool,
+        /// Disable Heimdall startup at Windows user login.
+        #[arg(long, conflicts_with = "enable")]
+        disable: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]

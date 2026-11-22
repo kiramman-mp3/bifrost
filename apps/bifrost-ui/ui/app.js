@@ -179,6 +179,15 @@ function renderSettings(data) {
       </div>`
     )
     .join("");
+
+  const autostartBtn = document.getElementById("btn-heimdall-autostart");
+  const autostartStatus = document.getElementById("settings-autostart-status");
+  if (autostartBtn && autostartStatus) {
+    autostartBtn.textContent = data.heimdall_autostart ? "Disable Autostart" : "Enable Autostart";
+    autostartStatus.textContent = data.heimdall_autostart
+      ? "Enabled: Heimdall starts silently at Windows login via HKCU\\...\\Run\\BifrostHeimdall (zero admin)."
+      : "Disabled: Start Heimdall manually or enable silent Windows login autostart (HKCU\\...\\Run, no admin required).";
+  }
 }
 
 async function refreshAll() {
@@ -372,6 +381,20 @@ function wireEvents() {
         const health = await invoke("start_heimdall");
         showToast(`Heimdall daemon started (PID ${health.daemon_pid}).`);
       }
+      await refreshAll();
+    } catch (err) {
+      showToast(String(err), true);
+    }
+  });
+  document.getElementById("btn-heimdall-autostart").addEventListener("click", async () => {
+    try {
+      const next = !Boolean(lastDashboard?.heimdall_autostart);
+      await invoke("set_heimdall_autostart", { enabled: next });
+      showToast(
+        next
+          ? "Enabled silent Heimdall login autostart (HKCU\\...\\Run)."
+          : "Disabled Heimdall login autostart."
+      );
       await refreshAll();
     } catch (err) {
       showToast(String(err), true);
