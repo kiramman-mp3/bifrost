@@ -6,11 +6,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-22
+
 ### Added
-- **Automatic Windows Desktop & Start Menu App Icons on APK Install (`valhalla`, `mimir`)**:
-  - Added pure-Rust AXML `package` extraction and PNG-to-`.ico` launcher icon extraction in `crates/valhalla/src/apk.rs`.
-  - Created `crates/valhalla/src/shortcuts.rs` (`#![forbid(unsafe_code)]`) to automatically create Windows Desktop (`<Desktop>\<App>.lnk`) and Start Menu (`Start Menu\Programs\BIFRÖST Apps\<App>.lnk`) shortcuts on `bifrost install <app.apk>` (launching the app in a dedicated resizable WSA-style window via `bifrost apps launch <pkg> --window`) and remove them automatically on `bifrost uninstall <pkg>`.
-  - Added `bifrost apps shortcut <pkg> [--name] [--apk] [--remove]` for creating or removing shortcuts for already-installed apps, and automatic loopback ADB reconnection in `ValhallaManager::resolve_target_serial`.
+- **Zero-Friction WSA-Style Auto-Boot & `bifrost-ui` Window Controls (Phase 1)**:
+  - `bifrost apps launch <pkg> --window` (and `bifrost install <apk>`) automatically starts Midgard in invisible `--headless` mode from the active registered image in `ImageRegistry` and waits for loopback ADB + `sys.boot_completed=1` when Android is currently stopped (`--no-autostart` opt-out supported).
+  - Added **Open Window** and **Pin / Unpin** Windows shortcut controls directly to `apps/bifrost-ui`'s Application Manager (`launch_app_window`, `list_app_shortcuts`, `create_app_shortcut`, `remove_app_shortcut`).
+- **Automatic Windows Desktop & Start Menu App Icons + Heimdall In-Android Sync (Phase 2)**:
+  - Pure-Rust AXML `package` extraction and PNG-to-`.ico` launcher icon extraction in `crates/valhalla/src/apk.rs`.
+  - Created `crates/valhalla/src/shortcuts.rs` (`#![forbid(unsafe_code)]`) for automatic Desktop (`<Desktop>\<App>.lnk`) and Start Menu (`Start Menu\Programs\BIFRÖST Apps\<App>.lnk`) shortcut creation on `bifrost install`, clean removal on `bifrost uninstall`, and manual management via `bifrost apps shortcut`.
+  - Created `crates/heimdall/src/app_sync.rs` so Heimdall automatically syncs shortcuts (and pulls base APK icons) for apps installed or uninstalled from inside Android (e.g., via F-Droid).
+- **Unprivileged Windows 11 `.apk` File Association & Context Menu (Phase 3)**:
+  - Created `crates/valhalla/src/file_assoc.rs` registering Explorer's **"Install with BIFRÖST"** context menu and default `.apk` double-click handler strictly under `HKCU\Software\Classes` (zero admin/UAC required), wired into `bifrost desktop register-apk-handler | unregister-apk-handler`, `install-bifrost.ps1`, and `uninstall-bifrost.ps1`.
+- **Native Audio, Real-Time Windows 11 Toast Notifications & Auto Clipboard Sync (Phase 4)**:
+  - Added DirectSound HDA audio (`-audiodev dsound,id=snd0 -device ich9-intel-hda -device hda-duplex`) to `QemuWhpxBackend` controlled by `runtime.audio_enabled = true`.
+  - Added WinRT `dispatch_windows_toast` in `crates/bifrost-bridge/src/notifications.rs` and `crates/heimdall/src/desktop_bridge.rs` for deduplicated real-time Android → Windows 11 Toast forwarding and hash-guarded automatic clipboard sync (enabled by default in `DesktopConfig` and toggleable in `bifrost-ui`).
+- **Empirical Windows 11 GPU 3D Evaluation & CI Enhancements (Phase 5)**:
+  - Added `docs/research/gpu-3d-windows-evaluation.md` documenting empirical Intel Arc 140T + QEMU 11.1.0 ANGLE/`virglrenderer` tests and enabled opt-in headless `virtio-gpu-gl-pci` + `egl-headless` when `graphics_mode = "gfxstream"`.
+  - Added `workflow_dispatch` to `.github/workflows/ci.yml` and CI status badge to `README.md` (`64` total passing tests across 13 workspace crates).
 
 ## [0.2.0] - 2026-11-22
 
