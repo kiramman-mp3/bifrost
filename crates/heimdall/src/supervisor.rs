@@ -12,6 +12,7 @@ use tokio::sync::{watch, Mutex, RwLock};
 use tracing::{debug, warn};
 
 use crate::app_sync::AppShortcutSyncer;
+use crate::desktop_bridge::DesktopBridgeWorker;
 
 /// Shared live supervision state maintained by Heimdall.
 pub struct SupervisorState {
@@ -23,6 +24,7 @@ pub struct SupervisorState {
     pub desktop: DesktopConfig,
     pub health: RwLock<DaemonHealthReport>,
     pub app_sync: Mutex<AppShortcutSyncer>,
+    pub desktop_bridge: Mutex<DesktopBridgeWorker>,
 }
 
 impl SupervisorState {
@@ -79,6 +81,7 @@ impl SupervisorState {
             desktop,
             health: RwLock::new(health),
             app_sync: Mutex::new(AppShortcutSyncer::default()),
+            desktop_bridge: Mutex::new(DesktopBridgeWorker::default()),
         }
     }
 
@@ -143,6 +146,15 @@ impl SupervisorState {
                 if self.desktop.auto_sync_shortcuts {
                     let mut syncer = self.app_sync.lock().await;
                     syncer.maybe_sync(&self.adb, endpoint, &self.data_dir);
+                }
+                if self.desktop.forward_notifications || self.desktop.auto_sync_clipboard {
+                    let mut bridge = self.desktop_bridge.lock().await;
+                    if self.desktop.forward_notifications {
+                        bridge.sync_notifications(&self.adb, endpoint);
+                    }
+                    if self.desktop.auto_sync_clipboard {
+                        bridge.sync_clipboard(&self.adb, endpoint);
+                    }
                 }
             }
         }

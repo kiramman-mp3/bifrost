@@ -18,6 +18,7 @@ pub struct VmSpec {
     pub adb_bind_address: String,
     pub adb_port: u16,
     pub graphics_mode: GraphicsMode,
+    pub audio_enabled: bool,
     pub headless: bool,
     pub interactive_console: bool,
     pub serial_log_path: PathBuf,

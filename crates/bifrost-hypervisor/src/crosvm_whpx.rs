@@ -256,6 +256,7 @@ mod tests {
             adb_bind_address: "127.0.0.1".to_string(),
             adb_port: 5555,
             graphics_mode: GraphicsMode::Gfxstream,
+            audio_enabled: true,
             headless: false,
             interactive_console: false,
             serial_log_path: PathBuf::from(r"C:\logs\serial.log"),
