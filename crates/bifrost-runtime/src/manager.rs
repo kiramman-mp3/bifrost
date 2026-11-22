@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use bifrost_core::{BifrostConfig, BifrostError, BifrostPaths, Result, RuntimeState};
 use bifrost_hypervisor::{HypervisorBackend, QemuWhpxBackend, VmSpec};
-use bifrost_storage::{ensure_userdata_disk, verify_manifest_file, VerifiedBundle};
+use bifrost_storage::{ensure_userdata_disk, verify_manifest_file, ImageRegistry, VerifiedBundle};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
@@ -152,6 +152,7 @@ impl<B: HypervisorBackend> MidgardRuntime<B> {
             adb_bind_address: self.config.network.adb_bind_address.clone(),
             adb_port: self.config.network.adb_port,
             graphics_mode: self.config.runtime.graphics_mode,
+            audio_enabled: self.config.runtime.audio_enabled,
             headless: options.headless,
             interactive_console: options.interactive_console,
             serial_log_path: self.serial_log_path(),
@@ -238,6 +239,47 @@ impl<B: HypervisorBackend> MidgardRuntime<B> {
         }
 
         self.start(resolved_manifest, options)
+    }
+
+    /// Resolves the active Midgard image manifest from `ImageRegistry` or the previous runtime record.
+    pub fn resolve_default_manifest(&self) -> Result<PathBuf> {
+        if let Ok(registry) = ImageRegistry::load(&self.paths.images_dir) {
+            if let Some(active) = registry.active_image() {
+                if active.manifest_path.is_file() {
+                    return Ok(active.manifest_path.clone());
+                }
+            }
+        }
+
+        if let Ok(previous) = self.status() {
+            if let Some(manifest) = previous.manifest_path {
+                if manifest.is_file() {
+                    return Ok(manifest);
+                }
+            }
+        }
+
+        Err(BifrostError::Runtime(
+            "no registered Midgard image found for automatic headless startup; register one with `bifrost images register --manifest <path>`"
+                .to_string(),
+        ))
+    }
+
+    /// Ensures Midgard is running, automatically launching the active registered image
+    /// in invisible `--headless` mode if currently stopped (WSA-style zero-friction boot).
+    pub fn ensure_started_headless(&self) -> Result<RuntimeRecord> {
+        let current = self.status()?;
+        if current.state.is_active() {
+            return Ok(current);
+        }
+        let manifest = self.resolve_default_manifest()?;
+        self.start(
+            manifest,
+            StartOptions {
+                headless: true,
+                interactive_console: false,
+            },
+        )
     }
 
     /// Reads the tail of the Midgard serial console log and VMM stderr log.

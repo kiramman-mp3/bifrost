@@ -1,13 +1,18 @@
 //! Heimdall runtime supervision and periodic health monitoring loop.
 
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use bifrost_bridge::{AdbClient, DaemonHealthReport};
+use bifrost_core::config::DesktopConfig;
 use bifrost_core::RuntimeState;
 use bifrost_runtime::MidgardRuntime;
-use tokio::sync::{watch, RwLock};
+use tokio::sync::{watch, Mutex, RwLock};
 use tracing::{debug, warn};
+
+use crate::app_sync::AppShortcutSyncer;
+use crate::desktop_bridge::DesktopBridgeWorker;
 
 /// Shared live supervision state maintained by Heimdall.
 pub struct SupervisorState {
@@ -15,12 +20,39 @@ pub struct SupervisorState {
     pub pipe_name: String,
     pub runtime: MidgardRuntime,
     pub adb: AdbClient,
+    pub data_dir: PathBuf,
+    pub desktop: DesktopConfig,
     pub health: RwLock<DaemonHealthReport>,
+    pub app_sync: Mutex<AppShortcutSyncer>,
+    pub desktop_bridge: Mutex<DesktopBridgeWorker>,
 }
 
 impl SupervisorState {
-    /// Initializes supervision state and runs an immediate baseline probe.
+    /// Initializes supervision state with default desktop settings (used by IPC tests).
+    #[cfg(test)]
     pub fn new(runtime: MidgardRuntime, adb: AdbClient, pipe_name: String) -> Self {
+        let data_dir = std::env::temp_dir().join("bifrost-heimdall-default");
+        Self::with_desktop_config(
+            runtime,
+            adb,
+            pipe_name,
+            data_dir,
+            DesktopConfig {
+                auto_sync_shortcuts: false,
+                forward_notifications: false,
+                auto_sync_clipboard: false,
+            },
+        )
+    }
+
+    /// Initializes supervision state with explicit data directory and desktop automation config.
+    pub fn with_desktop_config(
+        runtime: MidgardRuntime,
+        adb: AdbClient,
+        pipe_name: String,
+        data_dir: PathBuf,
+        desktop: DesktopConfig,
+    ) -> Self {
         let initial_state = runtime
             .status()
             .map(|r| r.state)
@@ -45,7 +77,11 @@ impl SupervisorState {
             pipe_name,
             runtime,
             adb,
+            data_dir,
+            desktop,
             health: RwLock::new(health),
+            app_sync: Mutex::new(AppShortcutSyncer::default()),
+            desktop_bridge: Mutex::new(DesktopBridgeWorker::default()),
         }
     }
 
@@ -103,6 +139,25 @@ impl SupervisorState {
         guard.health_checks_completed = guard.health_checks_completed.saturating_add(1);
         let snapshot = guard.clone();
         drop(guard);
+
+        // Background desktop automation when Android is fully booted and reachable over ADB.
+        if effective_state == RuntimeState::Running {
+            if let Some(ref endpoint) = adb_endpoint {
+                if self.desktop.auto_sync_shortcuts {
+                    let mut syncer = self.app_sync.lock().await;
+                    syncer.maybe_sync(&self.adb, endpoint, &self.data_dir);
+                }
+                if self.desktop.forward_notifications || self.desktop.auto_sync_clipboard {
+                    let mut bridge = self.desktop_bridge.lock().await;
+                    if self.desktop.forward_notifications {
+                        bridge.sync_notifications(&self.adb, endpoint);
+                    }
+                    if self.desktop.auto_sync_clipboard {
+                        bridge.sync_clipboard(&self.adb, endpoint);
+                    }
+                }
+            }
+        }
 
         debug!(
             state = %snapshot.runtime_state,

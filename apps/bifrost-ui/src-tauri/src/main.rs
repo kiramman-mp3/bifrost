@@ -16,11 +16,12 @@ use bifrost_core::config::LoggingConfig;
 use bifrost_core::logging::init_logging;
 use bifrost_core::BifrostConfig;
 use bifrost_diagnostics::DoctorReport;
+use bifrost_display::AppWindowHandle;
 use bifrost_network::PortForwardRule;
 use bifrost_process::AndroidProcess;
 use bifrost_runtime::{RuntimeLogs, RuntimeRecord};
 use valhalla::manager::{InstallOutcome, LaunchOutcome};
-use valhalla::{ApkInspection, InstalledPackage, PackageDetails};
+use valhalla::{ApkInspection, InstalledPackage, PackageDetails, ShortcutRecord};
 
 use crate::service::DashboardSnapshot;
 
@@ -97,6 +98,35 @@ async fn launch_app(package: String) -> Result<LaunchOutcome, String> {
 }
 
 #[tauri::command]
+async fn launch_app_window(
+    package: String,
+    width: Option<u32>,
+    height: Option<u32>,
+    dpi: Option<u32>,
+) -> Result<AppWindowHandle, String> {
+    map_err(service::launch_app_window(package, width, height, dpi).await)
+}
+
+#[tauri::command]
+fn list_app_shortcuts() -> Result<Vec<ShortcutRecord>, String> {
+    map_err(service::list_app_shortcuts())
+}
+
+#[tauri::command]
+fn create_app_shortcut(
+    package: String,
+    name: Option<String>,
+    apk_path: Option<PathBuf>,
+) -> Result<ShortcutRecord, String> {
+    map_err(service::create_app_shortcut(package, name, apk_path))
+}
+
+#[tauri::command]
+fn remove_app_shortcut(package: String) -> Result<bool, String> {
+    map_err(service::remove_app_shortcut(package))
+}
+
+#[tauri::command]
 async fn stop_app(package: String) -> Result<(), String> {
     map_err(service::stop_app(package).await)
 }
@@ -134,6 +164,10 @@ fn main() {
             install_apk_file,
             uninstall_app,
             launch_app,
+            launch_app_window,
+            list_app_shortcuts,
+            create_app_shortcut,
+            remove_app_shortcut,
             stop_app,
             list_shared_files,
             list_processes,

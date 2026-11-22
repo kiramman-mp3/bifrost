@@ -28,9 +28,9 @@ use valhalla::manager::{InstallOutcome, LaunchOutcome};
 use valhalla::{inspect_apk, AbiCompatibility, InstalledPackage, PackageDetails, ValhallaManager};
 
 use crate::cli::{
-    AppsAction, Cli, ClipboardAction, Command, ConfigAction, DaemonAction, ImagesAction,
-    NetworkAction, NotificationsAction, ProcessesAction, RecoveryAction, RuntimeAction,
-    ShareAction,
+    AppsAction, Cli, ClipboardAction, Command, ConfigAction, DaemonAction, DesktopAction,
+    ImagesAction, NetworkAction, NotificationsAction, ProcessesAction, RecoveryAction,
+    RuntimeAction, ShareAction,
 };
 
 /// Structured status output returned by `bifrost status`.
@@ -128,6 +128,40 @@ pub async fn execute(cli: &Cli) -> Result<CommandOutput> {
         Command::Recovery { action } => handle_recovery(action, cli.config.as_ref(), cli.json)
             .await
             .map(CommandOutput::ok),
+        Command::Desktop { action } => handle_desktop(action, cli.json).map(CommandOutput::ok),
+    }
+}
+
+fn handle_desktop(action: &DesktopAction, as_json: bool) -> Result<String> {
+    match action {
+        DesktopAction::RegisterApkHandler { context_menu_only } => {
+            let status = valhalla::register_apk_handler(!*context_menu_only)?;
+            if as_json {
+                return serde_json::to_string_pretty(&status)
+                    .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
+            }
+            Ok(format!(
+                "Registered Windows .apk handler (ProgID: {}, context_menu: {}, default_app: {}).\nCommand: {}",
+                status.prog_id,
+                status.context_menu_registered,
+                status.default_handler_registered,
+                status.command
+            ))
+        }
+        DesktopAction::UnregisterApkHandler => {
+            valhalla::unregister_apk_handler()?;
+            if as_json {
+                return serde_json::to_string_pretty(&serde_json::json!({
+                    "unregistered": true,
+                    "prog_id": valhalla::BIFROST_APK_PROG_ID,
+                }))
+                .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
+            }
+            Ok(
+                "Removed BIFRÖST .apk file association and Explorer context menu from HKCU."
+                    .to_string(),
+            )
+        }
     }
 }
 
@@ -647,10 +681,40 @@ async fn handle_apps(
             width,
             height,
             dpi,
+            no_autostart,
         } => {
             if *window {
-                let target = valhalla.resolve_target_serial(serial.as_deref())?;
                 let ctrl = DisplayController::new();
+                let target = match valhalla.resolve_target_serial(serial.as_deref()) {
+                    Ok(t) => t,
+                    Err(_) if !*no_autostart && serial.is_none() => {
+                        let (_, _, config, paths) =
+                            load_effective_config_and_paths(explicit_config)?;
+                        let adb_endpoint = format!(
+                            "{}:{}",
+                            config.network.adb_bind_address, config.network.adb_port
+                        );
+                        let rt = MidgardRuntime::with_default_backend(config, paths.clone());
+                        if !rt.status()?.state.is_active() {
+                            let manifest = rt.resolve_default_manifest()?;
+                            if heimdall_up {
+                                let _: RuntimeRecord = client
+                                    .send(IpcRequest::RuntimeStart {
+                                        manifest_path: manifest,
+                                        headless: true,
+                                    })
+                                    .await?;
+                            } else {
+                                let _ = rt.ensure_started_headless()?;
+                            }
+                        }
+                        ctrl.wait_for_device_ready(
+                            &adb_endpoint,
+                            std::time::Duration::from_secs(90),
+                        )?
+                    }
+                    Err(err) => return Err(err),
+                };
                 let handle = ctrl.launch_in_independent_window(
                     &target,
                     package,
@@ -791,9 +855,43 @@ async fn handle_install(
         ));
     }
 
-    let (_, _, _, paths) = load_effective_config_and_paths(explicit_config)?;
+    let (_, _, config, paths) = load_effective_config_and_paths(explicit_config)?;
     let client = heimdall_client_for(&paths);
-    let outcome = if client.health().await.is_ok() {
+    let heimdall_up = client.health().await.is_ok();
+
+    // Ensure Midgard is booted headlessly if installing via double-click while stopped.
+    if serial.is_none() && ValhallaManager::new().resolve_target_serial(None).is_err() {
+        let inspection = inspect_apk(apk)?;
+        if !inspection.abi_compatibility.is_supported() {
+            return Err(BifrostError::UnsupportedAbi {
+                path: inspection.path,
+                detected_abis: inspection.detected_abis.join(", "),
+            });
+        }
+        let rt = MidgardRuntime::with_default_backend(config.clone(), paths.clone());
+        if let Ok(manifest) = rt.resolve_default_manifest() {
+            if !rt.status()?.state.is_active() {
+                if heimdall_up {
+                    let _: RuntimeRecord = client
+                        .send(IpcRequest::RuntimeStart {
+                            manifest_path: manifest,
+                            headless: true,
+                        })
+                        .await?;
+                } else {
+                    let _ = rt.ensure_started_headless()?;
+                }
+            }
+            let endpoint = format!(
+                "{}:{}",
+                config.network.adb_bind_address, config.network.adb_port
+            );
+            let _ = DisplayController::new()
+                .wait_for_device_ready(&endpoint, std::time::Duration::from_secs(90))?;
+        }
+    }
+
+    let outcome = if heimdall_up {
         client
             .send::<InstallOutcome>(IpcRequest::AppInstall {
                 serial: serial.map(ToOwned::to_owned),

@@ -6,13 +6,14 @@
 [![AOSP](https://img.shields.io/badge/Android-AOSP%20x86__64-3DDC84?style=flat-square&logo=android)](https://source.android.com/)
 [![WHPX](https://img.shields.io/badge/Hypervisor-WHPX-5C2D91?style=flat-square)](https://learn.microsoft.com/en-us/virtualization/api/hypervisor-platform/hypervisor-platform)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square)](LICENSE)
+[![Windows CI](https://img.shields.io/github/actions/workflow/status/kiramman-mp3/bifrost/ci.yml?branch=main&style=flat-square&label=Windows%20CI)](https://github.com/kiramman-mp3/bifrost/actions/workflows/ci.yml)
 
 **BIFRÖST** is an open-source, Rust-powered Android subsystem for Windows 11 x64 designed to run real Android applications with deep native desktop integration — *"A Bridge Between Worlds."*
 
-Inspired by Bifröst from Norse mythology and engineered as a modern, auditable, community-maintained successor to Microsoft's discontinued Windows Subsystem for Android (WSA), BIFRÖST v0.2.0 delivers **Milestones 0 through 8** across a modular Rust workspace (`13` crates, `56` passing tests): native Windows 11 / WHPX diagnostics, SHA-256 and Ed25519-verified Midgard VM orchestration (`QEMU-WHPX` with `virtio-gpu-pci` + GTK display verified live with LineageOS 24.0 `virtio_x86_64` + `crosvm-WHPX` backend), Heimdall authenticated Named Pipe daemon, Valhalla APK/ABI manager, WSA-style dedicated dynamically resizable per-app `VirtualDisplay` desktop windows (`--flex-display`), a Windows 11 Fluent Design 2 desktop application, and an unprivileged Windows installer.
+Inspired by Bifröst from Norse mythology and engineered as a modern, auditable, community-maintained successor to Microsoft's discontinued Windows Subsystem for Android (WSA), BIFRÖST v0.3.0 delivers **Milestones 0 through 8 plus full WSA-grade desktop integration** across a modular Rust workspace (`13` crates, `64` passing tests): native Windows 11 / WHPX diagnostics, invisible headless auto-boot on app launch, QEMU-WHPX with DirectSound audio + `virtio-gpu-pci` / experimental headless `virtio-gpu-gl-pci` + `crosvm-WHPX` backend, Heimdall authenticated Named Pipe daemon with automatic in-Android shortcut sync + real-time Windows 11 Toast notifications + auto clipboard sync, unprivileged `HKCU` `.apk` Explorer double-click & context menu handler, Valhalla APK/ABI manager, WSA-style dedicated dynamically resizable per-app windows (`--flex-display`), Windows 11 Fluent Design 2 Tauri 2 desktop app, and unprivileged Windows installer.
 
 > [!TIP]
-> **Quick start (`v0.2.0`)**: Download the latest Windows x64 release bundle or run directly from source:
+> **Quick start (`v0.3.0`)**: Download the latest Windows x64 release bundle or run directly from source:
 > ```powershell
 > $env:CARGO_TARGET_DIR = "$env:TEMP\bifrost-target" # required with MinGW ld if repo path contains non-ASCII characters
 > cargo test --workspace
@@ -200,11 +201,12 @@ BIFRÖST/
 │   ├── bifrost-network/                           # Unprivileged loopback-only TCP port forwarding
 │   │   ├── Cargo.toml
 │   │   └── src/lib.rs                             # #![forbid(unsafe_code)]
-│   ├── valhalla/                                  # Real Android application & APK management (`pm`, `am`, `dumpsys`, Windows shortcuts)
+│   ├── valhalla/                                  # Real Android application & APK management (`pm`, `am`, `dumpsys`, Windows shortcuts, `.apk` handler)
 │   │   ├── Cargo.toml
 │   │   └── src/
 │   │       ├── lib.rs                             # #![forbid(unsafe_code)]
 │   │       ├── apk.rs                             # Pure-Rust APK ZIP, AXML package, PNG->ICO icon, SHA-256 & ADR-0004 ABI inspection
+│   │       ├── file_assoc.rs                      # Unprivileged HKCU `.apk` Explorer context menu & default double-click registration
 │   │       ├── package.rs                         # Strict package ID validation & pm/dumpsys parsers
 │   │       ├── shortcuts.rs                       # Automatic Windows Desktop & Start Menu `.lnk` + `.ico` shortcut manager
 │   │       └── manager.rs                         # ValhallaManager (list, info, install+shortcuts, uninstall+cleanup, launch, stop)
@@ -212,8 +214,10 @@ BIFRÖST/
 │   │   ├── Cargo.toml
 │   │   └── src/
 │   │       ├── main.rs                            # Tokio daemon CLI (`heimdall run`)
+│   │       ├── app_sync.rs                        # Auto-sync Desktop & Start Menu shortcuts for apps installed/removed inside Android
+│   │       ├── desktop_bridge.rs                  # Real-time Windows 11 Toast notification forwarder & hash-guarded clipboard sync
 │   │       ├── pipe_security.rs                   # Audited Windows SDDL owner-only Named Pipe DACL (`D:(A;;GA;;;OW)`)
-│   │       ├── supervisor.rs                      # Periodic runtime & ADB health monitoring
+│   │       ├── supervisor.rs                      # Periodic runtime, ADB, app sync & desktop bridge monitoring
 │   │       └── server.rs                          # Authenticated Named Pipe server & live IPC tests
 │   └── mimir/                                     # Administrative CLI (`bifrost` binary)
 │       ├── Cargo.toml
@@ -229,7 +233,8 @@ BIFRÖST/
     │   ├── ADR-0003-graphics-and-windowing-strategy.md # virtio-gpu + gfxstream & phased windowing
     │   └── ADR-0004-arm64-compatibility-policy.md # Clean-room x86_64 policy & proprietary exclusions
     └── research/
-        └── feasibility-report.md                  # Technical feasibility & host baseline report
+        ├── feasibility-report.md                  # Technical feasibility & host baseline report
+        └── gpu-3d-windows-evaluation.md           # Empirical Windows 11 GPU 3D evaluation (ANGLE/virgl & crosvm-whpx)
 ```
 
 ---
@@ -321,7 +326,7 @@ cargo build --workspace
 |---|---|---|
 | `cargo fmt --all -- --check` | Verify Rust code formatting across workspace | **Implemented** |
 | `cargo clippy --workspace --all-targets -- -D warnings` | Run strict Clippy static analysis | **Implemented** |
-| `cargo test --workspace` | Execute unit & IPC tests (`56` tests across 13 workspace crates) | **Implemented** |
+| `cargo test --workspace` | Execute unit & IPC tests (`64` tests across 13 workspace crates) | **Implemented** |
 | `cargo run -p bifrost-ui` | Launch BIFRÖST Windows 11 Fluent Design desktop application | **Implemented** |
 | `heimdall run` | Start background Heimdall supervisor on owner-DACL Windows Named Pipe | **Implemented** |
 | `bifrost version [--json]` | Display BIFRÖST version, host target, and capability maturity | **Implemented** |
@@ -342,6 +347,7 @@ cargo build --workspace
 | `bifrost network forwards \| forward \| unforward` | Manage unprivileged loopback TCP port forwards | **Implemented** |
 | `bifrost images list \| register \| use` | Manage SHA-256 / Ed25519-verified Midgard versions & upgrade compatibility | **Implemented** |
 | `bifrost recovery backup \| restore \| wipe-userdata \| export-diagnostics` | Verified userdata backup/restore, guarded wipe & sanitized diagnostic bundle | **Implemented** |
+| `bifrost desktop register-apk-handler \| unregister-apk-handler` | Register or remove unprivileged Windows 11 `.apk` context menu & default handler (`HKCU`) | **Implemented** |
 
 ---
 
@@ -404,7 +410,7 @@ See [ROADMAP.md](ROADMAP.md) for detailed milestone exit criteria.
 
 | Contributor | Commits |
 |---|---:|
-| Johan Rodríguez | 94 |
+| Johan Rodríguez | 111 |
 
 ---
 

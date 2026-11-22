@@ -278,21 +278,38 @@ impl HypervisorBackend for QemuWhpxBackend {
         // Disable legacy Bochs VGA (`-vga none`) and always attach a real DRM/KMS
         // VirtIO GPU so Android's `virtgpu_detect`, `drm_hwcomposer`, and
         // `surfaceflinger` initialize cleanly in both graphical and headless modes.
-        let gpu_device = match spec.graphics_mode {
-            GraphicsMode::Auto | GraphicsMode::SwiftShader => "virtio-gpu-pci,xres=1280,yres=720",
-            GraphicsMode::Gfxstream => "virtio-gpu-pci,xres=1280,yres=720",
+        // When `GraphicsMode::Gfxstream` is explicitly requested in headless mode,
+        // use QEMU's `virtio-gpu-gl-pci` + `egl-headless` (ANGLE/virgl on Windows).
+        let use_headless_gl = spec.headless && spec.graphics_mode == GraphicsMode::Gfxstream;
+        let gpu_device = if use_headless_gl {
+            "virtio-gpu-gl-pci,xres=1280,yres=720"
+        } else {
+            "virtio-gpu-pci,xres=1280,yres=720"
         };
         args.push("-vga".to_string());
         args.push("none".to_string());
         args.push("-device".to_string());
         args.push(gpu_device.to_string());
 
-        if spec.headless {
+        if use_headless_gl {
+            args.push("-display".to_string());
+            args.push("egl-headless".to_string());
+        } else if spec.headless {
             args.push("-display".to_string());
             args.push("none".to_string());
         } else {
             args.push("-display".to_string());
             args.push("gtk,zoom-to-fit=on".to_string());
+        }
+
+        // Native Windows DirectSound audio device for Android playback/capture.
+        if spec.audio_enabled {
+            args.push("-audiodev".to_string());
+            args.push("dsound,id=snd0".to_string());
+            args.push("-device".to_string());
+            args.push("ich9-intel-hda".to_string());
+            args.push("-device".to_string());
+            args.push("hda-duplex,audiodev=snd0".to_string());
         }
 
         // Serial console capture (file-backed log or interactive stdio).
@@ -644,6 +661,7 @@ mod tests {
             adb_bind_address: "127.0.0.1".to_string(),
             adb_port: 5555,
             graphics_mode: GraphicsMode::Auto,
+            audio_enabled: true,
             headless: true,
             interactive_console: false,
             serial_log_path: PathBuf::from(r"C:\data\logs\serial.log"),
@@ -667,7 +685,17 @@ mod tests {
         assert!(joined.contains("tcp:127.0.0.1:4444,server=on,wait=off"));
         assert!(joined.contains("-vga none"));
         assert!(joined.contains("-device virtio-gpu-pci,xres=1280,yres=720"));
+        assert!(joined.contains("-audiodev dsound,id=snd0"));
+        assert!(joined.contains("hda-duplex,audiodev=snd0"));
         assert!(joined.contains("-display none"));
+
+        // Explicit Gfxstream in headless mode selects virtio-gpu-gl-pci + egl-headless.
+        let mut gl_spec = sample_direct_kernel_spec();
+        gl_spec.graphics_mode = GraphicsMode::Gfxstream;
+        gl_spec.headless = true;
+        let gl_joined = backend.build_args(&gl_spec).unwrap().join(" ");
+        assert!(gl_joined.contains("-device virtio-gpu-gl-pci,xres=1280,yres=720"));
+        assert!(gl_joined.contains("-display egl-headless"));
     }
 
     #[test]

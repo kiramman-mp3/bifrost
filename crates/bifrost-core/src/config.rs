@@ -57,6 +57,7 @@ pub struct BifrostConfig {
     pub schema_version: u32,
     pub runtime: RuntimeConfig,
     pub display: DisplayConfig,
+    pub desktop: DesktopConfig,
     pub network: NetworkConfig,
     pub logging: LoggingConfig,
 }
@@ -67,6 +68,7 @@ impl Default for BifrostConfig {
             schema_version: CURRENT_SCHEMA_VERSION,
             runtime: RuntimeConfig::default(),
             display: DisplayConfig::default(),
+            desktop: DesktopConfig::default(),
             network: NetworkConfig::default(),
             logging: LoggingConfig::default(),
         }
@@ -81,6 +83,7 @@ pub struct RuntimeConfig {
     pub memory_mb: u64,
     pub storage_gb: u64,
     pub graphics_mode: GraphicsMode,
+    pub audio_enabled: bool,
     pub data_dir: Option<PathBuf>,
 }
 
@@ -91,7 +94,30 @@ impl Default for RuntimeConfig {
             memory_mb: 4096,
             storage_gb: 32,
             graphics_mode: GraphicsMode::Auto,
+            audio_enabled: true,
             data_dir: None,
+        }
+    }
+}
+
+/// Windows 11 desktop integration automation settings.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DesktopConfig {
+    /// Automatically sync Desktop & Start Menu shortcuts for apps installed/removed inside Android.
+    pub auto_sync_shortcuts: bool,
+    /// Forward new Android notifications to Windows 11 native Toast notifications.
+    pub forward_notifications: bool,
+    /// Automatically sync Windows <-> Android clipboard text changes via Heimdall.
+    pub auto_sync_clipboard: bool,
+}
+
+impl Default for DesktopConfig {
+    fn default() -> Self {
+        Self {
+            auto_sync_shortcuts: true,
+            forward_notifications: true,
+            auto_sync_clipboard: true,
         }
     }
 }

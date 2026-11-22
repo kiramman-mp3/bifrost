@@ -320,7 +320,7 @@ pub fn sanitize_shortcut_name(raw: &str) -> Option<String> {
     Some(trimmed)
 }
 
-fn locate_bifrost_cli() -> Result<PathBuf> {
+pub(crate) fn locate_bifrost_cli() -> Result<PathBuf> {
     if let Ok(local) = std::env::var("LOCALAPPDATA") {
         let installed = PathBuf::from(local)
             .join("Programs")

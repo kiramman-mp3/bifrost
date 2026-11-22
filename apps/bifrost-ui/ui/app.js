@@ -119,6 +119,13 @@ function populateConfigForm(cfg, configPath) {
   document.getElementById("cfg-adb-host").value = cfg.network.adb_bind_address;
   document.getElementById("cfg-adb-port").value = cfg.network.adb_port;
   document.getElementById("cfg-log-level").value = cfg.logging.level;
+  document.getElementById("cfg-audio-enabled").checked = cfg.runtime.audio_enabled ?? true;
+  document.getElementById("cfg-auto-sync-shortcuts").checked =
+    cfg.desktop?.auto_sync_shortcuts ?? true;
+  document.getElementById("cfg-forward-notifications").checked =
+    cfg.desktop?.forward_notifications ?? true;
+  document.getElementById("cfg-auto-sync-clipboard").checked =
+    cfg.desktop?.auto_sync_clipboard ?? true;
   document.getElementById("cfg-path-label").textContent = `Target: ${configPath}`;
 }
 
@@ -241,29 +248,73 @@ async function refreshApps() {
   const container = document.getElementById("apps-table-container");
   const thirdPartyOnly = document.getElementById("apps-third-party").checked;
   try {
-    const apps = await invoke("list_apps", { thirdPartyOnly });
+    const [apps, shortcuts] = await Promise.all([
+      invoke("list_apps", { thirdPartyOnly }),
+      invoke("list_app_shortcuts").catch(() => []),
+    ]);
+    const pinnedSet = new Set(shortcuts.map((s) => s.package_name));
     if (!apps.length) {
       container.textContent = "No installed packages found.";
       return;
     }
     container.innerHTML = apps
-      .map(
-        (app) => `
+      .map((app) => {
+        const isPinned = pinnedSet.has(app.package_name);
+        return `
         <div class="item-row">
           <div>
             <strong>${escapeHtml(app.package_name)}</strong>
-            <div class="muted small-text">${app.is_system ? "system" : "user"} package</div>
+            <div class="muted small-text">${app.is_system ? "system" : "user"} package${isPinned ? " · pinned to Desktop & Start Menu" : ""}</div>
           </div>
           <div class="actions">
+            <button class="btn small primary" data-app-window="${escapeHtml(app.package_name)}">Open Window</button>
+            <button class="btn small" data-app-shortcut="${escapeHtml(app.package_name)}" data-pinned="${isPinned}">${isPinned ? "Unpin" : "Pin"}</button>
             <button class="btn small" data-app-info="${escapeHtml(app.package_name)}">Info</button>
-            <button class="btn small primary" data-app-launch="${escapeHtml(app.package_name)}">Launch</button>
             <button class="btn small" data-app-stop="${escapeHtml(app.package_name)}">Stop</button>
             <button class="btn small danger" data-app-uninstall="${escapeHtml(app.package_name)}">Uninstall</button>
           </div>
-        </div>`
-      )
+        </div>`;
+      })
       .join("");
 
+    container.querySelectorAll("[data-app-window]").forEach((btn) =>
+      btn.addEventListener("click", async () => {
+        const pkg = btn.dataset.appWindow;
+        try {
+          const handle = await invoke("launch_app_window", {
+            package: pkg,
+            width: null,
+            height: null,
+            dpi: null,
+          });
+          showToast(`Opened '${handle.window_title}' (PID ${handle.pid})`);
+        } catch (err) {
+          showToast(String(err), true);
+        }
+      })
+    );
+    container.querySelectorAll("[data-app-shortcut]").forEach((btn) =>
+      btn.addEventListener("click", async () => {
+        const pkg = btn.dataset.appShortcut;
+        const pinned = btn.dataset.pinned === "true";
+        try {
+          if (pinned) {
+            await invoke("remove_app_shortcut", { package: pkg });
+            showToast(`Removed Windows shortcuts for ${pkg}`);
+          } else {
+            const rec = await invoke("create_app_shortcut", {
+              package: pkg,
+              name: null,
+              apkPath: null,
+            });
+            showToast(`Pinned '${rec.display_name}' to Desktop & Start Menu`);
+          }
+          await refreshApps();
+        } catch (err) {
+          showToast(String(err), true);
+        }
+      })
+    );
     container.querySelectorAll("[data-app-info]").forEach((btn) =>
       btn.addEventListener("click", async () => {
         try {
@@ -271,16 +322,6 @@ async function refreshApps() {
           document.getElementById("app-details-title").textContent = info.package_name;
           document.getElementById("app-details-body").textContent = JSON.stringify(info, null, 2);
           document.getElementById("app-details-card").classList.remove("hidden");
-        } catch (err) {
-          showToast(String(err), true);
-        }
-      })
-    );
-    container.querySelectorAll("[data-app-launch]").forEach((btn) =>
-      btn.addEventListener("click", async () => {
-        try {
-          await invoke("launch_app", { package: btn.dataset.appLaunch });
-          showToast(`Launched ${btn.dataset.appLaunch}`);
         } catch (err) {
           showToast(String(err), true);
         }
@@ -403,12 +444,18 @@ function wireEvents() {
         memory_mb: Number(document.getElementById("cfg-ram").value),
         storage_gb: Number(document.getElementById("cfg-storage").value),
         graphics_mode: document.getElementById("cfg-graphics").value,
+        audio_enabled: document.getElementById("cfg-audio-enabled").checked,
         data_dir: lastDashboard.config.runtime.data_dir,
       },
       display: {
         width: Number(document.getElementById("cfg-width").value),
         height: Number(document.getElementById("cfg-height").value),
         dpi: Number(document.getElementById("cfg-dpi").value),
+      },
+      desktop: {
+        auto_sync_shortcuts: document.getElementById("cfg-auto-sync-shortcuts").checked,
+        forward_notifications: document.getElementById("cfg-forward-notifications").checked,
+        auto_sync_clipboard: document.getElementById("cfg-auto-sync-clipboard").checked,
       },
       network: {
         adb_bind_address: document.getElementById("cfg-adb-host").value.trim(),
