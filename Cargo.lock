@@ -88,6 +88,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing",
+ "windows",
 ]
 
 [[package]]
@@ -124,6 +125,24 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tracing",
+]
+
+[[package]]
+name = "bifrost-network"
+version = "0.1.0"
+dependencies = [
+ "bifrost-bridge",
+ "bifrost-core",
+ "serde",
+]
+
+[[package]]
+name = "bifrost-process"
+version = "0.1.0"
+dependencies = [
+ "bifrost-bridge",
+ "bifrost-core",
+ "serde",
 ]
 
 [[package]]
@@ -483,6 +502,8 @@ dependencies = [
  "bifrost-bridge",
  "bifrost-core",
  "bifrost-diagnostics",
+ "bifrost-network",
+ "bifrost-process",
  "bifrost-runtime",
  "clap",
  "serde",
