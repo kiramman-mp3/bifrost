@@ -57,7 +57,10 @@ function setupDragDrop() {
     const paths = event?.payload?.paths || [];
     if (!paths.length) return;
 
-    const apkFile = paths.find((p) => p.toLowerCase().endsWith(".apk"));
+    const apkFile = paths.find((p) => {
+      const lower = p.toLowerCase();
+      return lower.endsWith(".apk") || lower.endsWith(".apkm");
+    });
     if (apkFile) {
       activateSection("apps");
       document.getElementById("apk-path-input").value = apkFile;
@@ -521,8 +524,8 @@ function wireEvents() {
   document.getElementById("btn-browse-apk").addEventListener("click", async () => {
     try {
       const picked = await invoke("pick_file_dialog", {
-        title: "Select Android Package (.apk)",
-        filter: "Android Package (*.apk)|*.apk|All files (*.*)|*.*",
+        title: "Select Android Package (.apk / .apkm)",
+        filter: "Android Package (*.apk;*.apkm)|*.apk;*.apkm|All files (*.*)|*.*",
       });
       if (picked) document.getElementById("apk-path-input").value = picked;
     } catch (err) {

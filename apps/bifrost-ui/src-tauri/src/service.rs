@@ -342,10 +342,10 @@ pub fn inspect_apk_file(path: PathBuf) -> Result<ApkInspection> {
     inspect_apk(path)
 }
 
-/// Installs an inspected APK via Valhalla / Android `PackageManager`,
+/// Installs an inspected `.apk` or `.apkm` split bundle via Valhalla / Android `PackageManager`,
 /// automatically starting Midgard headlessly if no Android device is online.
 pub async fn install_apk_file(apk_path: PathBuf) -> Result<InstallOutcome> {
-    let safe_apk = validate_host_file_path(&apk_path, Some("apk"))?;
+    let safe_apk = valhalla::validate_package_file_path(&apk_path)?;
     let (_, config, paths) = load_config_and_paths()?;
     let client = heimdall_client(&paths);
     let heimdall_up = client.health().await.is_ok();
