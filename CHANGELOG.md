@@ -7,6 +7,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Added
+- **Milestone 4 — Heimdall & Bridge**:
+  - Created `crates/bifrost-bridge` (`#![forbid(unsafe_code)]`) with loopback-only ADB orchestration (`AdbClient`, `adb devices -l` parser, Android guest health probing), `HeimdallClient`, and authenticated IPC protocol (256-bit random session token, constant-time auth check, 64 KiB max frame guard) (`3` unit tests).
+  - Created `crates/heimdall` (`heimdall.exe`) async Tokio supervisor daemon with periodic health monitoring and Windows Named Pipe IPC restricted via owner-only SDDL DACL `D:(A;;GA;;;OW)` + session token validation (`1` live Named Pipe integration test verifying valid auth, forged-token rejection, and clean shutdown).
+  - Wired `bifrost devices`, `bifrost daemon status|stop`, and Heimdall IPC routing into `crates/mimir`, verified live with `heimdall.exe`, `bifrost.exe`, and host `adb.exe` (`35` total passing workspace tests).
 - **Milestone 3 — Midgard Prototype (Partially Implemented — Host Stack Complete, Live Boot Pending)**:
   - Created `crates/bifrost-storage` (`#![forbid(unsafe_code)]`) with versioned `MidgardImageManifest`, streaming SHA-256 artifact verification, and persistent `userdata.img` provisioning with confirmation-guarded wipes (`4` unit tests).
   - Created `crates/bifrost-hypervisor` (`#![forbid(unsafe_code)]`) with VMM-agnostic `HypervisorBackend` trait, pure-Rust loopback QMP client (`system_powerdown`/`quit`), and `QemuWhpxBackend` (`-machine q35,accel=whpx,kernel-irqchip=off`, VirtIO storage/net/RNG, loopback-only ADB forwarding, option-injection guards) (`4` unit tests).
