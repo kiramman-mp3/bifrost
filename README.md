@@ -9,10 +9,10 @@
 
 **BIFRÖST** is an open-source, Rust-powered Android subsystem for Windows 11 x64 designed to run real Android applications with deep native desktop integration — *"A Bridge Between Worlds."*
 
-Inspired by Bifröst from Norse mythology and engineered as a modern, auditable, community-maintained successor to Microsoft's discontinued Windows Subsystem for Android (WSA), BIFRÖST v0.1.0 delivers **Milestones 0 through 8** across a modular Rust workspace (`13` crates, `56` passing tests): native Windows 11 / WHPX diagnostics, SHA-256 and Ed25519-verified Midgard VM orchestration (`QEMU-WHPX` verified live with LineageOS 24.0 `virtio_x86_64` + `crosvm-WHPX` backend), Heimdall authenticated Named Pipe daemon, Valhalla APK/ABI manager, per-app `VirtualDisplay` desktop windows, a Windows 11 Fluent Design 2 desktop application, and an unprivileged Windows installer.
+Inspired by Bifröst from Norse mythology and engineered as a modern, auditable, community-maintained successor to Microsoft's discontinued Windows Subsystem for Android (WSA), BIFRÖST v0.2.0 delivers **Milestones 0 through 8** across a modular Rust workspace (`13` crates, `56` passing tests): native Windows 11 / WHPX diagnostics, SHA-256 and Ed25519-verified Midgard VM orchestration (`QEMU-WHPX` with `virtio-gpu-pci` + GTK display verified live with LineageOS 24.0 `virtio_x86_64` + `crosvm-WHPX` backend), Heimdall authenticated Named Pipe daemon, Valhalla APK/ABI manager, WSA-style dedicated dynamically resizable per-app `VirtualDisplay` desktop windows (`--flex-display`), a Windows 11 Fluent Design 2 desktop application, and an unprivileged Windows installer.
 
 > [!TIP]
-> **Quick start (`v0.1.0`)**: Download the latest Windows x64 release bundle or run directly from source:
+> **Quick start (`v0.2.0`)**: Download the latest Windows x64 release bundle or run directly from source:
 > ```powershell
 > $env:CARGO_TARGET_DIR = "$env:TEMP\bifrost-target" # required with MinGW ld if repo path contains non-ASCII characters
 > cargo test --workspace
@@ -403,7 +403,7 @@ See [ROADMAP.md](ROADMAP.md) for detailed milestone exit criteria.
 
 | Contributor | Commits |
 |---|---:|
-| Johan Rodríguez | 83 |
+| Johan Rodríguez | 87 |
 
 ---
 
