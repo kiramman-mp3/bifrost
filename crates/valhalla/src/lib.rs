@@ -13,8 +13,9 @@ pub use apk::{
     ApkInspection,
 };
 pub use file_assoc::{
-    build_apk_open_command, register_apk_handler, unregister_apk_handler, ApkAssociationStatus,
-    BIFROST_APK_PROG_ID,
+    build_apk_open_command, build_heimdall_autostart_command, query_heimdall_autostart,
+    register_apk_handler, set_heimdall_autostart, unregister_apk_handler, ApkAssociationStatus,
+    HeimdallAutostartStatus, BIFROST_APK_PROG_ID, BIFROST_HEIMDALL_RUN_VALUE,
 };
 pub use manager::{InstallOutcome, LaunchOutcome, ValhallaManager};
 pub use package::{

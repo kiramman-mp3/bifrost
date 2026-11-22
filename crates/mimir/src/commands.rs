@@ -484,6 +484,31 @@ async fn handle_daemon(
             }
             Ok("Requested graceful Heimdall daemon shutdown.".to_string())
         }
+        DaemonAction::Autostart { enable, disable } => {
+            let status = if *enable {
+                valhalla::set_heimdall_autostart(true)?
+            } else if *disable {
+                valhalla::set_heimdall_autostart(false)?
+            } else {
+                valhalla::query_heimdall_autostart()?
+            };
+            if as_json {
+                return serde_json::to_string_pretty(&status)
+                    .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
+            }
+            if status.enabled {
+                Ok(format!(
+                    "Heimdall Windows login autostart: ENABLED (HKCU\\...\\Run\\{})\nCommand: {}",
+                    status.value_name,
+                    status.command.as_deref().unwrap_or("n/a")
+                ))
+            } else {
+                Ok(format!(
+                    "Heimdall Windows login autostart: DISABLED (HKCU\\...\\Run\\{})",
+                    status.value_name
+                ))
+            }
+        }
     }
 }
 
@@ -747,6 +772,7 @@ async fn handle_apps(
             Ok(out.trim_end().to_string())
         }
         AppsAction::Info { package, serial } => {
+            valhalla::validate_package_name(package)?;
             let details = if heimdall_up {
                 client
                     .send::<PackageDetails>(IpcRequest::AppInfo {
@@ -781,6 +807,7 @@ async fn handle_apps(
             dpi,
             no_autostart,
         } => {
+            valhalla::validate_package_name(package)?;
             if *window {
                 let ctrl = DisplayController::new();
                 let target = match valhalla.resolve_target_serial(serial.as_deref()) {
@@ -860,6 +887,7 @@ async fn handle_apps(
             ))
         }
         AppsAction::Stop { package, serial } => {
+            valhalla::validate_package_name(package)?;
             if heimdall_up {
                 let _: serde_json::Value = client
                     .send(IpcRequest::AppStop {
@@ -924,8 +952,11 @@ async fn handle_install(
     explicit_config: Option<&PathBuf>,
     as_json: bool,
 ) -> Result<String> {
+    // Reject unsafe paths (traversal / wrong extension) locally before touching IPC or ADB.
+    let safe_apk = validate_host_file_path(apk, Some("apk"))?;
+
     if inspect_only {
-        let info = inspect_apk(apk)?;
+        let info = inspect_apk(&safe_apk)?;
         if as_json {
             return serde_json::to_string_pretty(&info)
                 .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
@@ -959,7 +990,7 @@ async fn handle_install(
 
     // Ensure Midgard is booted headlessly if installing via double-click while stopped.
     if serial.is_none() && ValhallaManager::new().resolve_target_serial(None).is_err() {
-        let inspection = inspect_apk(apk)?;
+        let inspection = inspect_apk(&safe_apk)?;
         if !inspection.abi_compatibility.is_supported() {
             return Err(BifrostError::UnsupportedAbi {
                 path: inspection.path,
@@ -993,11 +1024,11 @@ async fn handle_install(
         client
             .send::<InstallOutcome>(IpcRequest::AppInstall {
                 serial: serial.map(ToOwned::to_owned),
-                apk_path: apk.clone(),
+                apk_path: safe_apk.clone(),
             })
             .await?
     } else {
-        ValhallaManager::new().install_apk(serial, apk)?
+        ValhallaManager::new().install_apk(serial, &safe_apk)?
     };
 
     if as_json {
@@ -1027,6 +1058,8 @@ async fn handle_uninstall(
     explicit_config: Option<&PathBuf>,
     as_json: bool,
 ) -> Result<String> {
+    // Validate Android package identifier locally before touching IPC or ADB.
+    valhalla::validate_package_name(package)?;
     let (_, _, _, paths) = load_effective_config_and_paths(explicit_config)?;
     let client = heimdall_client_for(&paths);
     let output = if client.health().await.is_ok() {
@@ -1559,7 +1592,7 @@ mod tests {
         let out = execute(&cli).await.unwrap();
         assert_eq!(out.exit_code, 0);
         let parsed: serde_json::Value = serde_json::from_str(&out.stdout).unwrap();
-        assert_eq!(parsed["checks"].as_array().unwrap().len(), 7);
+        assert_eq!(parsed["checks"].as_array().unwrap().len(), 8);
     }
 
     #[tokio::test]

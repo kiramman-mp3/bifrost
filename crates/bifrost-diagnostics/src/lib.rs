@@ -18,8 +18,8 @@ use bifrost_core::BifrostConfig;
 pub use evaluator::evaluate_snapshot;
 pub use format::render_human_report;
 pub use model::{
-    CheckStatus, CpuInfo, DiagnosticCheck, DoctorReport, GpuAdapterInfo, MemoryInfo, OsInfo,
-    OverallReadiness, StorageInfo, SystemSnapshot, WhpxInfo,
+    CheckStatus, CpuInfo, DiagnosticCheck, DoctorReport, GpuAdapterInfo, HostToolingInfo,
+    MemoryInfo, OsInfo, OverallReadiness, StorageInfo, SystemSnapshot, WhpxInfo,
 };
 
 /// Probes the local host and evaluates its compatibility with BIFRÖST.
@@ -77,5 +77,6 @@ fn probe_host(target_storage_path: &Path) -> SystemSnapshot {
             available_bytes: 0,
         },
         gpus: Vec::new(),
+        tooling: HostToolingInfo::default(),
     }
 }

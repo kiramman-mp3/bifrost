@@ -3,8 +3,8 @@
 use bifrost_core::BifrostConfig;
 
 use crate::model::{
-    CheckStatus, CpuInfo, DiagnosticCheck, DoctorReport, GpuAdapterInfo, MemoryInfo, OsInfo,
-    OverallReadiness, StorageInfo, SystemSnapshot, WhpxInfo,
+    CheckStatus, CpuInfo, DiagnosticCheck, DoctorReport, GpuAdapterInfo, HostToolingInfo,
+    MemoryInfo, OsInfo, OverallReadiness, StorageInfo, SystemSnapshot, WhpxInfo,
 };
 
 const BYTES_PER_MIB: u64 = 1024 * 1024;
@@ -27,6 +27,7 @@ pub fn evaluate_snapshot(snapshot: SystemSnapshot, config: &BifrostConfig) -> Do
         check_memory(&snapshot.memory, config),
         check_storage(&snapshot.storage, config),
         check_gpu(&snapshot.gpus),
+        check_tooling(&snapshot.tooling),
     ];
 
     let pass_count = checks
@@ -456,6 +457,80 @@ fn check_gpu(gpus: &[GpuAdapterInfo]) -> DiagnosticCheck {
     }
 }
 
+fn check_tooling(tooling: &HostToolingInfo) -> DiagnosticCheck {
+    let mut missing: Vec<&str> = Vec::new();
+    let mut actions: Vec<&str> = Vec::new();
+
+    if tooling.qemu_path.is_none() {
+        missing.push("QEMU (qemu-system-x86_64)");
+        actions.push("install QEMU: `winget install SoftwareFreedomConservancy.QEMU`");
+    }
+    if tooling.adb_path.is_none() {
+        missing.push("Android Platform-Tools (adb)");
+        actions.push("install ADB: `winget install Google.PlatformTools`");
+    }
+    if tooling.scrcpy_path.is_none() {
+        missing.push("scrcpy (per-app Windows 11 windows)");
+        actions.push("install scrcpy: `winget install Genymobile.scrcpy`");
+    }
+    if tooling.registered_images_count == 0 {
+        missing.push("registered Midgard Android image");
+        actions.push(
+            "register an image: `bifrost images register --manifest <path-to-manifest.json>`",
+        );
+    }
+
+    let edk2_note = if tooling.edk2_firmware_path.is_some() {
+        "EDK2 UEFI firmware found"
+    } else {
+        "EDK2 UEFI firmware not detected"
+    };
+    let active_img = tooling.active_image_id.as_deref().unwrap_or("none");
+
+    if missing.is_empty() {
+        DiagnosticCheck {
+            id: "tooling".to_string(),
+            name: "Host Runtime Tooling".to_string(),
+            status: CheckStatus::Pass,
+            summary: format!(
+                "QEMU, ADB, scrcpy & {} Midgard image(s) ready (active: {active_img})",
+                tooling.registered_images_count
+            ),
+            detail: format!(
+                "All runtime prerequisites detected ({edk2_note}); zero-friction app window launch is ready."
+            ),
+            remediation: None,
+        }
+    } else {
+        DiagnosticCheck {
+            id: "tooling".to_string(),
+            name: "Host Runtime Tooling".to_string(),
+            status: CheckStatus::Warn,
+            summary: format!("Missing: {}", missing.join(", ")),
+            detail: format!(
+                "QEMU: {}, ADB: {}, scrcpy: {}, Images: {} ({edk2_note}).",
+                if tooling.qemu_path.is_some() {
+                    "found"
+                } else {
+                    "missing"
+                },
+                if tooling.adb_path.is_some() {
+                    "found"
+                } else {
+                    "missing"
+                },
+                if tooling.scrcpy_path.is_some() {
+                    "found"
+                } else {
+                    "missing"
+                },
+                tooling.registered_images_count
+            ),
+            remediation: Some(actions.join("; ")),
+        }
+    }
+}
+
 fn human_edition(edition_id: &str) -> &str {
     match edition_id {
         "Core" | "CoreSingleLanguage" | "CoreCountrySpecific" => "Home",
@@ -521,6 +596,18 @@ mod tests {
                 driver_version: Some("32.0.101.8860".to_string()),
                 is_software: false,
             }],
+            tooling: HostToolingInfo {
+                qemu_path: Some(PathBuf::from(
+                    r"C:\Program Files\qemu\qemu-system-x86_64.exe",
+                )),
+                edk2_firmware_path: Some(PathBuf::from(
+                    r"C:\Program Files\qemu\share\edk2-x86_64-code.fd",
+                )),
+                adb_path: Some(PathBuf::from(r"C:\Android\Sdk\platform-tools\adb.exe")),
+                scrcpy_path: Some(PathBuf::from(r"C:\Programs\scrcpy\scrcpy.exe")),
+                registered_images_count: 1,
+                active_image_id: Some("lineage-24-virtio-x86_64".to_string()),
+            },
         }
     }
 
@@ -530,7 +617,22 @@ mod tests {
         assert_eq!(report.overall, OverallReadiness::Ready);
         assert_eq!(report.fail_count, 0);
         assert_eq!(report.warn_count, 0);
-        assert_eq!(report.pass_count, 7);
+        assert_eq!(report.pass_count, 8);
+    }
+
+    #[test]
+    fn missing_host_tooling_reports_warning_with_remediation() {
+        let mut snap = baseline_win11_home_snapshot();
+        snap.tooling.scrcpy_path = None;
+        snap.tooling.registered_images_count = 0;
+
+        let report = evaluate_snapshot(snap, &BifrostConfig::default());
+        assert_eq!(report.overall, OverallReadiness::ReadyWithWarnings);
+        let tooling_check = report.checks.iter().find(|c| c.id == "tooling").unwrap();
+        assert_eq!(tooling_check.status, CheckStatus::Warn);
+        let rem = tooling_check.remediation.as_deref().unwrap();
+        assert!(rem.contains("Genymobile.scrcpy"));
+        assert!(rem.contains("bifrost images register"));
     }
 
     #[test]

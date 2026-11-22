@@ -15,6 +15,10 @@ use crate::shortcuts::locate_bifrost_cli;
 /// ProgID registered in `HKCU\Software\Classes` for BIFRÖST `.apk` handling.
 pub const BIFROST_APK_PROG_ID: &str = "Bifrost.ApkPackage";
 
+/// Registry value name under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
+/// for silent Heimdall login autostart (zero UAC required).
+pub const BIFROST_HEIMDALL_RUN_VALUE: &str = "BifrostHeimdall";
+
 /// Summary of the Windows `.apk` file association registration state.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ApkAssociationStatus {
@@ -25,10 +29,73 @@ pub struct ApkAssociationStatus {
     pub default_handler_registered: bool,
 }
 
+/// Summary of the user-space Windows login autostart registration for Heimdall.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HeimdallAutostartStatus {
+    pub value_name: String,
+    pub enabled: bool,
+    pub command: Option<String>,
+}
+
 /// Builds the quoted Windows Shell command line invoked for `.apk` files.
 #[must_use]
 pub fn build_apk_open_command(bifrost_exe: &Path) -> String {
     format!("\"{}\" install \"%1\"", bifrost_exe.display())
+}
+
+/// Builds the quoted Windows login Run command line for silent Heimdall startup.
+///
+/// Prefers `bifrost-ui.exe --start-heimdall` (GUI subsystem, zero console flash)
+/// and falls back to `bifrost.exe daemon start`.
+#[must_use]
+pub fn build_heimdall_autostart_command(bifrost_exe: &Path) -> String {
+    if let Some(dir) = bifrost_exe.parent() {
+        let ui_exe = dir.join("bifrost-ui.exe");
+        if ui_exe.is_file() {
+            return format!("\"{}\" --start-heimdall", ui_exe.display());
+        }
+    }
+    format!("\"{}\" daemon start", bifrost_exe.display())
+}
+
+/// Queries whether Heimdall is registered to start automatically at Windows user login.
+pub fn query_heimdall_autostart() -> Result<HeimdallAutostartStatus> {
+    let command = read_windows_run_value()?;
+    Ok(HeimdallAutostartStatus {
+        value_name: BIFROST_HEIMDALL_RUN_VALUE.to_string(),
+        enabled: command.is_some(),
+        command,
+    })
+}
+
+/// Enables or disables unprivileged Windows login autostart for Heimdall under
+/// `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`.
+pub fn set_heimdall_autostart(enabled: bool) -> Result<HeimdallAutostartStatus> {
+    if enabled {
+        let bifrost_exe = locate_bifrost_cli()?;
+        let command = build_heimdall_autostart_command(&bifrost_exe);
+        write_windows_run_value(Some(&command))?;
+        info!(
+            value_name = BIFROST_HEIMDALL_RUN_VALUE,
+            "enabled HKCU Windows login autostart for Heimdall"
+        );
+        Ok(HeimdallAutostartStatus {
+            value_name: BIFROST_HEIMDALL_RUN_VALUE.to_string(),
+            enabled: true,
+            command: Some(command),
+        })
+    } else {
+        write_windows_run_value(None)?;
+        info!(
+            value_name = BIFROST_HEIMDALL_RUN_VALUE,
+            "disabled HKCU Windows login autostart for Heimdall"
+        );
+        Ok(HeimdallAutostartStatus {
+            value_name: BIFROST_HEIMDALL_RUN_VALUE.to_string(),
+            enabled: false,
+            command: None,
+        })
+    }
 }
 
 /// Registers the Explorer context menu ("Install with BIFRÖST") and optionally sets
@@ -157,6 +224,7 @@ if (Test-Path $extRoot) {
         Remove-ItemProperty -Path $extRoot -Name '(Default)' -ErrorAction SilentlyContinue
     }
 }
+exit 0
 "#;
 
     let output = Command::new("powershell.exe")
@@ -185,6 +253,90 @@ fn remove_windows_apk_association() -> Result<()> {
     })
 }
 
+#[cfg(windows)]
+fn read_windows_run_value() -> Result<Option<String>> {
+    const SCRIPT: &str = r#"
+$OutputEncoding = [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$path = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+$name = $env:BIFROST_RUN_NAME
+if (Test-Path $path) {
+    $prop = Get-ItemProperty -Path $path -Name $name -ErrorAction SilentlyContinue
+    if ($null -ne $prop) {
+        Write-Output $prop.$name
+    }
+}
+exit 0
+"#;
+    let output = Command::new("powershell.exe")
+        .args(["-NoProfile", "-NonInteractive", "-Command", SCRIPT])
+        .env("BIFROST_RUN_NAME", BIFROST_HEIMDALL_RUN_VALUE)
+        .output()
+        .map_err(|source| BifrostError::Io {
+            context: "querying HKCU Run autostart via PowerShell".to_string(),
+            source,
+        })?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(BifrostError::Runtime(format!(
+            "failed querying Heimdall autostart: {stderr}"
+        )));
+    }
+    let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if text.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(text))
+    }
+}
+
+#[cfg(not(windows))]
+fn read_windows_run_value() -> Result<Option<String>> {
+    Ok(None)
+}
+
+#[cfg(windows)]
+fn write_windows_run_value(command: Option<&str>) -> Result<()> {
+    const SCRIPT: &str = r#"
+$ErrorActionPreference = 'Stop'
+$path = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+$name = $env:BIFROST_RUN_NAME
+$cmd = $env:BIFROST_RUN_CMD
+if ([string]::IsNullOrEmpty($cmd)) {
+    if (Test-Path $path) {
+        Remove-ItemProperty -Path $path -Name $name -ErrorAction SilentlyContinue
+    }
+} else {
+    if (-not (Test-Path $path)) { New-Item -Path $path -Force | Out-Null }
+    Set-ItemProperty -Path $path -Name $name -Value $cmd
+}
+exit 0
+"#;
+    let output = Command::new("powershell.exe")
+        .args(["-NoProfile", "-NonInteractive", "-Command", SCRIPT])
+        .env("BIFROST_RUN_NAME", BIFROST_HEIMDALL_RUN_VALUE)
+        .env("BIFROST_RUN_CMD", command.unwrap_or(""))
+        .output()
+        .map_err(|source| BifrostError::Io {
+            context: "updating HKCU Run autostart via PowerShell".to_string(),
+            source,
+        })?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(BifrostError::Runtime(format!(
+            "failed updating Heimdall autostart: {stderr}"
+        )));
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn write_windows_run_value(_command: Option<&str>) -> Result<()> {
+    Err(BifrostError::Unsupported {
+        feature: "Windows login autostart".to_string(),
+        milestone: "Windows 11 host only".to_string(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
@@ -197,6 +349,15 @@ mod tests {
         assert_eq!(
             build_apk_open_command(&exe),
             "\"C:\\Users\\johan\\AppData\\Local\\Programs\\BIFRÖST\\bifrost.exe\" install \"%1\""
+        );
+    }
+
+    #[test]
+    fn builds_properly_quoted_heimdall_autostart_command() {
+        let exe = PathBuf::from(r"C:\NonExistentDir\bifrost.exe");
+        assert_eq!(
+            build_heimdall_autostart_command(&exe),
+            "\"C:\\NonExistentDir\\bifrost.exe\" daemon start"
         );
     }
 }

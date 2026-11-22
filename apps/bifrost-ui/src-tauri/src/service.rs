@@ -9,7 +9,10 @@ use bifrost_bridge::{
     default_pipe_name, read_host_clipboard_text, AdbClient, AdbDevice, DaemonHealthReport,
     HeimdallClient, IpcRequest, SharedDirectoryBridge, SharedFileEntry,
 };
-use bifrost_core::{BifrostConfig, BifrostError, BifrostPaths, Result, RuntimeState, VersionInfo};
+use bifrost_core::{
+    validate_host_file_path, BifrostConfig, BifrostError, BifrostPaths, Result, RuntimeState,
+    VersionInfo,
+};
 use bifrost_diagnostics::{run_doctor, DoctorReport};
 use bifrost_display::{AppWindowHandle, AppWindowSpec, DisplayController};
 use bifrost_network::{NetworkManager, PortForwardRule};
@@ -19,8 +22,9 @@ use bifrost_storage::ImageRegistry;
 use serde::Serialize;
 use valhalla::manager::{InstallOutcome, LaunchOutcome};
 use valhalla::{
-    inspect_apk, ApkInspection, InstalledPackage, PackageDetails, ShortcutManager, ShortcutRecord,
-    ValhallaManager,
+    inspect_apk, query_heimdall_autostart, set_heimdall_autostart as apply_heimdall_autostart,
+    ApkInspection, HeimdallAutostartStatus, InstalledPackage, PackageDetails, ShortcutManager,
+    ShortcutRecord, ValhallaManager,
 };
 
 /// Aggregated Dashboard snapshot served to the UI.
@@ -30,6 +34,7 @@ pub struct DashboardSnapshot {
     pub runtime_state: RuntimeState,
     pub heimdall_connected: bool,
     pub heimdall_health: Option<DaemonHealthReport>,
+    pub heimdall_autostart: bool,
     pub runtime: RuntimeRecord,
     pub active_manifest_path: Option<PathBuf>,
     pub config: BifrostConfig,
@@ -118,12 +123,16 @@ pub async fn get_dashboard_snapshot() -> Result<DashboardSnapshot> {
         .map(|v| v.len())
         .unwrap_or(0);
     let clipboard_has_text = read_host_clipboard_text().ok().flatten().is_some();
+    let heimdall_autostart = query_heimdall_autostart()
+        .map(|s| s.enabled)
+        .unwrap_or(false);
 
     Ok(DashboardSnapshot {
         version: VersionInfo::current(),
         runtime_state,
         heimdall_connected,
         heimdall_health,
+        heimdall_autostart,
         runtime,
         active_manifest_path,
         config,
@@ -134,6 +143,11 @@ pub async fn get_dashboard_snapshot() -> Result<DashboardSnapshot> {
         shared_file_count,
         clipboard_has_text,
     })
+}
+
+/// Enables or disables unprivileged Windows login autostart for Heimdall.
+pub fn set_heimdall_autostart(enabled: bool) -> Result<HeimdallAutostartStatus> {
+    apply_heimdall_autostart(enabled)
 }
 
 /// Starts the Heimdall background supervisor daemon cleanly detached without a console window.
@@ -324,19 +338,54 @@ pub fn inspect_apk_file(path: PathBuf) -> Result<ApkInspection> {
     inspect_apk(path)
 }
 
-/// Installs an inspected APK via Valhalla / Android `PackageManager`.
+/// Installs an inspected APK via Valhalla / Android `PackageManager`,
+/// automatically starting Midgard headlessly if no Android device is online.
 pub async fn install_apk_file(apk_path: PathBuf) -> Result<InstallOutcome> {
-    let (_, _, paths) = load_config_and_paths()?;
+    let safe_apk = validate_host_file_path(&apk_path, Some("apk"))?;
+    let (_, config, paths) = load_config_and_paths()?;
     let client = heimdall_client(&paths);
-    if client.health().await.is_ok() {
+    let heimdall_up = client.health().await.is_ok();
+
+    if ValhallaManager::new().resolve_target_serial(None).is_err() {
+        let inspection = inspect_apk(&safe_apk)?;
+        if !inspection.abi_compatibility.is_supported() {
+            return Err(BifrostError::UnsupportedAbi {
+                path: inspection.path,
+                detected_abis: inspection.detected_abis.join(", "),
+            });
+        }
+        let rt = MidgardRuntime::with_default_backend(config.clone(), paths.clone());
+        if let Ok(manifest) = rt.resolve_default_manifest() {
+            if !rt.status()?.state.is_active() {
+                if heimdall_up {
+                    let _: RuntimeRecord = client
+                        .send(IpcRequest::RuntimeStart {
+                            manifest_path: manifest,
+                            headless: true,
+                        })
+                        .await?;
+                } else {
+                    let _ = rt.ensure_started_headless()?;
+                }
+            }
+            let endpoint = format!(
+                "{}:{}",
+                config.network.adb_bind_address, config.network.adb_port
+            );
+            let _ = DisplayController::new()
+                .wait_for_device_ready(&endpoint, std::time::Duration::from_secs(90))?;
+        }
+    }
+
+    if heimdall_up {
         return client
             .send(IpcRequest::AppInstall {
                 serial: None,
-                apk_path,
+                apk_path: safe_apk,
             })
             .await;
     }
-    ValhallaManager::new().install_apk(None, apk_path)
+    ValhallaManager::new().install_apk(None, safe_apk)
 }
 
 /// Uninstalls an Android package via Valhalla.
@@ -487,7 +536,7 @@ mod tests {
     async fn dashboard_snapshot_returns_valid_host_diagnostics_and_config() {
         let snap = get_dashboard_snapshot().await.unwrap();
         assert_eq!(snap.version.identifier, "bifrost");
-        assert_eq!(snap.doctor.checks.len(), 7);
+        assert_eq!(snap.doctor.checks.len(), 8);
         assert_eq!(snap.config.network.adb_bind_address, "127.0.0.1");
     }
 
