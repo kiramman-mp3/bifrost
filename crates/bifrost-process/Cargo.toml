@@ -1,0 +1,15 @@
+[package]
+name = "bifrost-process"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+description = "Android guest process discovery and lifecycle control over BIFRÖST Bridge."
+
+[lints]
+workspace = true
+
+[dependencies]
+bifrost-bridge = { path = "../bifrost-bridge" }
+bifrost-core = { path = "../bifrost-core" }
+serde.workspace = true

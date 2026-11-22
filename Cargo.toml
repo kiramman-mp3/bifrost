@@ -1,0 +1,47 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/bifrost-core",
+    "crates/bifrost-diagnostics",
+    "crates/bifrost-storage",
+    "crates/bifrost-hypervisor",
+    "crates/bifrost-runtime",
+    "crates/bifrost-bridge",
+    "crates/bifrost-display",
+    "crates/bifrost-process",
+    "crates/bifrost-network",
+    "crates/valhalla",
+    "crates/heimdall",
+    "crates/mimir",
+    "apps/bifrost-ui/src-tauri",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+authors = ["Johan Rodríguez"]
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[workspace.dependencies]
+clap = { version = "4.5", features = ["derive"] }
+directories = "5.0"
+ed25519-dalek = { version = "2.1", default-features = false, features = ["std"] }
+getrandom = "0.2"
+hex = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+tempfile = "3.13"
+thiserror = "2.0"
+tokio = { version = "1.43", features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+toml = "0.8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
+windows = "0.58"
+zip = { version = "2.2", default-features = false, features = ["deflate"] }

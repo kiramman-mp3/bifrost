@@ -1,0 +1,34 @@
+[package]
+name = "mimir"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+description = "Mimir — Administrative command-line interface (`bifrost`) for BIFRÖST."
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "bifrost"
+path = "src/main.rs"
+
+[dependencies]
+bifrost-bridge = { path = "../bifrost-bridge" }
+bifrost-core = { path = "../bifrost-core" }
+bifrost-diagnostics = { path = "../bifrost-diagnostics" }
+bifrost-display = { path = "../bifrost-display" }
+bifrost-network = { path = "../bifrost-network" }
+bifrost-process = { path = "../bifrost-process" }
+bifrost-runtime = { path = "../bifrost-runtime" }
+bifrost-storage = { path = "../bifrost-storage" }
+valhalla = { path = "../valhalla" }
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+zip.workspace = true
