@@ -152,6 +152,7 @@ impl<B: HypervisorBackend> MidgardRuntime<B> {
             adb_bind_address: self.config.network.adb_bind_address.clone(),
             adb_port: self.config.network.adb_port,
             graphics_mode: self.config.runtime.graphics_mode,
+            audio_enabled: self.config.runtime.audio_enabled,
             headless: options.headless,
             interactive_console: options.interactive_console,
             serial_log_path: self.serial_log_path(),
