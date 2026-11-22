@@ -99,8 +99,14 @@ function renderDashboard(data) {
     .toUpperCase();
   document.getElementById("dash-adb").textContent = `ADB devices: ${data.devices.length}`;
 
-  if (data.runtime.manifest_path && !document.getElementById("manifest-input").value) {
-    document.getElementById("manifest-input").value = data.runtime.manifest_path;
+  const heimdallBtn = document.getElementById("btn-heimdall-toggle");
+  if (heimdallBtn) {
+    heimdallBtn.textContent = data.heimdall_connected ? "Stop Heimdall" : "Start Heimdall";
+  }
+
+  const defaultManifest = data.runtime.manifest_path || data.active_manifest_path;
+  if (defaultManifest && !document.getElementById("manifest-input").value) {
+    document.getElementById("manifest-input").value = defaultManifest;
   }
 
   populateConfigForm(data.config, data.config_path);
@@ -357,6 +363,20 @@ async function refreshApps() {
 
 function wireEvents() {
   document.getElementById("btn-refresh-all").addEventListener("click", refreshAll);
+  document.getElementById("btn-heimdall-toggle").addEventListener("click", async () => {
+    try {
+      if (lastDashboard?.heimdall_connected) {
+        await invoke("stop_heimdall");
+        showToast("Heimdall daemon stopped.");
+      } else {
+        const health = await invoke("start_heimdall");
+        showToast(`Heimdall daemon started (PID ${health.daemon_pid}).`);
+      }
+      await refreshAll();
+    } catch (err) {
+      showToast(String(err), true);
+    }
+  });
   document.getElementById("btn-refresh-procs").addEventListener("click", refreshProcesses);
   document.getElementById("btn-refresh-logs").addEventListener("click", refreshLogs);
   document.getElementById("btn-refresh-share").addEventListener("click", refreshSharedFiles);
