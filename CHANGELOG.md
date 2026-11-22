@@ -7,6 +7,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Added
+- **Milestone 5 — Valhalla Application Management**:
+  - Created `crates/valhalla` (`#![forbid(unsafe_code)]`) with pure-Rust APK ZIP/`AndroidManifest.xml`/Zip-Slip inspection, SHA-256 hashing, ADR-0004 `x86_64` ABI enforcement (rejecting ARM64-only APKs with `UnsupportedAbi`), strict package ID validation, and real `pm`/`dumpsys`/`am` orchestration (`6` unit tests).
+  - Extended Heimdall's authenticated Named Pipe IPC with `AppsList`, `AppInfo`, `AppInstall`, `AppUninstall`, `AppLaunch`, and `AppStop`.
+  - Wired `bifrost apps list|info|launch|stop`, `bifrost install [--inspect-only]`, and `bifrost uninstall [--keep-data]` into `crates/mimir` (`41` total passing workspace tests across 9 crates).
 - **Milestone 4 — Heimdall & Bridge**:
   - Created `crates/bifrost-bridge` (`#![forbid(unsafe_code)]`) with loopback-only ADB orchestration (`AdbClient`, `adb devices -l` parser, Android guest health probing), `HeimdallClient`, and authenticated IPC protocol (256-bit random session token, constant-time auth check, 64 KiB max frame guard) (`3` unit tests).
   - Created `crates/heimdall` (`heimdall.exe`) async Tokio supervisor daemon with periodic health monitoring and Windows Named Pipe IPC restricted via owner-only SDDL DACL `D:(A;;GA;;;OW)` + session token validation (`1` live Named Pipe integration test verifying valid auth, forged-token rejection, and clean shutdown).

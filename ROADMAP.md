@@ -65,15 +65,14 @@ This roadmap tracks BIFRÖST's incremental delivery from feasibility research to
 
 ---
 
-## Milestone 5 — Valhalla Application Management (`Planned` — **Next Implementation Milestone**)
-- [ ] Create `crates/valhalla`.
-- [ ] Query real installed packages from Android `PackageManager`.
-- [ ] Implement safe APK validation (canonical path check, zip/manifest inspection, ABI check flagging ARM64-only APKs).
-- [ ] Implement real APK installation, uninstallation, metadata retrieval, and activity launching via Bridge.
+## Milestone 5 — Valhalla Application Management (`Implemented`)
+- [x] Created `crates/valhalla` (`#![forbid(unsafe_code)]`) with offline ZIP/APK structural inspection, Zip Slip rejection, streaming SHA-256 hashing, and ADR-0004 `x86_64` ABI verification (explicitly rejecting `arm64-v8a`-only APKs with `UnsupportedAbi`).
+- [x] Implemented strict Android package identifier validation and real Android package management via `bifrost-bridge` (`pm list packages -f`, `dumpsys package`, `cmd package resolve-activity`, `adb install -r`, `adb uninstall`, `am start`, `am force-stop`).
+- [x] Exposed all Valhalla operations over Heimdall's authenticated Named Pipe IPC and wired `bifrost apps list|info|launch|stop`, `bifrost install [--inspect-only]`, and `bifrost uninstall [--keep-data]` into `mimir`.
 
 ---
 
-## Milestone 6 — Deep Windows Integration (`Planned` / `Experimental`)
+## Milestone 6 — Deep Windows Integration (`Planned` / `Experimental` — **Next Implementation Milestone**)
 - [ ] Evaluate and migrate/add `crosvm` WHPX + `gfxstream` backend in `bifrost-hypervisor`.
 - [ ] Implement scoped host ↔ guest directory sharing with strict path traversal guards.
 - [ ] Implement bidirectional clipboard sync and Android → Windows native toast notifications.
