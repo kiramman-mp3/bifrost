@@ -62,8 +62,9 @@ impl VersionInfo {
             version: VERSION.to_string(),
             target_os: std::env::consts::OS.to_string(),
             target_arch: std::env::consts::ARCH.to_string(),
-            current_milestone: "Milestone 5 — Valhalla (Android Application & APK Management)"
-                .to_string(),
+            current_milestone:
+                "Milestone 6 — Windows Integration (Share, Clipboard, Notifications, Processes, Network)"
+                    .to_string(),
             capabilities: vec![
                 ComponentCapability {
                     name: "bifrost-core".to_string(),
@@ -75,7 +76,7 @@ impl VersionInfo {
                     name: "mimir".to_string(),
                     status: FeatureStatus::Implemented,
                     summary:
-                        "Full administrative CLI (version, status, config, doctor, runtime, logs, devices, daemon, apps, install, uninstall)"
+                        "Full CLI (version, status, config, doctor, runtime, logs, devices, daemon, apps, install, share, clipboard, notifications, processes, network)"
                             .to_string(),
                 },
                 ComponentCapability {
@@ -96,7 +97,7 @@ impl VersionInfo {
                     name: "heimdall-bridge".to_string(),
                     status: FeatureStatus::Implemented,
                     summary:
-                        "Heimdall daemon, owner-DACL Named Pipe IPC with auth token, health monitor & loopback ADB"
+                        "Heimdall daemon, owner-DACL Named Pipe IPC, loopback ADB, shared dirs, Win32 clipboard & notification parser"
                             .to_string(),
                 },
                 ComponentCapability {
@@ -104,6 +105,13 @@ impl VersionInfo {
                     status: FeatureStatus::Implemented,
                     summary:
                         "APK ZIP/ABI inspection (ADR-0004), real pm/am/dumpsys package discovery, install, uninstall & launch"
+                            .to_string(),
+                },
+                ComponentCapability {
+                    name: "windows-integration".to_string(),
+                    status: FeatureStatus::PartiallyImplemented,
+                    summary:
+                        "Shared dirs, Win32 clipboard, notifications, processes & loopback networking live; per-app windows pending live display stream"
                             .to_string(),
                 },
                 ComponentCapability {
