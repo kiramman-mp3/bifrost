@@ -647,10 +647,40 @@ async fn handle_apps(
             width,
             height,
             dpi,
+            no_autostart,
         } => {
             if *window {
-                let target = valhalla.resolve_target_serial(serial.as_deref())?;
                 let ctrl = DisplayController::new();
+                let target = match valhalla.resolve_target_serial(serial.as_deref()) {
+                    Ok(t) => t,
+                    Err(_) if !*no_autostart && serial.is_none() => {
+                        let (_, _, config, paths) =
+                            load_effective_config_and_paths(explicit_config)?;
+                        let adb_endpoint = format!(
+                            "{}:{}",
+                            config.network.adb_bind_address, config.network.adb_port
+                        );
+                        let rt = MidgardRuntime::with_default_backend(config, paths.clone());
+                        if !rt.status()?.state.is_active() {
+                            let manifest = rt.resolve_default_manifest()?;
+                            if heimdall_up {
+                                let _: RuntimeRecord = client
+                                    .send(IpcRequest::RuntimeStart {
+                                        manifest_path: manifest,
+                                        headless: true,
+                                    })
+                                    .await?;
+                            } else {
+                                let _ = rt.ensure_started_headless()?;
+                            }
+                        }
+                        ctrl.wait_for_device_ready(
+                            &adb_endpoint,
+                            std::time::Duration::from_secs(90),
+                        )?
+                    }
+                    Err(err) => return Err(err),
+                };
                 let handle = ctrl.launch_in_independent_window(
                     &target,
                     package,

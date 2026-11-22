@@ -277,6 +277,10 @@ pub enum AppsAction {
         /// Display DPI when `--window` is set.
         #[arg(long, default_value_t = 240)]
         dpi: u32,
+
+        /// Do not auto-start Midgard headlessly if no Android device is currently online.
+        #[arg(long)]
+        no_autostart: bool,
     },
     /// Force-stop a running Android application (`am force-stop`).
     Stop {

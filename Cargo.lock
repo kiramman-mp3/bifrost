@@ -273,6 +273,7 @@ dependencies = [
  "bifrost-bridge",
  "bifrost-core",
  "bifrost-diagnostics",
+ "bifrost-display",
  "bifrost-network",
  "bifrost-process",
  "bifrost-runtime",

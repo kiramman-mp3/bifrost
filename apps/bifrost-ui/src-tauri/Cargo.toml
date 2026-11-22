@@ -18,6 +18,7 @@ tauri-build = { version = "2", features = [] }
 bifrost-bridge = { path = "../../../crates/bifrost-bridge" }
 bifrost-core = { path = "../../../crates/bifrost-core" }
 bifrost-diagnostics = { path = "../../../crates/bifrost-diagnostics" }
+bifrost-display = { path = "../../../crates/bifrost-display" }
 bifrost-network = { path = "../../../crates/bifrost-network" }
 bifrost-process = { path = "../../../crates/bifrost-process" }
 bifrost-runtime = { path = "../../../crates/bifrost-runtime" }
