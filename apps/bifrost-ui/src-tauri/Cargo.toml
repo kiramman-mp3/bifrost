@@ -1,0 +1,27 @@
+[package]
+name = "bifrost-ui"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+description = "BIFRÖST — Windows 11 Fluent Design desktop application backed by Rust and Tauri 2."
+
+[lints]
+workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+bifrost-bridge = { path = "../../../crates/bifrost-bridge" }
+bifrost-core = { path = "../../../crates/bifrost-core" }
+bifrost-diagnostics = { path = "../../../crates/bifrost-diagnostics" }
+bifrost-network = { path = "../../../crates/bifrost-network" }
+bifrost-process = { path = "../../../crates/bifrost-process" }
+bifrost-runtime = { path = "../../../crates/bifrost-runtime" }
+serde.workspace = true
+serde_json.workspace = true
+tauri = { version = "2", features = [] }
+tokio.workspace = true
+tracing.workspace = true
+valhalla = { path = "../../../crates/valhalla" }

@@ -63,7 +63,7 @@ impl VersionInfo {
             target_os: std::env::consts::OS.to_string(),
             target_arch: std::env::consts::ARCH.to_string(),
             current_milestone:
-                "Milestone 6 — Windows Integration (Share, Clipboard, Notifications, Processes, Network)"
+                "Milestone 7 — Desktop Application (`bifrost-ui` Tauri 2 Fluent Design)"
                     .to_string(),
             capabilities: vec![
                 ComponentCapability {
@@ -112,6 +112,13 @@ impl VersionInfo {
                     status: FeatureStatus::PartiallyImplemented,
                     summary:
                         "Shared dirs, Win32 clipboard, notifications, processes & loopback networking live; per-app windows pending live display stream"
+                            .to_string(),
+                },
+                ComponentCapability {
+                    name: "bifrost-ui".to_string(),
+                    status: FeatureStatus::Implemented,
+                    summary:
+                        "Windows 11 Fluent Design 2 Tauri 2 desktop app with pure-Rust backend (Dashboard, Apps, Runtime Config, Diagnostics, Settings)"
                             .to_string(),
                 },
                 ComponentCapability {
