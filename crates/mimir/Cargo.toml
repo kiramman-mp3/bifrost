@@ -20,6 +20,7 @@ bifrost-diagnostics = { path = "../bifrost-diagnostics" }
 bifrost-network = { path = "../bifrost-network" }
 bifrost-process = { path = "../bifrost-process" }
 bifrost-runtime = { path = "../bifrost-runtime" }
+bifrost-storage = { path = "../bifrost-storage" }
 valhalla = { path = "../valhalla" }
 clap.workspace = true
 serde.workspace = true

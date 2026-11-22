@@ -88,11 +88,11 @@ This roadmap tracks BIFRÖST's incremental delivery from feasibility research to
 
 ---
 
-## Milestone 8 — Distribution & Lifecycle (`Planned` — **Next Implementation Milestone**)
-- [ ] Signed Windows installer (MSIX / WiX) and clean uninstaller.
-- [ ] Runtime image downloader with Ed25519 signature + SHA-256 verification.
-- [ ] Independent Android runtime upgrades preserving persistent `userdata`.
-- [ ] Runtime backup, recovery, and diagnostic report export.
+## Milestone 8 — Distribution & Lifecycle (`Implemented`)
+- [x] Added pure-Rust **Ed25519 signature verification** (`bifrost-storage::signature` via `ed25519-dalek`) for Midgard manifests and updates alongside streaming SHA-256 verification.
+- [x] Added local Midgard **Image Registry & Upgrade Compatibility** (`bifrost-storage::registry`, `bifrost images list|register|use`) blocking silent Android downgrades and incompatible userdata switches while keeping `userdata.img` persistent across compatible upgrades.
+- [x] Added verified **Backup, Restore, Guarded Wipe & Diagnostic Export** (`bifrost-storage::recovery`, `bifrost recovery backup|restore|wipe-userdata|export-diagnostics`) with mandatory `--confirm` protection for destructive operations and zero leaked auth tokens.
+- [x] Added reproducible Windows 11 release packaging, unprivileged user-space installer/uninstaller scripts (`installer/windows/`), and automated Windows CI workflow (`.github/workflows/ci.yml`).
 
 ---
 

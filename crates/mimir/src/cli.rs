@@ -158,6 +158,18 @@ pub enum Command {
         #[command(subcommand)]
         action: NetworkAction,
     },
+
+    /// Manage verified Midgard Android runtime image versions and upgrade compatibility.
+    Images {
+        #[command(subcommand)]
+        action: ImagesAction,
+    },
+
+    /// Back up, restore, reset userdata safely, or export diagnostic bundles.
+    Recovery {
+        #[command(subcommand)]
+        action: RecoveryAction,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -340,5 +352,62 @@ pub enum NetworkAction {
         local_port: u16,
         #[arg(long)]
         serial: Option<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ImagesAction {
+    /// List registered Midgard runtime image bundles and highlight the active version.
+    List,
+    /// Verify SHA-256 (and optional Ed25519 signature) and register a Midgard image bundle.
+    Register {
+        /// Path to `manifest.json`.
+        #[arg(long)]
+        manifest: PathBuf,
+        /// Optional 64-byte hex Ed25519 signature over `manifest.json`.
+        #[arg(long)]
+        signature: Option<String>,
+        /// Optional 32-byte hex Ed25519 public key (required when `--signature` is set).
+        #[arg(long)]
+        pubkey: Option<String>,
+        /// Userdata compatibility schema epoch (defaults to 1).
+        #[arg(long, default_value_t = 1)]
+        userdata_compat: u32,
+    },
+    /// Switch active Midgard runtime version after verifying upgrade compatibility.
+    Use {
+        /// Registered image ID to activate.
+        image_id: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum RecoveryAction {
+    /// Create a SHA-256-verified backup of persistent Android `userdata.img`.
+    Backup {
+        /// Destination directory for the verified backup.
+        #[arg(long)]
+        output: PathBuf,
+    },
+    /// Verify backup SHA-256 and restore `userdata.img` (requires `--confirm`).
+    Restore {
+        /// Source backup directory containing `backup-metadata.json` and `userdata.img`.
+        #[arg(long)]
+        from: PathBuf,
+        /// Explicit confirmation required before overwriting live userdata.
+        #[arg(long)]
+        confirm: bool,
+    },
+    /// Permanently delete persistent `userdata.img` (requires `--confirm`).
+    WipeUserdata {
+        /// Explicit confirmation required for destructive userdata wipe.
+        #[arg(long)]
+        confirm: bool,
+    },
+    /// Export a sanitized JSON diagnostic report (excluding auth tokens).
+    ExportDiagnostics {
+        /// Output `.json` file path.
+        #[arg(long)]
+        output: PathBuf,
     },
 }

@@ -18,13 +18,18 @@ use bifrost_diagnostics::{render_human_report, run_doctor, OverallReadiness};
 use bifrost_network::NetworkManager;
 use bifrost_process::ProcessManager;
 use bifrost_runtime::{MidgardRuntime, RuntimeLogs, RuntimeRecord, StartOptions};
+use bifrost_storage::{
+    backup_userdata, restore_userdata, verify_manifest_file, verify_manifest_signature_file,
+    wipe_userdata_disk, ImageRegistry,
+};
 use serde::Serialize;
 use valhalla::manager::{InstallOutcome, LaunchOutcome};
 use valhalla::{inspect_apk, AbiCompatibility, InstalledPackage, PackageDetails, ValhallaManager};
 
 use crate::cli::{
-    AppsAction, Cli, ClipboardAction, Command, ConfigAction, DaemonAction, NetworkAction,
-    NotificationsAction, ProcessesAction, RuntimeAction, ShareAction,
+    AppsAction, Cli, ClipboardAction, Command, ConfigAction, DaemonAction, ImagesAction,
+    NetworkAction, NotificationsAction, ProcessesAction, RecoveryAction, RuntimeAction,
+    ShareAction,
 };
 
 /// Structured status output returned by `bifrost status`.
@@ -116,6 +121,12 @@ pub async fn execute(cli: &Cli) -> Result<CommandOutput> {
         }
         Command::Processes { action } => handle_processes(action, cli.json).map(CommandOutput::ok),
         Command::Network { action } => handle_network(action, cli.json).map(CommandOutput::ok),
+        Command::Images { action } => {
+            handle_images(action, cli.config.as_ref(), cli.json).map(CommandOutput::ok)
+        }
+        Command::Recovery { action } => handle_recovery(action, cli.config.as_ref(), cli.json)
+            .await
+            .map(CommandOutput::ok),
     }
 }
 
@@ -974,6 +985,206 @@ fn handle_network(action: &NetworkAction, as_json: bool) -> Result<String> {
             }
             Ok(format!(
                 "Removed loopback forward on port {local_port} for '{target}'."
+            ))
+        }
+    }
+}
+
+fn handle_images(
+    action: &ImagesAction,
+    explicit_config: Option<&PathBuf>,
+    as_json: bool,
+) -> Result<String> {
+    let (_, _, _, paths) = load_effective_config_and_paths(explicit_config)?;
+    let mut registry = ImageRegistry::load(&paths.images_dir)?;
+
+    match action {
+        ImagesAction::List => {
+            if as_json {
+                return serde_json::to_string_pretty(&registry)
+                    .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
+            }
+            if registry.images.is_empty() {
+                return Ok("No Midgard runtime images registered yet.".to_string());
+            }
+            let mut out = format!(
+                "Registered Midgard Runtime Images ({}):\n",
+                registry.images.len()
+            );
+            for img in &registry.images {
+                let marker = if registry.active_image_id.as_deref() == Some(img.id.as_str()) {
+                    "* "
+                } else {
+                    "  "
+                };
+                let sig = if img.signature_verified {
+                    "signed:ed25519"
+                } else {
+                    "sha256-only"
+                };
+                out.push_str(&format!(
+                    "{marker}{:<24} Android {:<6} [{} | compat v{}] {}\n",
+                    img.id,
+                    img.android_version,
+                    sig,
+                    img.userdata_compat_version,
+                    img.manifest_path.display()
+                ));
+            }
+            Ok(out.trim_end().to_string())
+        }
+        ImagesAction::Register {
+            manifest,
+            signature,
+            pubkey,
+            userdata_compat,
+        } => {
+            let signature_verified = match (signature.as_deref(), pubkey.as_deref()) {
+                (Some(sig), Some(pk)) => {
+                    verify_manifest_signature_file(manifest, sig, pk)?;
+                    true
+                }
+                (Some(_), None) | (None, Some(_)) => {
+                    return Err(BifrostError::ConfigValidation {
+                        field: "signature/pubkey".to_string(),
+                        reason: "both --signature and --pubkey must be provided together"
+                            .to_string(),
+                    });
+                }
+                (None, None) => false,
+            };
+
+            let bundle = verify_manifest_file(manifest)?;
+            let record = registry.register_bundle(&bundle, signature_verified, *userdata_compat)?;
+            registry.save(&paths.images_dir)?;
+
+            if as_json {
+                return serde_json::to_string_pretty(&record)
+                    .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
+            }
+            Ok(format!(
+                "Registered verified Midgard image '{}' (Android {}, signature_verified={}).",
+                record.id, record.android_version, record.signature_verified
+            ))
+        }
+        ImagesAction::Use { image_id } => {
+            let activated = registry.activate(image_id)?;
+            registry.save(&paths.images_dir)?;
+
+            if as_json {
+                return serde_json::to_string_pretty(&activated)
+                    .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
+            }
+            Ok(format!(
+                "Active Midgard runtime set to '{}' (Android {}; persistent userdata preserved).",
+                activated.id, activated.android_version
+            ))
+        }
+    }
+}
+
+async fn handle_recovery(
+    action: &RecoveryAction,
+    explicit_config: Option<&PathBuf>,
+    as_json: bool,
+) -> Result<String> {
+    let (config_path, config_exists, config, paths) =
+        load_effective_config_and_paths(explicit_config)?;
+    let userdata_path = paths
+        .data_dir
+        .join("instances")
+        .join("default")
+        .join("userdata.img");
+
+    match action {
+        RecoveryAction::Backup { output } => {
+            let meta = backup_userdata(&userdata_path, output)?;
+            if as_json {
+                return serde_json::to_string_pretty(&meta)
+                    .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
+            }
+            Ok(format!(
+                "Backed up userdata ({} bytes, sha256: {}) to '{}'.",
+                meta.size_bytes,
+                meta.sha256,
+                output.display()
+            ))
+        }
+        RecoveryAction::Restore { from, confirm } => {
+            let meta = restore_userdata(from, &userdata_path, *confirm)?;
+            if as_json {
+                return serde_json::to_string_pretty(&meta)
+                    .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
+            }
+            Ok(format!(
+                "Restored verified userdata (sha256: {}) into '{}'.",
+                meta.sha256,
+                userdata_path.display()
+            ))
+        }
+        RecoveryAction::WipeUserdata { confirm } => {
+            wipe_userdata_disk(&userdata_path, *confirm)?;
+            if as_json {
+                return serde_json::to_string_pretty(&serde_json::json!({
+                    "wiped": true,
+                    "path": userdata_path,
+                }))
+                .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
+            }
+            Ok(format!(
+                "Wiped persistent userdata disk '{}'.",
+                userdata_path.display()
+            ))
+        }
+        RecoveryAction::ExportDiagnostics { output } => {
+            let safe_out = validate_host_file_path(output, Some("json"))?;
+            let doctor = run_doctor(&config, &paths.data_dir);
+            let runtime_mgr = MidgardRuntime::with_default_backend(config.clone(), paths.clone());
+            let runtime_status = runtime_mgr.status()?;
+            let logs = runtime_mgr.read_logs(100)?;
+            let registry = ImageRegistry::load(&paths.images_dir)?;
+            let devices = AdbClient::new().list_devices().unwrap_or_default();
+            let heimdall_health = heimdall_client_for(&paths).health().await.ok();
+
+            let bundle = serde_json::json!({
+                "schema_version": 1,
+                "version": VersionInfo::current(),
+                "config_path": config_path,
+                "config_exists": config_exists,
+                "config": config,
+                "doctor": doctor,
+                "heimdall_health": heimdall_health,
+                "runtime_status": runtime_status,
+                "image_registry": registry,
+                "adb_devices": devices,
+                "recent_logs": logs,
+            });
+
+            if let Some(parent) = safe_out.parent() {
+                if !parent.as_os_str().is_empty() {
+                    std::fs::create_dir_all(parent).map_err(|source| BifrostError::Io {
+                        context: format!("creating diagnostics output dir '{}'", parent.display()),
+                        source,
+                    })?;
+                }
+            }
+            let serialized = serde_json::to_string_pretty(&bundle)
+                .map_err(|err| BifrostError::ConfigSerialize(err.to_string()))?;
+            std::fs::write(&safe_out, serialized).map_err(|source| BifrostError::Io {
+                context: format!("writing diagnostic bundle '{}'", safe_out.display()),
+                source,
+            })?;
+
+            if as_json {
+                return serde_json::to_string_pretty(&serde_json::json!({
+                    "exported": true,
+                    "path": safe_out,
+                }))
+                .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
+            }
+            Ok(format!(
+                "Exported sanitized BIFRÖST diagnostic bundle to '{}'.",
+                safe_out.display()
             ))
         }
     }
