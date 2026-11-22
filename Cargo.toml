@@ -12,6 +12,7 @@ members = [
     "crates/valhalla",
     "crates/heimdall",
     "crates/mimir",
+    "apps/bifrost-ui/src-tauri",
 ]
 
 [workspace.package]

@@ -81,13 +81,14 @@ This roadmap tracks BIFRÖST's incremental delivery from feasibility research to
 
 ---
 
-## Milestone 7 — Desktop Application (`apps/bifrost-ui`) (`Planned` — **Next Implementation Milestone**)
-- [ ] Build Windows 11 Fluent Design 2 desktop application (Tauri 2 with Rust backend talking strictly to Heimdall IPC).
-- [ ] Sections: Dashboard, Application Manager, Runtime Configuration, Diagnostics, and Settings (light/dark themes, accessible layout, zero ads).
+## Milestone 7 — Desktop Application (`apps/bifrost-ui`) (`Implemented`)
+- [x] Built `apps/bifrost-ui` with **Tauri 2** and a `#![forbid(unsafe_code)]` Rust backend integrating `bifrost-core`, `bifrost-diagnostics`, `bifrost-runtime`, `bifrost-bridge`, `bifrost-process`, `bifrost-network`, and `valhalla` (`17` Tauri commands over a testable `service.rs` layer).
+- [x] Designed a zero-bloat, offline-first **Windows 11 Fluent Design 2** frontend (`apps/bifrost-ui/ui/`) with Dark & Light themes, accessible navigation, strict CSP, and all 5 required sections (**Dashboard**, **Application Manager**, **Runtime Configuration**, **Diagnostics**, and **Settings**).
+- [x] Verified `bifrost-ui.exe` compiles cleanly with `50` total passing workspace tests across 12 crates.
 
 ---
 
-## Milestone 8 — Distribution & Lifecycle (`Planned`)
+## Milestone 8 — Distribution & Lifecycle (`Planned` — **Next Implementation Milestone**)
 - [ ] Signed Windows installer (MSIX / WiX) and clean uninstaller.
 - [ ] Runtime image downloader with Ed25519 signature + SHA-256 verification.
 - [ ] Independent Android runtime upgrades preserving persistent `userdata`.
