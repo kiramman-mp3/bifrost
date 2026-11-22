@@ -292,7 +292,7 @@ impl HypervisorBackend for QemuWhpxBackend {
             args.push("none".to_string());
         } else {
             args.push("-display".to_string());
-            args.push("sdl".to_string());
+            args.push("gtk,zoom-to-fit=on".to_string());
         }
 
         // Serial console capture (file-backed log or interactive stdio).
@@ -343,6 +343,15 @@ impl HypervisorBackend for QemuWhpxBackend {
             cmd.stdin(Stdio::null())
                 .stdout(Stdio::null())
                 .stderr(Stdio::from(stderr_file));
+
+            // Detach into its own process group on Windows so parent CLI exit
+            // never interrupts QEMU's GTK/WHPX window message pump.
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+                cmd.creation_flags(CREATE_NEW_PROCESS_GROUP);
+            }
         }
 
         let mut child = cmd.spawn().map_err(|source| BifrostError::Io {
