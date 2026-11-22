@@ -128,6 +128,36 @@ pub enum Command {
         #[arg(long, default_value_t = 100)]
         tail: usize,
     },
+
+    /// Manage scoped Windows <-> Android shared directories.
+    Share {
+        #[command(subcommand)]
+        action: ShareAction,
+    },
+
+    /// Read the Windows clipboard or sync text to Android.
+    Clipboard {
+        #[command(subcommand)]
+        action: ClipboardAction,
+    },
+
+    /// Inspect active Android notifications and render Windows toast payloads.
+    Notifications {
+        #[command(subcommand)]
+        action: NotificationsAction,
+    },
+
+    /// Inspect running Android guest processes (`ps -A`).
+    Processes {
+        #[command(subcommand)]
+        action: ProcessesAction,
+    },
+
+    /// Manage loopback-safe Windows <-> Android TCP port forwards.
+    Network {
+        #[command(subcommand)]
+        action: NetworkAction,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -237,4 +267,78 @@ pub enum DaemonAction {
     Status,
     /// Request a graceful Heimdall daemon shutdown over authenticated IPC.
     Stop,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ShareAction {
+    /// List files in the host BIFRÖST shared directory.
+    List,
+    /// Push a relative file from the host shared directory into Android `/sdcard/BifrostShare`.
+    Push {
+        /// Relative path inside the host shared directory.
+        path: String,
+        #[arg(long)]
+        serial: Option<String>,
+    },
+    /// Pull a relative file from Android `/sdcard/BifrostShare` into the host shared directory.
+    Pull {
+        /// Relative path inside Android `/sdcard/BifrostShare`.
+        path: String,
+        #[arg(long)]
+        serial: Option<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ClipboardAction {
+    /// Read current Unicode text from the Windows host clipboard.
+    Get,
+    /// Sync Windows host clipboard text into the connected Android device.
+    SyncToAndroid {
+        #[arg(long)]
+        serial: Option<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum NotificationsAction {
+    /// List active Android notifications over Bridge.
+    List {
+        #[arg(long)]
+        serial: Option<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ProcessesAction {
+    /// List running Android guest processes sorted by resident memory (RSS).
+    List {
+        /// Optional substring filter matched against process names.
+        #[arg(long)]
+        filter: Option<String>,
+        #[arg(long)]
+        serial: Option<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum NetworkAction {
+    /// List active ADB TCP port-forwarding rules.
+    Forwards {
+        #[arg(long)]
+        serial: Option<String>,
+    },
+    /// Add an unprivileged loopback TCP port forward (`127.0.0.1:<local_port>` -> guest).
+    Forward {
+        local_port: u16,
+        guest_port: u16,
+        #[arg(long)]
+        serial: Option<String>,
+    },
+    /// Remove a host loopback TCP port forward.
+    Unforward {
+        local_port: u16,
+        #[arg(long)]
+        serial: Option<String>,
+    },
 }
