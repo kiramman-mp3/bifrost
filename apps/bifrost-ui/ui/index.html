@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BIFRÖST — Android Subsystem for Windows</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Primary Navigation">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true"></div>
+          <div>
+            <h1 class="brand-title">BIFRÖST</h1>
+            <p class="brand-subtitle">A Bridge Between Worlds.</p>
+          </div>
+        </div>
+
+        <nav class="nav-list" role="tablist" aria-orientation="vertical">
+          <button class="nav-item active" role="tab" aria-selected="true" data-section="dashboard">
+            Dashboard
+          </button>
+          <button class="nav-item" role="tab" aria-selected="false" data-section="apps">
+            Applications
+          </button>
+          <button class="nav-item" role="tab" aria-selected="false" data-section="runtime">
+            Runtime Config
+          </button>
+          <button class="nav-item" role="tab" aria-selected="false" data-section="diagnostics">
+            Diagnostics
+          </button>
+          <button class="nav-item" role="tab" aria-selected="false" data-section="settings">
+            Settings
+          </button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="status-pill" id="sidebar-runtime-pill">
+            <span class="dot" id="sidebar-runtime-dot"></span>
+            <span id="sidebar-runtime-label">Checking…</span>
+          </div>
+          <button class="btn subtle small" id="theme-toggle" type="button">
+            Theme: Dark
+          </button>
+        </div>
+      </aside>
+
+      <main class="content">
+        <div id="toast-banner" class="toast hidden" role="status" aria-live="polite"></div>
+
+        <!-- 1. DASHBOARD -->
+        <section id="section-dashboard" class="panel active" role="tabpanel">
+          <header class="panel-header">
+            <div>
+              <h2>Dashboard</h2>
+              <p class="muted">Midgard Android runtime overview, host allocation, and quick controls.</p>
+            </div>
+            <div class="actions">
+              <button class="btn" id="btn-refresh-all" type="button">Refresh</button>
+            </div>
+          </header>
+
+          <div class="grid stats-grid">
+            <article class="card stat-card">
+              <span class="stat-label">Runtime State</span>
+              <strong class="stat-value" id="dash-state">—</strong>
+              <span class="stat-meta" id="dash-heimdall">Heimdall: —</span>
+            </article>
+            <article class="card stat-card">
+              <span class="stat-label">Android Version</span>
+              <strong class="stat-value" id="dash-android">—</strong>
+              <span class="stat-meta" id="dash-image">Image: —</span>
+            </article>
+            <article class="card stat-card">
+              <span class="stat-label">CPU Allocation</span>
+              <strong class="stat-value" id="dash-cpu">—</strong>
+              <span class="stat-meta" id="dash-cpu-host">Host CPU: —</span>
+            </article>
+            <article class="card stat-card">
+              <span class="stat-label">RAM Allocation</span>
+              <strong class="stat-value" id="dash-ram">—</strong>
+              <span class="stat-meta" id="dash-ram-host">Host RAM: —</span>
+            </article>
+            <article class="card stat-card">
+              <span class="stat-label">Storage Allocation</span>
+              <strong class="stat-value" id="dash-storage">—</strong>
+              <span class="stat-meta" id="dash-storage-host">Free disk: —</span>
+            </article>
+            <article class="card stat-card">
+              <span class="stat-label">Host Readiness</span>
+              <strong class="stat-value" id="dash-readiness">—</strong>
+              <span class="stat-meta" id="dash-adb">ADB devices: 0</span>
+            </article>
+          </div>
+
+          <article class="card">
+            <h3>Quick Runtime Controls</h3>
+            <div class="form-row">
+              <label for="manifest-input">Midgard Bundle Manifest (<code>manifest.json</code>)</label>
+              <input
+                id="manifest-input"
+                type="text"
+                placeholder="C:\Users\...\bifrost\images\midgard\manifest.json"
+              />
+            </div>
+            <div class="actions">
+              <label class="checkbox-label">
+                <input id="start-headless" type="checkbox" checked />
+                Headless mode
+              </label>
+              <button class="btn primary" id="btn-runtime-start" type="button">Start Midgard</button>
+              <button class="btn" id="btn-runtime-restart" type="button">Restart</button>
+              <button class="btn danger" id="btn-runtime-stop" type="button">Stop</button>
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="card-header-inline">
+              <h3>Running Android Processes</h3>
+              <button class="btn subtle small" id="btn-refresh-procs" type="button">Refresh</button>
+            </div>
+            <div id="dash-processes" class="list-box muted">
+              No online Android device connected.
+            </div>
+          </article>
+        </section>
+
+        <!-- 2. APPLICATION MANAGER (VALHALLA) -->
+        <section id="section-apps" class="panel" role="tabpanel">
+          <header class="panel-header">
+            <div>
+              <h2>Application Manager (Valhalla)</h2>
+              <p class="muted">Inspect APKs for x86_64 compatibility, install via Android PackageManager, and launch apps.</p>
+            </div>
+            <div class="actions">
+              <label class="checkbox-label">
+                <input id="apps-third-party" type="checkbox" checked />
+                Third-party only
+              </label>
+              <button class="btn" id="btn-refresh-apps" type="button">Refresh List</button>
+            </div>
+          </header>
+
+          <article class="card">
+            <h3>Inspect or Install APK</h3>
+            <div class="form-row">
+              <label for="apk-path-input">Local <code>.apk</code> path</label>
+              <input id="apk-path-input" type="text" placeholder="C:\path\to\application.apk" />
+            </div>
+            <div class="actions">
+              <button class="btn" id="btn-inspect-apk" type="button">Inspect Offline (ZIP / ABI)</button>
+              <button class="btn primary" id="btn-install-apk" type="button">Install APK</button>
+            </div>
+            <pre id="apk-inspect-output" class="code-box hidden"></pre>
+          </article>
+
+          <article class="card">
+            <h3>Installed Applications</h3>
+            <div id="apps-table-container" class="list-box muted">
+              Click "Refresh List" when Midgard or an ADB device is online.
+            </div>
+          </article>
+
+          <article class="card hidden" id="app-details-card">
+            <div class="card-header-inline">
+              <h3 id="app-details-title">Package Metadata</h3>
+              <button class="btn subtle small" id="btn-close-details" type="button">Close</button>
+            </div>
+            <pre id="app-details-body" class="code-box"></pre>
+          </article>
+        </section>
+
+        <!-- 3. RUNTIME CONFIGURATION -->
+        <section id="section-runtime" class="panel" role="tabpanel">
+          <header class="panel-header">
+            <div>
+              <h2>Runtime Configuration</h2>
+              <p class="muted">Validated by Rust <code>bifrost-core</code> and stored in <code>bifrost.toml</code>.</p>
+            </div>
+          </header>
+
+          <form id="config-form" class="card form-grid">
+            <div class="form-row">
+              <label for="cfg-cpu">CPU Cores (1–64)</label>
+              <input id="cfg-cpu" type="number" min="1" max="64" required />
+            </div>
+            <div class="form-row">
+              <label for="cfg-ram">RAM Allocation (MB, 1024–65536)</label>
+              <input id="cfg-ram" type="number" min="1024" max="65536" step="256" required />
+            </div>
+            <div class="form-row">
+              <label for="cfg-storage">Userdata Storage (GB, 8–1024)</label>
+              <input id="cfg-storage" type="number" min="8" max="1024" required />
+            </div>
+            <div class="form-row">
+              <label for="cfg-graphics">Graphics Mode</label>
+              <select id="cfg-graphics">
+                <option value="auto">Auto (virtio-gpu + gfxstream / fallback)</option>
+                <option value="gfxstream">gfxstream (Hardware 3D)</option>
+                <option value="swift_shader">SwiftShader (CPU Diagnostics)</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label for="cfg-width">Display Width (px)</label>
+              <input id="cfg-width" type="number" min="320" max="7680" required />
+            </div>
+            <div class="form-row">
+              <label for="cfg-height">Display Height (px)</label>
+              <input id="cfg-height" type="number" min="320" max="4320" required />
+            </div>
+            <div class="form-row">
+              <label for="cfg-dpi">Display DPI (120–640)</label>
+              <input id="cfg-dpi" type="number" min="120" max="640" required />
+            </div>
+            <div class="form-row">
+              <label for="cfg-adb-host">ADB Bind Address (Loopback enforced by default)</label>
+              <input id="cfg-adb-host" type="text" required />
+            </div>
+            <div class="form-row">
+              <label for="cfg-adb-port">ADB Port (1024–65535)</label>
+              <input id="cfg-adb-port" type="number" min="1024" max="65535" required />
+            </div>
+            <div class="form-row">
+              <label for="cfg-log-level">Logging Level</label>
+              <select id="cfg-log-level">
+                <option value="error">Error</option>
+                <option value="warn">Warn</option>
+                <option value="info">Info</option>
+                <option value="debug">Debug</option>
+                <option value="trace">Trace</option>
+              </select>
+            </div>
+
+            <div class="actions full-span">
+              <button class="btn primary" type="submit">Validate &amp; Save Configuration</button>
+              <span class="muted small-text" id="cfg-path-label"></span>
+            </div>
+          </form>
+        </section>
+
+        <!-- 4. DIAGNOSTICS -->
+        <section id="section-diagnostics" class="panel" role="tabpanel">
+          <header class="panel-header">
+            <div>
+              <h2>Diagnostics</h2>
+              <p class="muted">Native Windows 11 compatibility checks, WHPX status, GPU info, ADB status, and runtime logs.</p>
+            </div>
+            <div class="actions">
+              <button class="btn" id="btn-run-doctor" type="button">Run Doctor</button>
+              <button class="btn" id="btn-export-diag" type="button">Copy JSON Report</button>
+            </div>
+          </header>
+
+          <article class="card">
+            <h3>System Compatibility (<code>bifrost doctor</code>)</h3>
+            <div id="diag-checks" class="checks-list"></div>
+          </article>
+
+          <article class="card">
+            <div class="card-header-inline">
+              <h3>Midgard Runtime &amp; Serial Logs</h3>
+              <button class="btn subtle small" id="btn-refresh-logs" type="button">Refresh Logs</button>
+            </div>
+            <pre id="diag-logs" class="code-box">No logs loaded yet.</pre>
+          </article>
+        </section>
+
+        <!-- 5. SETTINGS -->
+        <section id="section-settings" class="panel" role="tabpanel">
+          <header class="panel-header">
+            <div>
+              <h2>Settings &amp; Platform Status</h2>
+              <p class="muted">Storage paths, shared folders, component maturity, and security invariants.</p>
+            </div>
+          </header>
+
+          <article class="card">
+            <h3>Storage &amp; Integration Paths</h3>
+            <dl class="kv-list" id="settings-paths"></dl>
+          </article>
+
+          <article class="card">
+            <div class="card-header-inline">
+              <h3>Shared Folder (Host Side)</h3>
+              <button class="btn subtle small" id="btn-refresh-share" type="button">Refresh</button>
+            </div>
+            <div id="settings-shared-files" class="list-box muted">Loading…</div>
+          </article>
+
+          <article class="card">
+            <h3>Component Maturity &amp; Transparency</h3>
+            <div id="settings-capabilities" class="checks-list"></div>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
