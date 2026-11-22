@@ -113,6 +113,18 @@ impl<B: HypervisorBackend> MidgardRuntime<B> {
         Ok(record)
     }
 
+    /// Promotes a `Booting` runtime record to `Running` once Android guest boot completes.
+    pub fn mark_running(&self) -> Result<()> {
+        let state_file = self.state_file();
+        let mut record = load_record(&state_file, &self.instance_id)?;
+        if record.state == RuntimeState::Booting {
+            record.state = RuntimeState::Running;
+            record.note = Some("Android guest boot completed and ADB is ready.".to_string());
+            save_record(&state_file, &record)?;
+        }
+        Ok(())
+    }
+
     /// Verifies the image bundle, ensures persistent `userdata`, and starts Midgard on WHPX.
     pub fn start(
         &self,
