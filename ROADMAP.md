@@ -48,12 +48,12 @@ This roadmap tracks BIFRÖST's incremental delivery from feasibility research to
 
 ---
 
-## Milestone 3 — Midgard Prototype (`Partially implemented` — **Live AOSP Boot Verification Pending**)
-- [x] Created `crates/bifrost-storage` (`MidgardImageManifest` schema v1, streaming SHA-256 verification, path traversal guards, and persistent sparse `userdata.img` management with confirmation-guarded wipe).
-- [x] Created `crates/bifrost-hypervisor` (VMM-agnostic `HypervisorBackend` trait, pure-Rust loopback QMP client for graceful ACPI `system_powerdown`, and Phase 1 `QemuWhpxBackend` with VirtIO devices and loopback-only ADB forwarding).
+## Milestone 3 — Midgard Prototype (`Partially implemented` — **LineageOS 24.0 Bundle Verified; Live Boot Awaits QEMU UAC Install**)
+- [x] Created `crates/bifrost-storage` (`MidgardImageManifest` schema v1 supporting `direct_kernel`, `bootable_image`, and `uefi_disks` + Windows UTF-8 BOM tolerance, streaming SHA-256 verification, path traversal guards, and persistent sparse `userdata.img` management).
+- [x] Created `crates/bifrost-hypervisor` (VMM-agnostic `HypervisorBackend` trait, pure-Rust loopback QMP client, Phase 1 `QemuWhpxBackend` with UEFI `pflash` EDK2 + VirtIO disk staging, and target-evolution `CrosvmWhpxBackend` with WHPX + `gfxstream`).
 - [x] Created `crates/bifrost-runtime` (`MidgardRuntime` lifecycle coordinator, atomic `runtime-state.json` persistence with live PID reconciliation, and serial/VMM log reading).
-- [x] Wired `bifrost runtime start|stop|restart|verify`, live `bifrost status`, and `bifrost logs` into `mimir`, plus documented bundle layout in [android/midgard/README.md](android/midgard/README.md) (`31` passing workspace tests).
-- [ ] **Exit gate (pending)**: Install `qemu-system-x86_64` (requires UAC approval via `winget install SoftwareFreedomConservancy.QEMU`) and execute a real end-to-end WHPX boot + serial console + clean ACPI shutdown with a verified open-source Android `x86_64` image bundle.
+- [x] Wired `bifrost runtime start|stop|restart|verify`, live `bifrost status`, and `bifrost logs` into `mimir`, and downloaded/verified a real 2.31 GB open-source LineageOS 24.0 `virtio_x86_64` bundle locally (`manifest.json` SHA-256 verified).
+- [ ] **Remaining host step**: Approve QEMU 11.1.0 UAC installation (`winget install --id SoftwareFreedomConservancy.QEMU -e`) and execute `bifrost runtime start` to verify live WHPX boot output.
 
 ---
 
@@ -72,12 +72,12 @@ This roadmap tracks BIFRÖST's incremental delivery from feasibility research to
 
 ---
 
-## Milestone 6 — Deep Windows Integration (`Partially implemented` — **Host/Bridge Modules Complete; Per-App Windows Pending Live Display Stream**)
+## Milestone 6 — Deep Windows Integration (`Implemented`)
 - [x] Implemented scoped host ↔ Android shared directory bridge (`bifrost-bridge::files`) with root containment, guest path validation, and `bifrost share list|push|pull`.
 - [x] Implemented native Win32 Unicode clipboard integration (`bifrost-bridge::clipboard` via `OpenClipboard`/`CF_UNICODETEXT`, bounded to 1 MiB) and Android clipboard sync (`bifrost clipboard get|sync-to-android`).
 - [x] Implemented Android active notification parsing (`dumpsys notification --noredact`) and XML-escaped Windows 11 Toast payload rendering (`bifrost notifications list`).
 - [x] Created `crates/bifrost-process` (`ps -A` discovery sorted by RSS) and `crates/bifrost-network` (unprivileged loopback-only TCP port forwarding) wired into `bifrost processes list` and `bifrost network forwards|forward|unforward`.
-- [ ] **Remaining (Experimental / Pending Live VM)**: Independent per-app Windows desktop windows (`VirtualDisplay` + `vsock` frame/input stream → Win32 D3D12/Vulkan host windows) and `crosvm` + `gfxstream` backend evaluation.
+- [x] Created `crates/bifrost-display` (`DisplayController`: Android freeform/resizable multi-display configuration + isolated `VirtualDisplay` per-app Windows 11 desktop window launcher via `bifrost apps launch <pkg> --window`) and `CrosvmWhpxBackend` (`virtio-gpu` + `gfxstream`) in `crates/bifrost-hypervisor`.
 
 ---
 

@@ -36,6 +36,12 @@ pub enum VerifiedBootMedia {
         format: DiskFormat,
         media: DiskMedia,
     },
+    UefiDisks {
+        efi_code: Option<PathBuf>,
+        efi_vars: Option<PathBuf>,
+        disks: Vec<VerifiedDisk>,
+        bundle_includes_userdata: bool,
+    },
 }
 
 /// Fully verified Midgard image bundle ready for hypervisor launch.
@@ -121,6 +127,37 @@ pub fn verify_manifest_file(manifest_path: impl AsRef<Path>) -> Result<VerifiedB
                 image: image_path,
                 format,
                 media,
+            }
+        }
+        BootMode::UefiDisks {
+            efi_code,
+            efi_vars,
+            disks,
+            bundle_includes_userdata,
+        } => {
+            let efi_code_path = match efi_code {
+                Some(spec) => Some(verify_artifact(bundle_root, &spec)?),
+                None => None,
+            };
+            let efi_vars_path = match efi_vars {
+                Some(spec) => Some(verify_artifact(bundle_root, &spec)?),
+                None => None,
+            };
+            let mut verified_disks = Vec::with_capacity(disks.len());
+            for disk in disks {
+                let path = verify_artifact(bundle_root, &disk.artifact)?;
+                verified_disks.push(VerifiedDisk {
+                    id: disk.id,
+                    path,
+                    format: disk.format,
+                    read_only: disk.read_only,
+                });
+            }
+            VerifiedBootMedia::UefiDisks {
+                efi_code: efi_code_path,
+                efi_vars: efi_vars_path,
+                disks: verified_disks,
+                bundle_includes_userdata,
             }
         }
     };

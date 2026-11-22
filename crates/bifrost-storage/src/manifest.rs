@@ -91,6 +91,18 @@ pub enum BootMode {
         format: DiskFormat,
         media: DiskMedia,
     },
+    /// UEFI (`pflash` EDK2) VirtIO disk topology (e.g., LineageOS `virtio_x86_64` with `vda.qcow2` + `vdb.qcow2` + `efi_vars.fd`).
+    UefiDisks {
+        /// Optional bundled UEFI code firmware (if omitted, auto-discovers QEMU's `edk2-x86_64-code.fd`).
+        efi_code: Option<ArtifactSpec>,
+        /// Optional UEFI NVRAM variables template (`efi_vars.fd`), staged per-instance so the bundle stays immutable.
+        efi_vars: Option<ArtifactSpec>,
+        /// Ordered VirtIO block disks (`bootindex=0`, `bootindex=1`, ...).
+        disks: Vec<DiskArtifactSpec>,
+        /// If true, skips attaching a separate raw `userdata.img` because the bundle ships its own VirtIO userdata disk.
+        #[serde(default)]
+        bundle_includes_userdata: bool,
+    },
 }
 
 /// Versioned manifest describing a cryptographically verifiable Midgard image bundle.
@@ -115,10 +127,11 @@ impl MidgardImageManifest {
         Self::from_json_str(&raw)
     }
 
-    /// Parses and validates a JSON manifest string.
+    /// Parses and validates a JSON manifest string (tolerating an optional Windows UTF-8 BOM).
     pub fn from_json_str(raw: &str) -> Result<Self> {
-        let manifest: Self =
-            serde_json::from_str(raw).map_err(|err| BifrostError::ConfigParse(err.to_string()))?;
+        let trimmed = raw.strip_prefix('\u{feff}').unwrap_or(raw);
+        let manifest: Self = serde_json::from_str(trimmed)
+            .map_err(|err| BifrostError::ConfigParse(err.to_string()))?;
         manifest.validate()?;
         Ok(manifest)
     }
@@ -192,6 +205,39 @@ impl MidgardImageManifest {
             BootMode::BootableImage { image, .. } => {
                 image.validate("boot.image")?;
             }
+            BootMode::UefiDisks {
+                efi_code,
+                efi_vars,
+                disks,
+                ..
+            } => {
+                if let Some(ref code) = efi_code {
+                    code.validate("boot.efi_code")?;
+                }
+                if let Some(ref vars) = efi_vars {
+                    vars.validate("boot.efi_vars")?;
+                }
+                if disks.is_empty() {
+                    return Err(BifrostError::ConfigValidation {
+                        field: "boot.disks".to_string(),
+                        reason: "UEFI disk boot requires at least one VirtIO disk".to_string(),
+                    });
+                }
+                for (idx, disk) in disks.iter().enumerate() {
+                    if disk.id.trim().is_empty()
+                        || !disk
+                            .id
+                            .chars()
+                            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+                    {
+                        return Err(BifrostError::ConfigValidation {
+                            field: format!("boot.disks[{idx}].id"),
+                            reason: "disk id must be non-empty ASCII alphanumeric".to_string(),
+                        });
+                    }
+                    disk.artifact.validate(&format!("boot.disks[{idx}]"))?;
+                }
+            }
         }
 
         Ok(())
@@ -231,6 +277,13 @@ mod tests {
         );
         let manifest = MidgardImageManifest::from_json_str(&json).unwrap();
         assert_eq!(manifest.id, "aosp-16-x86_64");
+
+        // Windows PowerShell 5.1 UTF-8 BOM must also parse cleanly.
+        let with_bom = format!("\u{feff}{json}");
+        assert_eq!(
+            MidgardImageManifest::from_json_str(&with_bom).unwrap().id,
+            "aosp-16-x86_64"
+        );
     }
 
     #[test]

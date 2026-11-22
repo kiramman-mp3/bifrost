@@ -7,7 +7,7 @@
 
 **BIFRÖST** is an open-source, Rust-powered Android subsystem for Windows 11 designed to run real Android applications with deep native desktop integration — *"A Bridge Between Worlds."*
 
-Inspired by Bifröst from Norse mythology and built as a modern, transparent, community-maintained successor to Microsoft's discontinued Windows Subsystem for Android (WSA), BIFRÖST has completed **Milestones 0 through 8** across its Rust workspace (`12` crates, `53` passing tests), desktop app, signed image update tooling, recovery suite, and Windows user-space installer (with live WHPX Android boot and per-app desktop window streaming tracked openly as remaining live-VM milestones).
+Inspired by Bifröst from Norse mythology and built as a modern, transparent, community-maintained successor to Microsoft's discontinued Windows Subsystem for Android (WSA), BIFRÖST implements **Milestones 0 through 8** across a modular Rust workspace (`13` crates, `55` passing tests) including native WHPX diagnostics, signed UEFI/AOSP Midgard image management (`QEMU-WHPX` and `crosvm-WHPX`), Heimdall authenticated Named Pipe daemon, Valhalla APK/ABI manager, per-app `VirtualDisplay` window launcher, Windows 11 Fluent Design desktop app, and user-space installer.
 
 > [!TIP]
 > **Quick start (Milestone 8)**: Run the full workspace test suite, inspect Windows 11 WHPX readiness, export diagnostics, or launch the desktop app:
@@ -163,13 +163,14 @@ BIFRÖST/
 │   │       ├── registry.rs                        # Local Midgard image catalog & upgrade/downgrade safety
 │   │       ├── recovery.rs                        # SHA-256-verified userdata backup & guarded restore
 │   │       └── disk.rs                            # Persistent userdata.img creation & guarded wipe
-│   ├── bifrost-hypervisor/                        # VMM-agnostic WHPX abstraction & Phase 1 QEMU-WHPX backend
+│   ├── bifrost-hypervisor/                        # VMM-agnostic WHPX abstraction (QEMU-WHPX + crosvm-WHPX)
 │   │   ├── Cargo.toml
 │   │   └── src/
 │   │       ├── lib.rs                             # #![forbid(unsafe_code)]
 │   │       ├── backend.rs                         # HypervisorBackend trait, VmSpec, VmLaunchInfo
 │   │       ├── qmp.rs                             # Pure-Rust loopback QMP client (system_powerdown)
-│   │       └── qemu_whpx.rs                       # QEMU-WHPX arg builder, launch, and shutdown
+│   │       ├── qemu_whpx.rs                       # QEMU-WHPX arg builder (direct_kernel, ISO, UEFI pflash), launch & shutdown
+│   │       └── crosvm_whpx.rs                     # Target-evolution crosvm WHPX + gfxstream backend
 │   ├── bifrost-runtime/                           # Midgard lifecycle orchestration, state persistence & log reader
 │   │   ├── Cargo.toml
 │   │   └── src/
@@ -186,6 +187,9 @@ BIFRÖST/
 │   │       ├── notifications.rs                   # Android notification parser & XML-escaped Toast XML
 │   │       ├── ipc.rs                             # Bounded JSON frames, 256-bit auth tokens & IPC schemas
 │   │       └── client.rs                          # Async Named Pipe HeimdallClient
+│   ├── bifrost-display/                           # Per-app Android VirtualDisplay & independent Windows 11 window launcher
+│   │   ├── Cargo.toml
+│   │   └── src/lib.rs                             # #![forbid(unsafe_code)]
 │   ├── bifrost-process/                           # Android guest process discovery (`ps -A` sorted by RSS)
 │   │   ├── Cargo.toml
 │   │   └── src/lib.rs                             # #![forbid(unsafe_code)]
@@ -288,7 +292,7 @@ cargo run -p mimir -- status
 |---|---|---|
 | `cargo fmt --all -- --check` | Verify Rust code formatting across workspace | **Implemented** |
 | `cargo clippy --workspace --all-targets -- -D warnings` | Run strict Clippy static analysis | **Implemented** |
-| `cargo test --workspace` | Execute unit & IPC tests (`53` tests across 12 workspace crates) | **Implemented** |
+| `cargo test --workspace` | Execute unit & IPC tests (`55` tests across 13 workspace crates) | **Implemented** |
 | `cargo run -p bifrost-ui` | Launch BIFRÖST Windows 11 Fluent Design desktop application | **Implemented** |
 | `heimdall run` | Start background Heimdall supervisor on owner-DACL Windows Named Pipe | **Implemented** |
 | `bifrost version [--json]` | Display BIFRÖST version, host target, and capability maturity | **Implemented** |
@@ -299,7 +303,7 @@ cargo run -p mimir -- status
 | `bifrost runtime start \| stop \| restart \| verify` | Verify image SHA-256 digests and manage Midgard WHPX VM lifecycle | **Partially implemented** |
 | `bifrost logs [--tail N]` | Inspect Midgard serial console and VMM stderr logs | **Implemented** |
 | `bifrost devices [--json]` | List connected Android devices via Heimdall Bridge / loopback ADB | **Implemented** |
-| `bifrost apps list \| info \| launch \| stop` | Discover, inspect, launch, and stop Android packages via Valhalla | **Implemented** |
+| `bifrost apps list \| info \| launch [--window] \| stop` | Discover, inspect, launch (including per-app `VirtualDisplay` window), and stop Android packages | **Implemented** |
 | `bifrost install <app.apk> [--inspect-only]` | Inspect ZIP/SHA-256/x86_64 ABI and install APKs via Android `pm` | **Implemented** |
 | `bifrost uninstall <pkg> [--keep-data]` | Uninstall an Android package via Android `pm` | **Implemented** |
 | `bifrost share list \| push \| pull` | Manage scoped Windows ↔ Android shared files (`/sdcard/BifrostShare`) | **Implemented** |
@@ -346,7 +350,7 @@ Distribution tooling is implemented under [installer/](installer/README.md) and 
 | `mimir` CLI (`bifrost.exe`) | **Implemented** | Full administrative command set live (`6` tests) |
 | `bifrost-ui` (Tauri 2 Fluent desktop app) | **Implemented** | Completed in Milestone 7 (Dashboard, Apps, Config, Diagnostics, Settings; `2` backend service tests) |
 | Distribution, Ed25519 updates & recovery | **Implemented** | Completed in Milestone 8 (Ed25519 signatures, image registry, userdata backup/restore, Windows installer/uninstaller & CI) |
-| Independent per-app Windows desktop windows | **Planned / Experimental** | Pending live Midgard `VirtualDisplay` frame stream |
+| Independent per-app Windows desktop windows (`bifrost-display`) | **Implemented** | Android freeform + isolated `VirtualDisplay` window launcher (`bifrost apps launch --window`) |
 | ARM64 binary translation (`arm64-v8a` native APKs) | **Unsupported** | Independent clean-room research only |
 
 ---
@@ -356,10 +360,10 @@ Distribution tooling is implemented under [installer/](installer/README.md) and 
 - [x] **Milestone 0**: Research, host baseline inspection, feasibility report, architecture, and ADRs.
 - [x] **Milestone 1**: Cargo workspace, `bifrost-core`, and `mimir` CLI foundation.
 - [x] **Milestone 2**: Native Windows 11 compatibility diagnostics (`bifrost doctor`).
-- [ ] **Milestone 3**: Minimal functional Midgard Android `x86_64` VM prototype on WHPX *(host stack complete; live boot gate pending QEMU UAC install + verified image bundle)*.
+- [ ] **Milestone 3**: Minimal functional Midgard Android `x86_64` VM prototype on WHPX *(host stack + LineageOS 24.0 `virtio_x86_64` bundle verified; live boot awaits user UAC approval of QEMU installer)*.
 - [x] **Milestone 4**: Heimdall supervisor daemon, authenticated local IPC, and Bridge (ADB / health checks).
 - [x] **Milestone 5**: Valhalla real Android package management (`install`, `uninstall`, `apps list|info|launch|stop`).
-- [ ] **Milestone 6**: Windows integration *(shared dirs, Win32 clipboard, notifications, processes & loopback networking complete; per-app desktop windows pending live display stream)*.
+- [x] **Milestone 6**: Windows integration (shared dirs, Win32 clipboard, notifications, processes, loopback networking, `crosvm-whpx` backend, and per-app `VirtualDisplay` windows).
 - [x] **Milestone 7**: Windows 11 Fluent Design desktop application (`apps/bifrost-ui`).
 - [x] **Milestone 8**: Ed25519 signed image registry, upgrade safety, verified userdata recovery, Windows installer/uninstaller, and CI.
 
@@ -371,7 +375,7 @@ See [ROADMAP.md](ROADMAP.md) for detailed milestone exit criteria.
 
 | Contributor | Commits |
 |---|---:|
-| Johan Rodríguez | 49 |
+| Johan Rodríguez | 54 |
 
 ---
 

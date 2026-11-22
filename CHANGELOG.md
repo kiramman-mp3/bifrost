@@ -7,6 +7,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Added
+- **UEFI VirtIO Boot, `crosvm-whpx` Backend & Per-App VirtualDisplay Windowing**:
+  - Added `BootMode::UefiDisks` (EDK2 `pflash` + per-instance writable `efi_vars.fd`/`qcow2` staging) and Windows UTF-8 BOM tolerance to `crates/bifrost-storage` and `crates/bifrost-hypervisor`.
+  - Implemented `CrosvmWhpxBackend` (`crosvm run --hypervisor whpx --gpu backend=gfxstream,...`) in `crates/bifrost-hypervisor/src/crosvm_whpx.rs` per ADR-0002 / ADR-0003 (`1` unit test).
+  - Created `crates/bifrost-display` (`#![forbid(unsafe_code)]`) for Android freeform multi-display configuration and independent per-app Windows 11 `VirtualDisplay` windows, wired into `bifrost apps launch <pkg> --window [--width] [--height] [--dpi]` (`55` total passing workspace tests across 13 crates).
 - **Milestone 8 — Distribution, Signed Updates & Recovery**:
   - Extended `crates/bifrost-storage` (`#![forbid(unsafe_code)]`) with Ed25519 cryptographic signature verification (`signature.rs`), local Midgard image version registry & upgrade/downgrade safety (`registry.rs`), and SHA-256-verified userdata backup/restore (`recovery.rs`) (`3` new unit tests).
   - Wired `bifrost images list|register|use` and `bifrost recovery backup|restore|wipe-userdata|export-diagnostics` into `crates/mimir` (`53` total passing workspace tests across 12 crates).

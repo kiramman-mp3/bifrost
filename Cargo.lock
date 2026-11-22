@@ -199,6 +199,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "bifrost-display"
+version = "0.1.0"
+dependencies = [
+ "bifrost-bridge",
+ "bifrost-core",
+ "serde",
+ "tracing",
+ "valhalla",
+]
+
+[[package]]
 name = "bifrost-hypervisor"
 version = "0.1.0"
 dependencies = [
@@ -2300,6 +2311,7 @@ dependencies = [
  "bifrost-bridge",
  "bifrost-core",
  "bifrost-diagnostics",
+ "bifrost-display",
  "bifrost-network",
  "bifrost-process",
  "bifrost-runtime",
