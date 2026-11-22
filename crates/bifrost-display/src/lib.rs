@@ -179,16 +179,24 @@ impl DisplayController {
 
         self.prepare_android_freeform(serial)?;
 
-        let child = Command::new(&scrcpy_bin)
-            .args(&args)
+        let mut cmd = Command::new(&scrcpy_bin);
+        cmd.args(&args)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .map_err(|source| BifrostError::Io {
-                context: format!("launching per-app window via '{}'", scrcpy_bin.display()),
-                source,
-            })?;
+            .stderr(Stdio::null());
+
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            cmd.creation_flags(CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW);
+        }
+
+        let child = cmd.spawn().map_err(|source| BifrostError::Io {
+            context: format!("launching per-app window via '{}'", scrcpy_bin.display()),
+            source,
+        })?;
 
         let pid = child.id();
         let window_title = format!("BIFRÖST — {package}");

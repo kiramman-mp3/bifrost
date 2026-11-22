@@ -716,6 +716,42 @@ async fn handle_apps(
             }
             Ok(format!("Force-stopped Android package '{package}'."))
         }
+        AppsAction::Shortcut {
+            package,
+            name,
+            apk,
+            remove,
+        } => {
+            let mgr = valhalla::ShortcutManager::new(paths.data_dir.clone());
+            if *remove {
+                let removed = mgr.remove_for_app(package)?;
+                if as_json {
+                    return serde_json::to_string_pretty(&serde_json::json!({
+                        "package": package,
+                        "removed": removed.is_some(),
+                    }))
+                    .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
+                }
+                return Ok(if removed.is_some() {
+                    format!("Removed Windows Desktop and Start Menu shortcuts for '{package}'.")
+                } else {
+                    format!("No recorded Windows shortcuts found for '{package}'.")
+                });
+            }
+
+            let record = mgr.create_for_app(package, name.as_deref(), apk.as_deref())?;
+            if as_json {
+                return serde_json::to_string_pretty(&record)
+                    .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
+            }
+            Ok(format!(
+                "Created Windows shortcuts for '{}' ({}):\n  Desktop:    {}\n  Start Menu: {}",
+                record.display_name,
+                record.package_name,
+                record.desktop_shortcut.display(),
+                record.start_menu_shortcut.display()
+            ))
+        }
     }
 }
 
@@ -743,8 +779,9 @@ async fn handle_install(
             ),
         };
         return Ok(format!(
-            "APK Path:          {}\nSize:              {} bytes\nSHA-256:           {}\nZIP Entries:       {}\nAndroidManifest:   {}\nDEX Bytecode:      {}\nABI Compatibility: {}",
+            "APK Path:          {}\nPackage Name:      {}\nSize:              {} bytes\nSHA-256:           {}\nZIP Entries:       {}\nAndroidManifest:   {}\nDEX Bytecode:      {}\nABI Compatibility: {}",
             info.path.display(),
+            info.package_name.as_deref().unwrap_or("unknown"),
             info.size_bytes,
             info.sha256,
             info.entry_count,
@@ -771,12 +808,20 @@ async fn handle_install(
         return serde_json::to_string_pretty(&outcome)
             .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
     }
-    Ok(format!(
+    let mut msg = format!(
         "Installed '{}' onto '{}' (SHA-256: {}).",
         outcome.inspection.path.display(),
         outcome.serial,
         outcome.inspection.sha256
-    ))
+    );
+    if let Some(ref sc) = outcome.shortcuts {
+        msg.push_str(&format!(
+            "\nDesktop Shortcut:    {}\nStart Menu Shortcut: {}",
+            sc.desktop_shortcut.display(),
+            sc.start_menu_shortcut.display()
+        ));
+    }
+    Ok(msg)
 }
 
 async fn handle_uninstall(
