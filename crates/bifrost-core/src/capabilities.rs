@@ -62,7 +62,7 @@ impl VersionInfo {
             version: VERSION.to_string(),
             target_os: std::env::consts::OS.to_string(),
             target_arch: std::env::consts::ARCH.to_string(),
-            current_milestone: "Milestone 4 — Heimdall Daemon & Bridge (Authenticated IPC & ADB)"
+            current_milestone: "Milestone 5 — Valhalla (Android Application & APK Management)"
                 .to_string(),
             capabilities: vec![
                 ComponentCapability {
@@ -73,9 +73,9 @@ impl VersionInfo {
                 },
                 ComponentCapability {
                     name: "mimir".to_string(),
-                    status: FeatureStatus::PartiallyImplemented,
+                    status: FeatureStatus::Implemented,
                     summary:
-                        "CLI active (version, status, config, doctor, runtime, logs, devices, daemon); Valhalla pending"
+                        "Full administrative CLI (version, status, config, doctor, runtime, logs, devices, daemon, apps, install, uninstall)"
                             .to_string(),
                 },
                 ComponentCapability {
@@ -101,8 +101,10 @@ impl VersionInfo {
                 },
                 ComponentCapability {
                     name: "valhalla".to_string(),
-                    status: FeatureStatus::Planned,
-                    summary: "Milestone 5 — Real Android APK & package management".to_string(),
+                    status: FeatureStatus::Implemented,
+                    summary:
+                        "APK ZIP/ABI inspection (ADR-0004), real pm/am/dumpsys package discovery, install, uninstall & launch"
+                            .to_string(),
                 },
                 ComponentCapability {
                     name: "arm64-translation".to_string(),

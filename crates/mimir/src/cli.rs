@@ -88,22 +88,38 @@ pub enum Command {
         action: DaemonAction,
     },
 
-    /// Manage installed Android applications via Valhalla (Planned: Milestone 5).
+    /// Manage installed Android applications via Valhalla.
     Apps {
         #[command(subcommand)]
         action: AppsAction,
     },
 
-    /// Install an Android APK package into Midgard (Planned: Milestone 5).
+    /// Inspect and install an Android APK package into Midgard via Valhalla.
     Install {
-        /// Path to the `.apk` file to install.
+        /// Path to the `.apk` file to inspect or install.
         apk: PathBuf,
+
+        /// Target Android device serial (optional when a single device is online).
+        #[arg(long)]
+        serial: Option<String>,
+
+        /// Only inspect APK structure, SHA-256, and x86_64 ABI compatibility without installing.
+        #[arg(long)]
+        inspect_only: bool,
     },
 
-    /// Uninstall an Android package by package name (Planned: Milestone 5).
+    /// Uninstall an Android package by package name via Valhalla.
     Uninstall {
-        /// Android application package identifier (e.g., com.example.app).
+        /// Android application package identifier (e.g., org.fdroid.fdroid).
         package: String,
+
+        /// Target Android device serial (optional when a single device is online).
+        #[arg(long)]
+        serial: Option<String>,
+
+        /// Retain application data and cache directories (`pm uninstall -k`).
+        #[arg(long)]
+        keep_data: bool,
     },
 
     /// Inspect Midgard serial console and VMM runtime logs.
@@ -176,8 +192,43 @@ pub enum RuntimeAction {
 
 #[derive(Debug, Subcommand)]
 pub enum AppsAction {
-    /// List installed Android applications.
-    List,
+    /// List installed Android applications (`pm list packages`).
+    List {
+        /// Show only third-party (non-system) installed packages.
+        #[arg(long)]
+        third_party: bool,
+
+        /// Target Android device serial.
+        #[arg(long)]
+        serial: Option<String>,
+    },
+    /// Show detailed metadata for an installed Android package (`dumpsys package`).
+    Info {
+        /// Android package identifier.
+        package: String,
+
+        /// Target Android device serial.
+        #[arg(long)]
+        serial: Option<String>,
+    },
+    /// Launch an installed Android application.
+    Launch {
+        /// Android package identifier.
+        package: String,
+
+        /// Target Android device serial.
+        #[arg(long)]
+        serial: Option<String>,
+    },
+    /// Force-stop a running Android application (`am force-stop`).
+    Stop {
+        /// Android package identifier.
+        package: String,
+
+        /// Target Android device serial.
+        #[arg(long)]
+        serial: Option<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
