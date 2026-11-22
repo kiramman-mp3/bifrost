@@ -1,0 +1,15 @@
+[package]
+name = "bifrost-network"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+description = "Loopback-safe Windows <-> Android networking and port-forwarding coordination for BIFRÖST."
+
+[lints]
+workspace = true
+
+[dependencies]
+bifrost-bridge = { path = "../bifrost-bridge" }
+bifrost-core = { path = "../bifrost-core" }
+serde.workspace = true
