@@ -97,7 +97,7 @@ impl HypervisorBackend for QemuWhpxBackend {
             "-machine".to_string(),
             "q35,accel=whpx,kernel-irqchip=off".to_string(),
             "-cpu".to_string(),
-            "qemu64,+ssse3,+sse4.1,+sse4.2,+popcnt,+x2apic".to_string(),
+            "qemu64,+ssse3,+sse4.1,+sse4.2,+popcnt,+x2apic,-svm".to_string(),
             "-m".to_string(),
             spec.memory_mb.to_string(),
             "-smp".to_string(),
@@ -172,9 +172,10 @@ impl HypervisorBackend for QemuWhpxBackend {
             } => {
                 attach_separate_userdata = !*bundle_includes_userdata;
 
+                let qemu_bin = self.locate_vmm().ok();
                 let resolved_code = match efi_code {
                     Some(p) => p.clone(),
-                    None => locate_qemu_edk2_code(self.locate_vmm().ok().as_deref())?,
+                    None => locate_qemu_edk2_file(qemu_bin.as_deref(), "edk2-x86_64-code.fd")?,
                 };
                 args.push("-drive".to_string());
                 args.push(format!(
@@ -183,8 +184,27 @@ impl HypervisorBackend for QemuWhpxBackend {
                 ));
 
                 if let Some(vars_template) = efi_vars {
+                    let format = detect_pflash_format(vars_template);
+                    let staged_name = if format == "qcow2" {
+                        "efi_vars.qcow2"
+                    } else {
+                        "efi_vars.fd"
+                    };
                     let staged_vars = stage_writable_copy(
                         vars_template,
+                        spec.userdata_disk.parent(),
+                        staged_name,
+                    )?;
+                    args.push("-drive".to_string());
+                    args.push(format!(
+                        "if=pflash,unit=1,file={},format={format}",
+                        path_to_arg(&staged_vars)?
+                    ));
+                } else if let Ok(default_vars) =
+                    locate_qemu_edk2_file(qemu_bin.as_deref(), "edk2-i386-vars.fd")
+                {
+                    let staged_vars = stage_writable_copy(
+                        &default_vars,
                         spec.userdata_disk.parent(),
                         "efi_vars.fd",
                     )?;
@@ -317,11 +337,29 @@ impl HypervisorBackend for QemuWhpxBackend {
                 .stderr(Stdio::from(stderr_file));
         }
 
-        let child = cmd.spawn().map_err(|source| BifrostError::Io {
+        let mut child = cmd.spawn().map_err(|source| BifrostError::Io {
             context: format!("spawning QEMU VMM '{}'", qemu_bin.display()),
             source,
         })?;
         let pid = child.id();
+
+        // Catch immediate VMM startup failures (e.g., invalid pflash size, WHPX error)
+        // instead of misreporting the VM as booting.
+        if !spec.interactive_console {
+            thread::sleep(Duration::from_millis(350));
+            if let Ok(Some(exit_status)) = child.try_wait() {
+                let stderr_snippet = fs::read_to_string(&spec.vmm_stderr_path)
+                    .unwrap_or_default()
+                    .trim()
+                    .to_string();
+                let detail = if stderr_snippet.is_empty() {
+                    format!("QEMU exited immediately with status {exit_status}")
+                } else {
+                    format!("QEMU exited immediately with status {exit_status}: {stderr_snippet}")
+                };
+                return Err(BifrostError::Hypervisor(detail));
+            }
+        }
 
         info!(
             pid,
@@ -471,24 +509,22 @@ fn ensure_parent_dir(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn locate_qemu_edk2_code(qemu_bin: Option<&Path>) -> Result<PathBuf> {
+fn locate_qemu_edk2_file(qemu_bin: Option<&Path>, filename: &str) -> Result<PathBuf> {
     let mut candidates = Vec::new();
     if let Some(bin) = qemu_bin {
         if let Some(dir) = bin.parent() {
-            candidates.push(dir.join("share").join("edk2-x86_64-code.fd"));
-            candidates.push(dir.join("edk2-x86_64-code.fd"));
+            candidates.push(dir.join("share").join(filename));
+            candidates.push(dir.join(filename));
         }
     }
-    candidates.push(PathBuf::from(
-        r"C:\Program Files\qemu\share\edk2-x86_64-code.fd",
-    ));
+    candidates.push(PathBuf::from(r"C:\Program Files\qemu\share").join(filename));
     if let Ok(local) = std::env::var("LOCALAPPDATA") {
         candidates.push(
             PathBuf::from(local)
                 .join("Programs")
                 .join("qemu")
                 .join("share")
-                .join("edk2-x86_64-code.fd"),
+                .join(filename),
         );
     }
 
@@ -498,10 +534,22 @@ fn locate_qemu_edk2_code(qemu_bin: Option<&Path>) -> Result<PathBuf> {
         }
     }
 
-    Err(BifrostError::Hypervisor(
-        "UEFI firmware 'edk2-x86_64-code.fd' not found next to QEMU; install QEMU or include efi_code in manifest.json"
-            .to_string(),
-    ))
+    Err(BifrostError::Hypervisor(format!(
+        "UEFI firmware '{filename}' not found next to QEMU; install QEMU or include efi_code in manifest.json"
+    )))
+}
+
+/// Detects whether a UEFI NVRAM variables file is stored as `qcow2` (magic `QFI\xfb`,
+/// as used by UTM/LineageOS VirtIO bundles) or `raw`.
+fn detect_pflash_format(path: &Path) -> &'static str {
+    use std::io::Read;
+    let mut magic = [0u8; 4];
+    if let Ok(mut f) = fs::File::open(path) {
+        if f.read_exact(&mut magic).is_ok() && magic == *b"QFI\xfb" {
+            return "qcow2";
+        }
+    }
+    "raw"
 }
 
 /// Copies a mutable template artifact (such as `efi_vars.fd` or a writable `qcow2` disk)
@@ -610,5 +658,22 @@ mod tests {
         spec.userdata_disk = PathBuf::from(r"C:\data\bad,readonly=on.img");
         let err = backend.build_args(&spec).unwrap_err();
         assert!(matches!(err, BifrostError::UnsafePath { .. }));
+    }
+
+    #[test]
+    fn detects_qcow2_and_raw_efi_vars_format() {
+        let dir = std::env::temp_dir().join("bifrost-pflash-detect-test");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let qcow2 = dir.join("vars.fd");
+        fs::write(&qcow2, b"QFI\xfb\x00\x00\x00\x03").unwrap();
+        assert_eq!(detect_pflash_format(&qcow2), "qcow2");
+
+        let raw = dir.join("raw.fd");
+        fs::write(&raw, vec![0u8; 4096]).unwrap();
+        assert_eq!(detect_pflash_format(&raw), "raw");
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }
