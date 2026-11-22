@@ -1,0 +1,17 @@
+[package]
+name = "bifrost-display"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+description = "Per-app Android VirtualDisplay and independent Windows 11 desktop window controller for BIFRÖST (ADR-0003)."
+
+[lints]
+workspace = true
+
+[dependencies]
+bifrost-bridge = { path = "../bifrost-bridge" }
+bifrost-core = { path = "../bifrost-core" }
+serde.workspace = true
+tracing.workspace = true
+valhalla = { path = "../valhalla" }

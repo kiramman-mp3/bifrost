@@ -90,7 +90,7 @@ impl VersionInfo {
                     name: "midgard".to_string(),
                     status: FeatureStatus::Experimental,
                     summary:
-                        "Verified image manifests, userdata disks, QEMU-WHPX launch, QMP shutdown & logs (live boot pending QEMU)"
+                        "Direct-kernel, ISO & UEFI VirtIO disk boot (QEMU-WHPX + crosvm-WHPX backends), verified manifests & QMP shutdown (live boot awaits QEMU UAC install)"
                             .to_string(),
                 },
                 ComponentCapability {
@@ -109,9 +109,9 @@ impl VersionInfo {
                 },
                 ComponentCapability {
                     name: "windows-integration".to_string(),
-                    status: FeatureStatus::PartiallyImplemented,
+                    status: FeatureStatus::Implemented,
                     summary:
-                        "Shared dirs, Win32 clipboard, notifications, processes & loopback networking live; per-app windows pending live display stream"
+                        "Shared dirs, Win32 clipboard, notifications, processes, loopback networking & per-app VirtualDisplay window controller (`bifrost-display`)"
                             .to_string(),
                 },
                 ComponentCapability {

@@ -253,7 +253,7 @@ pub enum AppsAction {
         #[arg(long)]
         serial: Option<String>,
     },
-    /// Launch an installed Android application.
+    /// Launch an installed Android application (optionally in an independent Windows 11 window).
     Launch {
         /// Android package identifier.
         package: String,
@@ -261,6 +261,22 @@ pub enum AppsAction {
         /// Target Android device serial.
         #[arg(long)]
         serial: Option<String>,
+
+        /// Launch inside an independent per-app Windows 11 VirtualDisplay window (ADR-0003).
+        #[arg(long)]
+        window: bool,
+
+        /// Window width in pixels when `--window` is set.
+        #[arg(long, default_value_t = 1280)]
+        width: u32,
+
+        /// Window height in pixels when `--window` is set.
+        #[arg(long, default_value_t = 720)]
+        height: u32,
+
+        /// Display DPI when `--window` is set.
+        #[arg(long, default_value_t = 240)]
+        dpi: u32,
     },
     /// Force-stop a running Android application (`am force-stop`).
     Stop {

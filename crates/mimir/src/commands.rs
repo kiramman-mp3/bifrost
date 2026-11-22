@@ -15,6 +15,7 @@ use bifrost_core::{
     VersionInfo,
 };
 use bifrost_diagnostics::{render_human_report, run_doctor, OverallReadiness};
+use bifrost_display::{AppWindowSpec, DisplayController};
 use bifrost_network::NetworkManager;
 use bifrost_process::ProcessManager;
 use bifrost_runtime::{MidgardRuntime, RuntimeLogs, RuntimeRecord, StartOptions};
@@ -639,7 +640,41 @@ async fn handle_apps(
                 details.code_path.as_deref().unwrap_or("unknown")
             ))
         }
-        AppsAction::Launch { package, serial } => {
+        AppsAction::Launch {
+            package,
+            serial,
+            window,
+            width,
+            height,
+            dpi,
+        } => {
+            if *window {
+                let target = valhalla.resolve_target_serial(serial.as_deref())?;
+                let ctrl = DisplayController::new();
+                let handle = ctrl.launch_in_independent_window(
+                    &target,
+                    package,
+                    AppWindowSpec {
+                        width: *width,
+                        height: *height,
+                        dpi: *dpi,
+                    },
+                )?;
+                if as_json {
+                    return serde_json::to_string_pretty(&handle)
+                        .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
+                }
+                return Ok(format!(
+                    "Launched '{}' in independent Windows 11 window '{}' (PID {}, {}x{}@{}dpi).",
+                    handle.package_name,
+                    handle.window_title,
+                    handle.pid,
+                    handle.spec.width,
+                    handle.spec.height,
+                    handle.spec.dpi
+                ));
+            }
+
             let outcome = if heimdall_up {
                 client
                     .send::<LaunchOutcome>(IpcRequest::AppLaunch {

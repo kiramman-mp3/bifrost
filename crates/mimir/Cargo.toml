@@ -17,6 +17,7 @@ path = "src/main.rs"
 bifrost-bridge = { path = "../bifrost-bridge" }
 bifrost-core = { path = "../bifrost-core" }
 bifrost-diagnostics = { path = "../bifrost-diagnostics" }
+bifrost-display = { path = "../bifrost-display" }
 bifrost-network = { path = "../bifrost-network" }
 bifrost-process = { path = "../bifrost-process" }
 bifrost-runtime = { path = "../bifrost-runtime" }
