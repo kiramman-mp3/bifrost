@@ -17,6 +17,7 @@ path = "src/main.rs"
 bifrost-bridge = { path = "../bifrost-bridge" }
 bifrost-core = { path = "../bifrost-core" }
 bifrost-runtime = { path = "../bifrost-runtime" }
+valhalla = { path = "../valhalla" }
 clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true

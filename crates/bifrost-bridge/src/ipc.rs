@@ -45,6 +45,31 @@ pub enum IpcRequest {
         tail: usize,
     },
     DevicesList,
+    AppsList {
+        serial: Option<String>,
+        third_party_only: bool,
+    },
+    AppInfo {
+        serial: Option<String>,
+        package: String,
+    },
+    AppInstall {
+        serial: Option<String>,
+        apk_path: PathBuf,
+    },
+    AppUninstall {
+        serial: Option<String>,
+        package: String,
+        keep_data: bool,
+    },
+    AppLaunch {
+        serial: Option<String>,
+        package: String,
+    },
+    AppStop {
+        serial: Option<String>,
+        package: String,
+    },
     DaemonShutdown,
 }
 
