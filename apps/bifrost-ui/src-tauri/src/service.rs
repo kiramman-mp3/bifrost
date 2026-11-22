@@ -9,12 +9,13 @@ use bifrost_bridge::{
     default_pipe_name, read_host_clipboard_text, AdbClient, AdbDevice, DaemonHealthReport,
     HeimdallClient, IpcRequest, SharedDirectoryBridge, SharedFileEntry,
 };
-use bifrost_core::{BifrostConfig, BifrostPaths, Result, RuntimeState, VersionInfo};
+use bifrost_core::{BifrostConfig, BifrostError, BifrostPaths, Result, RuntimeState, VersionInfo};
 use bifrost_diagnostics::{run_doctor, DoctorReport};
 use bifrost_display::{AppWindowHandle, AppWindowSpec, DisplayController};
 use bifrost_network::{NetworkManager, PortForwardRule};
 use bifrost_process::{AndroidProcess, ProcessManager};
 use bifrost_runtime::{MidgardRuntime, RuntimeLogs, RuntimeRecord, StartOptions};
+use bifrost_storage::ImageRegistry;
 use serde::Serialize;
 use valhalla::manager::{InstallOutcome, LaunchOutcome};
 use valhalla::{
@@ -30,6 +31,7 @@ pub struct DashboardSnapshot {
     pub heimdall_connected: bool,
     pub heimdall_health: Option<DaemonHealthReport>,
     pub runtime: RuntimeRecord,
+    pub active_manifest_path: Option<PathBuf>,
     pub config: BifrostConfig,
     pub config_path: PathBuf,
     pub paths: BifrostPaths,
@@ -69,13 +71,31 @@ pub async fn get_dashboard_snapshot() -> Result<DashboardSnapshot> {
     let heimdall_health = client.health().await.ok();
     let heimdall_connected = heimdall_health.is_some();
 
-    let runtime = if heimdall_connected {
+    let mut runtime = if heimdall_connected {
         client
             .send::<RuntimeRecord>(IpcRequest::RuntimeStatus)
             .await?
     } else {
         MidgardRuntime::with_default_backend(config.clone(), paths.clone()).status()?
     };
+
+    if !heimdall_connected && runtime.state == RuntimeState::Booting {
+        if let Some(ref endpoint) = runtime.adb_endpoint {
+            if AdbClient::new()
+                .probe_guest_health(endpoint)
+                .is_ok_and(|g| g.boot_completed)
+            {
+                let _ = MidgardRuntime::with_default_backend(config.clone(), paths.clone())
+                    .mark_running();
+                runtime.state = RuntimeState::Running;
+            }
+        }
+    }
+
+    let active_manifest_path = ImageRegistry::load(&paths.images_dir)
+        .ok()
+        .and_then(|r| r.active_image().map(|img| img.manifest_path.clone()))
+        .or_else(|| runtime.manifest_path.clone());
 
     let runtime_state = heimdall_health
         .as_ref()
@@ -105,6 +125,7 @@ pub async fn get_dashboard_snapshot() -> Result<DashboardSnapshot> {
         heimdall_connected,
         heimdall_health,
         runtime,
+        active_manifest_path,
         config,
         config_path,
         paths,
@@ -113,6 +134,76 @@ pub async fn get_dashboard_snapshot() -> Result<DashboardSnapshot> {
         shared_file_count,
         clipboard_has_text,
     })
+}
+
+/// Starts the Heimdall background supervisor daemon cleanly detached without a console window.
+pub async fn start_heimdall() -> Result<DaemonHealthReport> {
+    let (_, _, paths) = load_config_and_paths()?;
+    let client = heimdall_client(&paths);
+    if let Ok(health) = client.health().await {
+        return Ok(health);
+    }
+
+    let heimdall_bin = locate_heimdall_bin()?;
+    let mut cmd = std::process::Command::new(&heimdall_bin);
+    cmd.arg("run")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW);
+    }
+    let _ = cmd.spawn().map_err(|source| BifrostError::Io {
+        context: format!("spawning Heimdall daemon '{}'", heimdall_bin.display()),
+        source,
+    })?;
+
+    for _ in 0..20 {
+        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        if let Ok(health) = client.health().await {
+            return Ok(health);
+        }
+    }
+    Err(BifrostError::Ipc(
+        "Heimdall daemon did not become reachable over IPC within 5s".to_string(),
+    ))
+}
+
+/// Requests graceful Heimdall daemon shutdown over authenticated IPC.
+pub async fn stop_heimdall() -> Result<()> {
+    let (_, _, paths) = load_config_and_paths()?;
+    let client = heimdall_client(&paths);
+    let _: serde_json::Value = client.send(IpcRequest::DaemonShutdown).await?;
+    Ok(())
+}
+
+fn locate_heimdall_bin() -> Result<PathBuf> {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            for name in ["heimdall.exe", "heimdall"] {
+                let candidate = dir.join(name);
+                if candidate.is_file() {
+                    return Ok(candidate);
+                }
+            }
+        }
+    }
+    if let Ok(local) = std::env::var("LOCALAPPDATA") {
+        let installed = PathBuf::from(local)
+            .join("Programs")
+            .join("BIFRÖST")
+            .join("heimdall.exe");
+        if installed.is_file() {
+            return Ok(installed);
+        }
+    }
+    Err(BifrostError::Runtime(
+        "heimdall.exe not found alongside bifrost-ui.exe".to_string(),
+    ))
 }
 
 /// Runs native Windows 11 compatibility checks (`bifrost doctor`).

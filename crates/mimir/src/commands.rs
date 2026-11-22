@@ -198,6 +198,32 @@ fn heimdall_client_for(paths: &BifrostPaths) -> HeimdallClient {
     HeimdallClient::new(default_pipe_name(), &paths.data_dir)
 }
 
+fn locate_heimdall_binary() -> Result<PathBuf> {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            for name in ["heimdall.exe", "heimdall"] {
+                let sibling = dir.join(name);
+                if sibling.is_file() {
+                    return Ok(sibling);
+                }
+            }
+        }
+    }
+    if let Ok(local) = std::env::var("LOCALAPPDATA") {
+        let installed = PathBuf::from(local)
+            .join("Programs")
+            .join("BIFRÖST")
+            .join("heimdall.exe");
+        if installed.is_file() {
+            return Ok(installed);
+        }
+    }
+    Err(BifrostError::Runtime(
+        "heimdall executable not found next to bifrost.exe or in %LOCALAPPDATA%\\Programs\\BIFRÖST"
+            .to_string(),
+    ))
+}
+
 fn handle_version(as_json: bool) -> Result<String> {
     let info = VersionInfo::current();
     if as_json {
@@ -231,14 +257,29 @@ async fn handle_status(explicit_config: Option<&PathBuf>, as_json: bool) -> Resu
     let heimdall_health = client.health().await.ok();
     let heimdall_connected = heimdall_health.is_some();
 
-    let record = if heimdall_connected {
+    let mut record = if heimdall_connected {
         client
             .send::<RuntimeRecord>(IpcRequest::RuntimeStatus)
             .await?
     } else {
-        let runtime_mgr = MidgardRuntime::with_default_backend(config, paths);
+        let runtime_mgr = MidgardRuntime::with_default_backend(config.clone(), paths.clone());
         runtime_mgr.status()?
     };
+
+    // Reconcile `Booting` -> `Running` directly via loopback ADB when Heimdall is offline.
+    if !heimdall_connected && record.state == RuntimeState::Booting {
+        if let Some(ref endpoint) = record.adb_endpoint {
+            let adb = AdbClient::new();
+            if adb
+                .probe_guest_health(endpoint)
+                .is_ok_and(|g| g.boot_completed)
+            {
+                let runtime_mgr = MidgardRuntime::with_default_backend(config, paths);
+                let _ = runtime_mgr.mark_running();
+                record.state = RuntimeState::Running;
+            }
+        }
+    }
 
     let runtime_state = heimdall_health
         .as_ref()
@@ -248,9 +289,9 @@ async fn handle_status(explicit_config: Option<&PathBuf>, as_json: bool) -> Resu
     let note = if heimdall_connected {
         "Connected to Heimdall supervisor over authenticated Windows Named Pipe IPC."
     } else if record.state.is_active() {
-        "Midgard VM is active; Heimdall daemon is not running (start with `heimdall run`)."
+        "Midgard VM is active; Heimdall daemon is not running (start with `bifrost daemon start`)."
     } else {
-        "Heimdall daemon is offline. Start `heimdall run` for background supervision or launch Midgard directly."
+        "Heimdall daemon is offline. Start `bifrost daemon start` for background supervision or launch Midgard directly."
     };
 
     let report = StatusReport {
@@ -361,6 +402,63 @@ async fn handle_daemon(
     let client = heimdall_client_for(&paths);
 
     match action {
+        DaemonAction::Start => {
+            if let Ok(health) = client.health().await {
+                if as_json {
+                    return serde_json::to_string_pretty(&health)
+                        .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
+                }
+                return Ok(format!(
+                    "Heimdall daemon is already running (PID {}, pipe '{}').",
+                    health.daemon_pid, health.pipe_name
+                ));
+            }
+
+            let heimdall_bin = locate_heimdall_binary()?;
+            let mut cmd = std::process::Command::new(&heimdall_bin);
+            cmd.arg("run")
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null());
+            if let Some(cfg_path) = explicit_config {
+                cmd.arg("--config").arg(cfg_path);
+            }
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+                const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+                cmd.creation_flags(CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW);
+            }
+            let _child = cmd.spawn().map_err(|source| BifrostError::Io {
+                context: format!("spawning Heimdall daemon '{}'", heimdall_bin.display()),
+                source,
+            })?;
+
+            // Poll until Heimdall's authenticated Named Pipe is online.
+            let mut started_health = None;
+            for _ in 0..20 {
+                tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                if let Ok(h) = client.health().await {
+                    started_health = Some(h);
+                    break;
+                }
+            }
+            let health = started_health.ok_or_else(|| {
+                BifrostError::Ipc(
+                    "Heimdall daemon was spawned but did not become reachable over IPC within 5s"
+                        .to_string(),
+                )
+            })?;
+            if as_json {
+                return serde_json::to_string_pretty(&health)
+                    .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
+            }
+            Ok(format!(
+                "Started Heimdall daemon in background (PID {}, pipe '{}').",
+                health.daemon_pid, health.pipe_name
+            ))
+        }
         DaemonAction::Status => {
             let health = client.health().await?;
             if as_json {

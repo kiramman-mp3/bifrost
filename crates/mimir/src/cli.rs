@@ -318,6 +318,8 @@ pub enum AppsAction {
 
 #[derive(Debug, Subcommand)]
 pub enum DaemonAction {
+    /// Start the Heimdall background supervisor daemon cleanly detached in the background.
+    Start,
     /// Query live Heimdall daemon health and IPC status.
     Status,
     /// Request a graceful Heimdall daemon shutdown over authenticated IPC.
