@@ -1,7 +1,8 @@
-# Rust / Cargo
+# Rust / Cargo / Tauri generated schemas
 /target/
 **/*.rs.bk
 Cargo.lock.bak
+/apps/bifrost-ui/src-tauri/gen/
 
 # Windows & IDE
 .DS_Store

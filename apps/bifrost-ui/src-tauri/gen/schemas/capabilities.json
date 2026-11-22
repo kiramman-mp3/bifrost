@@ -1,1 +1,0 @@
-{"default":{"identifier":"default","description":"Default least-privilege Tauri 2 capability for BIFRÖST main desktop window.","local":true,"windows":["main"],"permissions":["core:default"]}}
