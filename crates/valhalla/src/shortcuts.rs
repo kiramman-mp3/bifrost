@@ -365,6 +365,7 @@ fn create_windows_shortcuts_via_com(
     // to prevent any command or PowerShell string interpolation injection.
     const SCRIPT: &str = r#"
 $ErrorActionPreference = 'Stop'
+$OutputEncoding = [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $desktopDir = [Environment]::GetFolderPath('Desktop')
 $startMenuDir = Join-Path ([Environment]::GetFolderPath('Programs')) 'BIFRÖST Apps'
 New-Item -ItemType Directory -Force -Path $startMenuDir | Out-Null
