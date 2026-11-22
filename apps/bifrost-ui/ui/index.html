@@ -30,6 +30,9 @@
           <button class="nav-item" role="tab" aria-selected="false" data-section="diagnostics">
             Diagnostics
           </button>
+          <button class="nav-item" role="tab" aria-selected="false" data-section="images">
+            Images &amp; Recovery
+          </button>
           <button class="nav-item" role="tab" aria-selected="false" data-section="settings">
             Settings
           </button>
@@ -47,6 +50,12 @@
       </aside>
 
       <main class="content">
+        <div id="drop-overlay" class="drop-overlay hidden" aria-hidden="true">
+          <div class="drop-overlay-card">
+            <strong>Drop <code>.apk</code> or <code>manifest.json</code> here</strong>
+            <span class="muted small-text">BIFRÖST will inspect the APK offline for x86_64 compatibility before installing.</span>
+          </div>
+        </div>
         <div id="toast-banner" class="toast hidden" role="status" aria-live="polite"></div>
 
         <!-- 1. DASHBOARD -->
@@ -99,11 +108,14 @@
             <h3>Quick Runtime Controls</h3>
             <div class="form-row">
               <label for="manifest-input">Midgard Bundle Manifest (<code>manifest.json</code>)</label>
-              <input
-                id="manifest-input"
-                type="text"
-                placeholder="C:\Users\...\bifrost\images\midgard\manifest.json"
-              />
+              <div class="input-with-btn">
+                <input
+                  id="manifest-input"
+                  type="text"
+                  placeholder="C:\Users\...\bifrost\images\midgard\manifest.json"
+                />
+                <button class="btn" id="btn-browse-manifest" type="button">Browse…</button>
+              </div>
             </div>
             <div class="actions">
               <label class="checkbox-label">
@@ -144,10 +156,16 @@
           </header>
 
           <article class="card">
-            <h3>Inspect or Install APK</h3>
+            <div class="card-header-inline">
+              <h3>Inspect or Install APK</h3>
+              <span class="muted small-text">Tip: drag &amp; drop an <code>.apk</code> anywhere on this window</span>
+            </div>
             <div class="form-row">
               <label for="apk-path-input">Local <code>.apk</code> path</label>
-              <input id="apk-path-input" type="text" placeholder="C:\path\to\application.apk" />
+              <div class="input-with-btn">
+                <input id="apk-path-input" type="text" placeholder="C:\path\to\application.apk" />
+                <button class="btn" id="btn-browse-apk" type="button">Browse…</button>
+              </div>
             </div>
             <div class="actions">
               <button class="btn" id="btn-inspect-apk" type="button">Inspect Offline (ZIP / ABI)</button>
@@ -288,7 +306,65 @@
           </article>
         </section>
 
-        <!-- 5. SETTINGS -->
+        <!-- 5. IMAGES & RECOVERY -->
+        <section id="section-images" class="panel" role="tabpanel">
+          <header class="panel-header">
+            <div>
+              <h2>Midgard Images &amp; Recovery</h2>
+              <p class="muted">Manage SHA-256 verified Android runtime bundles and back up or restore persistent <code>userdata.img</code>.</p>
+            </div>
+            <div class="actions">
+              <button class="btn" id="btn-refresh-images" type="button">Refresh Images</button>
+            </div>
+          </header>
+
+          <article class="card">
+            <h3>Registered Midgard Images</h3>
+            <div id="images-list" class="list-box muted">Loading registered images…</div>
+          </article>
+
+          <article class="card">
+            <h3>Register Midgard Image Bundle</h3>
+            <div class="form-row">
+              <label for="img-manifest-input">Verified bundle <code>manifest.json</code></label>
+              <div class="input-with-btn">
+                <input
+                  id="img-manifest-input"
+                  type="text"
+                  placeholder="C:\Users\...\bifrost\images\lineage\manifest.json"
+                />
+                <button class="btn" id="btn-browse-img-manifest" type="button">Browse…</button>
+              </div>
+            </div>
+            <div class="actions">
+              <button class="btn primary" id="btn-register-image" type="button">Verify &amp; Register Image</button>
+            </div>
+          </article>
+
+          <article class="card">
+            <h3>Persistent Userdata Backup &amp; Restore</h3>
+            <p class="muted small-text">
+              Backups compute and verify a SHA-256 digest of your Android <code>userdata.img</code>. Stop Midgard before restoring.
+            </p>
+            <div class="form-row">
+              <label for="recovery-dir-input">Backup / Restore Folder</label>
+              <div class="input-with-btn">
+                <input
+                  id="recovery-dir-input"
+                  type="text"
+                  placeholder="C:\Users\...\Backups\bifrost-userdata"
+                />
+                <button class="btn" id="btn-browse-recovery-dir" type="button">Browse…</button>
+              </div>
+            </div>
+            <div class="actions">
+              <button class="btn primary" id="btn-backup-userdata" type="button">Create Verified Backup</button>
+              <button class="btn danger" id="btn-restore-userdata" type="button">Restore Verified Backup</button>
+            </div>
+          </article>
+        </section>
+
+        <!-- 6. SETTINGS -->
         <section id="section-settings" class="panel" role="tabpanel">
           <header class="panel-header">
             <div>

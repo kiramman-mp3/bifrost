@@ -22,6 +22,7 @@ use bifrost_display::AppWindowHandle;
 use bifrost_network::PortForwardRule;
 use bifrost_process::AndroidProcess;
 use bifrost_runtime::{RuntimeLogs, RuntimeRecord};
+use bifrost_storage::{BackupMetadata, ImageRegistry, InstalledImageRecord};
 use valhalla::manager::{InstallOutcome, LaunchOutcome};
 use valhalla::{
     ApkInspection, HeimdallAutostartStatus, InstalledPackage, PackageDetails, ShortcutRecord,
@@ -165,6 +166,41 @@ fn list_network_forwards() -> Result<Vec<PortForwardRule>, String> {
     map_err(service::list_network_forwards())
 }
 
+#[tauri::command]
+fn list_images() -> Result<ImageRegistry, String> {
+    map_err(service::list_images())
+}
+
+#[tauri::command]
+fn register_image(manifest_path: PathBuf) -> Result<InstalledImageRecord, String> {
+    map_err(service::register_image(manifest_path))
+}
+
+#[tauri::command]
+fn activate_image(image_id: String) -> Result<InstalledImageRecord, String> {
+    map_err(service::activate_image(image_id))
+}
+
+#[tauri::command]
+fn backup_userdata(output_dir: PathBuf) -> Result<BackupMetadata, String> {
+    map_err(service::backup_userdata_to(output_dir))
+}
+
+#[tauri::command]
+fn restore_userdata(from_dir: PathBuf) -> Result<BackupMetadata, String> {
+    map_err(service::restore_userdata_from(from_dir))
+}
+
+#[tauri::command]
+async fn pick_file_dialog(title: String, filter: String) -> Result<Option<PathBuf>, String> {
+    map_err(service::pick_file_dialog(title, filter).await)
+}
+
+#[tauri::command]
+async fn pick_folder_dialog(title: String) -> Result<Option<PathBuf>, String> {
+    map_err(service::pick_folder_dialog(title).await)
+}
+
 fn main() {
     init_logging(&LoggingConfig::default());
 
@@ -234,6 +270,13 @@ fn main() {
             list_shared_files,
             list_processes,
             list_network_forwards,
+            list_images,
+            register_image,
+            activate_image,
+            backup_userdata,
+            restore_userdata,
+            pick_file_dialog,
+            pick_folder_dialog,
         ])
         .run(tauri::generate_context!())
         .expect("failed to launch BIFRÖST desktop application");

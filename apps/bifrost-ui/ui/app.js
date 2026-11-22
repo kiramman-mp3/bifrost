@@ -27,20 +27,68 @@ function formatGib(bytes) {
   return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
 }
 
-function setupNavigation() {
+function activateSection(sectionName) {
   const buttons = document.querySelectorAll(".nav-item");
-  buttons.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const target = btn.dataset.section;
-      buttons.forEach((b) => {
-        const active = b === btn;
-        b.classList.toggle("active", active);
-        b.setAttribute("aria-selected", String(active));
-      });
-      document.querySelectorAll(".panel").forEach((panel) => {
-        panel.classList.toggle("active", panel.id === `section-${target}`);
-      });
-    });
+  buttons.forEach((b) => {
+    const active = b.dataset.section === sectionName;
+    b.classList.toggle("active", active);
+    b.setAttribute("aria-selected", String(active));
+  });
+  document.querySelectorAll(".panel").forEach((panel) => {
+    panel.classList.toggle("active", panel.id === `section-${sectionName}`);
+  });
+}
+
+function setupNavigation() {
+  document.querySelectorAll(".nav-item").forEach((btn) => {
+    btn.addEventListener("click", () => activateSection(btn.dataset.section));
+  });
+}
+
+function setupDragDrop() {
+  const listen = window.__TAURI__?.event?.listen;
+  const overlay = document.getElementById("drop-overlay");
+  if (!listen || !overlay) return;
+
+  listen("tauri://drag-enter", () => overlay.classList.remove("hidden"));
+  listen("tauri://drag-leave", () => overlay.classList.add("hidden"));
+  listen("tauri://drag-drop", async (event) => {
+    overlay.classList.add("hidden");
+    const paths = event?.payload?.paths || [];
+    if (!paths.length) return;
+
+    const apkFile = paths.find((p) => p.toLowerCase().endsWith(".apk"));
+    if (apkFile) {
+      activateSection("apps");
+      document.getElementById("apk-path-input").value = apkFile;
+      try {
+        const info = await invoke("inspect_apk_file", { apkPath: apkFile });
+        const box = document.getElementById("apk-inspect-output");
+        box.textContent = JSON.stringify(info, null, 2);
+        box.classList.remove("hidden");
+        const abiKind = info?.abi_compatibility?.kind || "unknown";
+        showToast(
+          abiKind === "unsupported_native_abi"
+            ? `APK '${info.package_name || apkFile}' is ARM64-only (unsupported per ADR-0004).`
+            : `APK '${info.package_name || "ready"}' inspected (${abiKind}) — click "Install APK" to install.`,
+          abiKind === "unsupported_native_abi"
+        );
+      } catch (err) {
+        showToast(String(err), true);
+      }
+      return;
+    }
+
+    const jsonFile = paths.find((p) => p.toLowerCase().endsWith(".json"));
+    if (jsonFile) {
+      document.getElementById("manifest-input").value = jsonFile;
+      const imgInput = document.getElementById("img-manifest-input");
+      if (imgInput) imgInput.value = jsonFile;
+      showToast(`Loaded manifest path: ${jsonFile}`);
+      return;
+    }
+
+    showToast("Drop an .apk package or a Midgard manifest.json file.", true);
   });
 }
 
@@ -198,7 +246,12 @@ async function refreshAll() {
   try {
     const snap = await invoke("get_dashboard");
     renderDashboard(snap);
-    await Promise.allSettled([refreshLogs(), refreshSharedFiles(), refreshProcesses()]);
+    await Promise.allSettled([
+      refreshLogs(),
+      refreshSharedFiles(),
+      refreshProcesses(),
+      refreshImages(),
+    ]);
   } catch (err) {
     showToast(`Failed to refresh dashboard: ${err}`, true);
   }
@@ -236,6 +289,53 @@ async function refreshSharedFiles() {
       .join("");
   } catch (err) {
     el.textContent = `Failed to list shared folder: ${err}`;
+  }
+}
+
+async function refreshImages() {
+  const container = document.getElementById("images-list");
+  if (!container) return;
+  try {
+    const reg = await invoke("list_images");
+    const images = reg?.images || [];
+    if (!images.length) {
+      container.innerHTML = `<span class="muted">No Midgard images registered yet. Browse for a verified manifest.json below.</span>`;
+      return;
+    }
+    container.innerHTML = images
+      .map((img) => {
+        const isActive = reg.active_image_id === img.id;
+        return `
+        <div class="item-row">
+          <div>
+            <strong>${escapeHtml(img.name)}</strong> <code>${escapeHtml(img.id)}</code>
+            <div class="muted small-text">Android ${escapeHtml(img.android_version)} · ${escapeHtml(img.arch)} · ${escapeHtml(img.manifest_path)}</div>
+          </div>
+          <div class="actions">
+            ${
+              isActive
+                ? `<span class="badge pass">Active</span>`
+                : `<button class="btn small primary" data-activate-image="${escapeHtml(img.id)}">Set Active</button>`
+            }
+          </div>
+        </div>`;
+      })
+      .join("");
+
+    container.querySelectorAll("[data-activate-image]").forEach((btn) =>
+      btn.addEventListener("click", async () => {
+        const imageId = btn.dataset.activateImage;
+        try {
+          const activated = await invoke("activate_image", { imageId });
+          showToast(`Active Midgard image set to '${activated.id}' (Android ${activated.android_version}).`);
+          await refreshAll();
+        } catch (err) {
+          showToast(String(err), true);
+        }
+      })
+    );
+  } catch (err) {
+    container.textContent = `Failed to load image registry: ${err}`;
   }
 }
 
@@ -404,6 +504,104 @@ function wireEvents() {
   document.getElementById("btn-refresh-logs").addEventListener("click", refreshLogs);
   document.getElementById("btn-refresh-share").addEventListener("click", refreshSharedFiles);
   document.getElementById("btn-refresh-apps").addEventListener("click", refreshApps);
+  document.getElementById("btn-refresh-images").addEventListener("click", refreshImages);
+
+  document.getElementById("btn-browse-manifest").addEventListener("click", async () => {
+    try {
+      const picked = await invoke("pick_file_dialog", {
+        title: "Select Midgard Bundle Manifest (manifest.json)",
+        filter: "Midgard Manifest (*.json)|*.json|All files (*.*)|*.*",
+      });
+      if (picked) document.getElementById("manifest-input").value = picked;
+    } catch (err) {
+      showToast(String(err), true);
+    }
+  });
+
+  document.getElementById("btn-browse-apk").addEventListener("click", async () => {
+    try {
+      const picked = await invoke("pick_file_dialog", {
+        title: "Select Android Package (.apk)",
+        filter: "Android Package (*.apk)|*.apk|All files (*.*)|*.*",
+      });
+      if (picked) document.getElementById("apk-path-input").value = picked;
+    } catch (err) {
+      showToast(String(err), true);
+    }
+  });
+
+  document.getElementById("btn-browse-img-manifest").addEventListener("click", async () => {
+    try {
+      const picked = await invoke("pick_file_dialog", {
+        title: "Select Midgard Image Manifest (manifest.json)",
+        filter: "Midgard Manifest (*.json)|*.json|All files (*.*)|*.*",
+      });
+      if (picked) document.getElementById("img-manifest-input").value = picked;
+    } catch (err) {
+      showToast(String(err), true);
+    }
+  });
+
+  document.getElementById("btn-browse-recovery-dir").addEventListener("click", async () => {
+    try {
+      const picked = await invoke("pick_folder_dialog", {
+        title: "Select Folder for Userdata Backup / Restore",
+      });
+      if (picked) document.getElementById("recovery-dir-input").value = picked;
+    } catch (err) {
+      showToast(String(err), true);
+    }
+  });
+
+  document.getElementById("btn-register-image").addEventListener("click", async () => {
+    const manifestPath = document.getElementById("img-manifest-input").value.trim();
+    if (!manifestPath) {
+      showToast("Browse for or enter a Midgard manifest.json path first.", true);
+      return;
+    }
+    try {
+      const rec = await invoke("register_image", { manifestPath });
+      showToast(`Registered verified image '${rec.id}' (Android ${rec.android_version}).`);
+      await refreshAll();
+    } catch (err) {
+      showToast(String(err), true);
+    }
+  });
+
+  document.getElementById("btn-backup-userdata").addEventListener("click", async () => {
+    const outputDir = document.getElementById("recovery-dir-input").value.trim();
+    if (!outputDir) {
+      showToast("Choose a backup destination folder first.", true);
+      return;
+    }
+    try {
+      const meta = await invoke("backup_userdata", { outputDir });
+      showToast(`Backed up userdata (${formatGib(meta.size_bytes)}, SHA-256 ${meta.sha256.slice(0, 12)}…).`);
+    } catch (err) {
+      showToast(String(err), true);
+    }
+  });
+
+  document.getElementById("btn-restore-userdata").addEventListener("click", async () => {
+    const fromDir = document.getElementById("recovery-dir-input").value.trim();
+    if (!fromDir) {
+      showToast("Choose a verified backup folder to restore from first.", true);
+      return;
+    }
+    if (
+      !window.confirm(
+        `Restore Android userdata.img from '${fromDir}'? This overwrites your current Android user data after verifying SHA-256.`
+      )
+    ) {
+      return;
+    }
+    try {
+      const meta = await invoke("restore_userdata", { fromDir });
+      showToast(`Restored verified userdata (SHA-256 ${meta.sha256.slice(0, 12)}…).`);
+    } catch (err) {
+      showToast(String(err), true);
+    }
+  });
   document.getElementById("btn-close-details").addEventListener("click", () => {
     document.getElementById("app-details-card").classList.add("hidden");
   });
@@ -544,6 +742,7 @@ function wireEvents() {
 document.addEventListener("DOMContentLoaded", () => {
   setupNavigation();
   setupTheme();
+  setupDragDrop();
   wireEvents();
   refreshAll();
 });
