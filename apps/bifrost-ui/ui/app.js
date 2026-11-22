@@ -119,6 +119,13 @@ function populateConfigForm(cfg, configPath) {
   document.getElementById("cfg-adb-host").value = cfg.network.adb_bind_address;
   document.getElementById("cfg-adb-port").value = cfg.network.adb_port;
   document.getElementById("cfg-log-level").value = cfg.logging.level;
+  document.getElementById("cfg-audio-enabled").checked = cfg.runtime.audio_enabled ?? true;
+  document.getElementById("cfg-auto-sync-shortcuts").checked =
+    cfg.desktop?.auto_sync_shortcuts ?? true;
+  document.getElementById("cfg-forward-notifications").checked =
+    cfg.desktop?.forward_notifications ?? true;
+  document.getElementById("cfg-auto-sync-clipboard").checked =
+    cfg.desktop?.auto_sync_clipboard ?? true;
   document.getElementById("cfg-path-label").textContent = `Target: ${configPath}`;
 }
 
@@ -437,7 +444,7 @@ function wireEvents() {
         memory_mb: Number(document.getElementById("cfg-ram").value),
         storage_gb: Number(document.getElementById("cfg-storage").value),
         graphics_mode: document.getElementById("cfg-graphics").value,
-        audio_enabled: lastDashboard.config.runtime.audio_enabled ?? true,
+        audio_enabled: document.getElementById("cfg-audio-enabled").checked,
         data_dir: lastDashboard.config.runtime.data_dir,
       },
       display: {
@@ -445,10 +452,10 @@ function wireEvents() {
         height: Number(document.getElementById("cfg-height").value),
         dpi: Number(document.getElementById("cfg-dpi").value),
       },
-      desktop: lastDashboard.config.desktop || {
-        auto_sync_shortcuts: true,
-        forward_notifications: true,
-        auto_sync_clipboard: true,
+      desktop: {
+        auto_sync_shortcuts: document.getElementById("cfg-auto-sync-shortcuts").checked,
+        forward_notifications: document.getElementById("cfg-forward-notifications").checked,
+        auto_sync_clipboard: document.getElementById("cfg-auto-sync-clipboard").checked,
       },
       network: {
         adb_bind_address: document.getElementById("cfg-adb-host").value.trim(),

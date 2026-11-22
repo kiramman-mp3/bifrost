@@ -1,6 +1,7 @@
 //! Heimdall (`heimdall.exe`) background supervisor daemon entry point.
 
 mod app_sync;
+mod desktop_bridge;
 mod pipe_security;
 mod server;
 mod supervisor;

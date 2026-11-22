@@ -21,6 +21,6 @@ pub use ipc::{
     IPC_PROTOCOL_VERSION, MAX_IPC_FRAME_BYTES,
 };
 pub use notifications::{
-    build_windows_toast_xml, list_active_notifications, parse_dumpsys_notifications,
-    AndroidNotification,
+    build_windows_toast_xml, dispatch_windows_toast, list_active_notifications,
+    parse_dumpsys_notifications, AndroidNotification,
 };
