@@ -25,7 +25,8 @@ use windows::Win32::System::SystemInformation::{
 use windows::Win32::System::Threading::{IsProcessorFeaturePresent, PF_VIRT_FIRMWARE_ENABLED};
 
 use crate::model::{
-    CpuInfo, GpuAdapterInfo, MemoryInfo, OsInfo, StorageInfo, SystemSnapshot, WhpxInfo,
+    CpuInfo, GpuAdapterInfo, HostToolingInfo, MemoryInfo, OsInfo, StorageInfo, SystemSnapshot,
+    WhpxInfo,
 };
 
 const MIN_WINDOWS_11_BUILD: u32 = 22_000;
@@ -39,12 +40,14 @@ pub(crate) fn probe_system(target_storage_path: &Path) -> SystemSnapshot {
     let memory = probe_memory();
     let storage = probe_storage(target_storage_path);
     let gpus = probe_gpus();
+    let tooling = probe_tooling(target_storage_path);
 
     debug!(
         build = os.build,
         edition = %os.edition_id,
         whpx_ready = whpx.api_available && whpx.hypervisor_present,
         gpu_count = gpus.len(),
+        registered_images = tooling.registered_images_count,
         "completed native Windows host probe"
     );
 
@@ -55,7 +58,132 @@ pub(crate) fn probe_system(target_storage_path: &Path) -> SystemSnapshot {
         memory,
         storage,
         gpus,
+        tooling,
     }
+}
+
+fn probe_tooling(target_storage_path: &Path) -> HostToolingInfo {
+    let qemu_path = locate_qemu();
+    let edk2_firmware_path = qemu_path
+        .as_deref()
+        .and_then(|q| q.parent())
+        .and_then(|dir| {
+            [
+                dir.join("share").join("edk2-x86_64-code.fd"),
+                dir.join("edk2-x86_64-code.fd"),
+            ]
+            .into_iter()
+            .find(|p| p.is_file())
+        });
+    let adb_path = locate_adb();
+    let scrcpy_path = locate_scrcpy();
+    let (registered_images_count, active_image_id) =
+        probe_registered_images(&target_storage_path.join("images").join("registry.json"));
+
+    HostToolingInfo {
+        qemu_path,
+        edk2_firmware_path,
+        adb_path,
+        scrcpy_path,
+        registered_images_count,
+        active_image_id,
+    }
+}
+
+fn find_on_path(binary_name: &str) -> Option<PathBuf> {
+    let path_var = std::env::var_os("PATH")?;
+    for dir in std::env::split_paths(&path_var) {
+        let candidate = dir.join(binary_name);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+fn locate_qemu() -> Option<PathBuf> {
+    if let Ok(env_bin) = std::env::var("BIFROST_QEMU_BIN") {
+        let p = PathBuf::from(env_bin);
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+    if let Some(p) =
+        find_on_path("qemu-system-x86_64.exe").or_else(|| find_on_path("qemu-system-x86_64"))
+    {
+        return Some(p);
+    }
+    let mut candidates = vec![PathBuf::from(
+        r"C:\Program Files\qemu\qemu-system-x86_64.exe",
+    )];
+    if let Ok(local) = std::env::var("LOCALAPPDATA") {
+        candidates.push(
+            PathBuf::from(local)
+                .join("Programs")
+                .join("qemu")
+                .join("qemu-system-x86_64.exe"),
+        );
+    }
+    candidates.into_iter().find(|p| p.is_file())
+}
+
+fn locate_adb() -> Option<PathBuf> {
+    if let Ok(env_bin) = std::env::var("BIFROST_ADB_BIN") {
+        let p = PathBuf::from(env_bin);
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+    if let Some(p) = find_on_path("adb.exe").or_else(|| find_on_path("adb")) {
+        return Some(p);
+    }
+    if let Ok(local) = std::env::var("LOCALAPPDATA") {
+        let sdk_adb = PathBuf::from(local)
+            .join("Android")
+            .join("Sdk")
+            .join("platform-tools")
+            .join("adb.exe");
+        if sdk_adb.is_file() {
+            return Some(sdk_adb);
+        }
+    }
+    None
+}
+
+fn locate_scrcpy() -> Option<PathBuf> {
+    if let Ok(env_bin) = std::env::var("BIFROST_SCRCPY_BIN") {
+        let p = PathBuf::from(env_bin);
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+    if let Some(p) = find_on_path("scrcpy.exe").or_else(|| find_on_path("scrcpy")) {
+        return Some(p);
+    }
+    if let Ok(local) = std::env::var("LOCALAPPDATA") {
+        let user_scrcpy = PathBuf::from(local)
+            .join("Programs")
+            .join("scrcpy")
+            .join("scrcpy.exe");
+        if user_scrcpy.is_file() {
+            return Some(user_scrcpy);
+        }
+    }
+    None
+}
+
+fn probe_registered_images(registry_path: &Path) -> (usize, Option<String>) {
+    let raw = match std::fs::read_to_string(registry_path) {
+        Ok(s) => s,
+        Err(_) => return (0, None),
+    };
+    let parsed: serde_json::Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(_) => return (0, None),
+    };
+    let count = parsed["images"].as_array().map_or(0, Vec::len);
+    let active = parsed["active_image_id"].as_str().map(ToOwned::to_owned);
+    (count, active)
 }
 
 #[repr(C)]

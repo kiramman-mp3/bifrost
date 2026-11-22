@@ -23,7 +23,9 @@ use bifrost_network::PortForwardRule;
 use bifrost_process::AndroidProcess;
 use bifrost_runtime::{RuntimeLogs, RuntimeRecord};
 use valhalla::manager::{InstallOutcome, LaunchOutcome};
-use valhalla::{ApkInspection, InstalledPackage, PackageDetails, ShortcutRecord};
+use valhalla::{
+    ApkInspection, HeimdallAutostartStatus, InstalledPackage, PackageDetails, ShortcutRecord,
+};
 
 use crate::service::DashboardSnapshot;
 
@@ -44,6 +46,11 @@ async fn start_heimdall() -> Result<DaemonHealthReport, String> {
 #[tauri::command]
 async fn stop_heimdall() -> Result<(), String> {
     map_err(service::stop_heimdall().await)
+}
+
+#[tauri::command]
+fn set_heimdall_autostart(enabled: bool) -> Result<HeimdallAutostartStatus, String> {
+    map_err(service::set_heimdall_autostart(enabled))
 }
 
 #[tauri::command]
@@ -161,10 +168,23 @@ fn list_network_forwards() -> Result<Vec<PortForwardRule>, String> {
 fn main() {
     init_logging(&LoggingConfig::default());
 
+    // Silent GUI login autostart mode (`bifrost-ui.exe --start-heimdall`):
+    // spawns Heimdall cleanly detached with zero console window flash at Windows login.
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() >= 2 && args[1] == "--start-heimdall" {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("failed creating tokio runtime for Heimdall autostart");
+        if rt.block_on(service::start_heimdall()).is_err() {
+            std::process::exit(1);
+        }
+        return;
+    }
+
     // Silent GUI shortcut launcher mode (`bifrost-ui.exe --launch-app <pkg>`):
     // launches an Android app directly in its WSA-style resizable Windows 11 window
     // without flashing any console window or opening the management dashboard.
-    let args: Vec<String> = std::env::args().collect();
     if args.len() >= 3 && args[1] == "--launch-app" {
         let package = args[2].clone();
         let rt = tokio::runtime::Builder::new_current_thread()
@@ -193,6 +213,7 @@ fn main() {
             get_dashboard,
             start_heimdall,
             stop_heimdall,
+            set_heimdall_autostart,
             get_doctor_report,
             save_config,
             start_runtime,
