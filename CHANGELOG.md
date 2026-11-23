@@ -6,6 +6,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-11-22
+
+### Added
+- **Windows 11 Fluent App Installer Dialog (`bifrost-ui`, `valhalla`)**:
+  - Double-clicking or right-clicking (**"Install with BIFRÖST"**) any `.apk` or `.apkm` file in Windows Explorer now launches a dedicated compact Fluent Design 2 App Installer window (`bifrost-ui.exe --install-apk "%1"`, zero console flash) — also reused for in-app installs and drag-and-drop.
+  - Displays the app's real extracted PNG icon, clean app title (`info.json` `app_name` / package metadata), and `versionName` (parsed from binary AXML `AndroidManifest.xml` or `.apkm` `info.json`), automatically distinguishing **Install** vs. **Update** (`Installed: vX → New: vY`).
+  - Live animated progress bar streaming real installation stages (`install-progress` events) plus an instant **Launch App** button upon completion.
+- **Host CPU/RAM Auto-Tuning (`bifrost-core`, `mimir`, `bifrost-ui`)**:
+  - Added `RuntimeConfig::recommend_for_host()`, `bifrost config autotune`, and an **Auto-Tune for this PC** button in `bifrost-ui` Runtime Config to scale vCPUs and RAM cleanly for high-core Windows 11 hosts while preserving host headroom.
+
+### Changed & Optimized
+- **Single-Pass `.apk` / `.apkm` Installation Pipeline (`valhalla`)**:
+  - Eliminated redundant multi-pass decompression during `.apkm` inspection, split staging, and shortcut icon extraction, upgrading hashing and split-copy I/O to 512 KiB buffered streams.
+- **Full-Stack Performance Tuning (`bifrost-display`, `bifrost-hypervisor`, `heimdall`, `bifrost-ui`)**:
+  - Consolidated `bifrost-display` Android freeform setup from 3 sequential `adb.exe` calls into 1 call and tuned per-app `VirtualDisplay` streams to `--max-fps=60 --video-bit-rate=12M`.
+  - Cached `DoctorReport` and Heimdall autostart status in `bifrost-ui` for sub-50ms Dashboard refreshes (freshly recalculated on **Run Doctor** or toggle).
+  - Reduced Heimdall idle overhead to near-0% CPU by skipping `adb.exe` polls while Midgard is stopped, caching confirmed `boot_completed` guest health, and spacing `app_sync` to every 6 cycles.
+  - Attached dedicated QEMU VirtIO block `iothread` (`-object iothread,id=io0`, `cache=writeback,aio=threads`), added `CREATE_NO_WINDOW` for headless QEMU, and upgraded experimental headless 3D GPU mode to `virtio-gpu-gl-pci,xres=1280,yres=720,blob=on,hostmem=256M` + `-display egl-headless` (`71` passing workspace tests across 13 crates).
+
 ## [0.3.2] - 2026-11-22
 
 ### Added
