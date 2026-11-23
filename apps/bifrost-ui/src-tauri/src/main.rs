@@ -10,6 +10,7 @@
 mod service;
 
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 use bifrost_bridge::{
     dispatch_windows_toast, AndroidNotification, DaemonHealthReport, SharedFileEntry,
@@ -23,12 +24,15 @@ use bifrost_network::PortForwardRule;
 use bifrost_process::AndroidProcess;
 use bifrost_runtime::{RuntimeLogs, RuntimeRecord};
 use bifrost_storage::{BackupMetadata, ImageRegistry, InstalledImageRecord};
+use tauri::{Emitter, Manager};
 use valhalla::manager::{InstallOutcome, LaunchOutcome};
 use valhalla::{
     ApkInspection, HeimdallAutostartStatus, InstalledPackage, PackageDetails, ShortcutRecord,
 };
 
-use crate::service::DashboardSnapshot;
+use crate::service::{DashboardSnapshot, PackageInstallPreview};
+
+struct PendingInstallState(Mutex<Option<PathBuf>>);
 
 fn map_err<T>(res: bifrost_core::Result<T>) -> Result<T, String> {
     res.map_err(|err| err.to_string())
@@ -103,13 +107,38 @@ async fn get_app_info(package: String) -> Result<PackageDetails, String> {
 }
 
 #[tauri::command]
+fn get_pending_install(state: tauri::State<'_, PendingInstallState>) -> Option<PathBuf> {
+    state.0.lock().ok().and_then(|g| g.clone())
+}
+
+#[tauri::command]
+fn close_installer_window(app: tauri::AppHandle) {
+    if let Some(win) = app.get_webview_window("main") {
+        let _ = win.close();
+    }
+}
+
+#[tauri::command]
+async fn preview_package_install(apk_path: PathBuf) -> Result<PackageInstallPreview, String> {
+    map_err(service::preview_package_install(apk_path).await)
+}
+
+#[tauri::command]
 fn inspect_apk_file(apk_path: PathBuf) -> Result<ApkInspection, String> {
     map_err(service::inspect_apk_file(apk_path))
 }
 
 #[tauri::command]
-async fn install_apk_file(apk_path: PathBuf) -> Result<InstallOutcome, String> {
-    map_err(service::install_apk_file(apk_path).await)
+async fn install_apk_file(
+    app: tauri::AppHandle,
+    apk_path: PathBuf,
+) -> Result<InstallOutcome, String> {
+    map_err(
+        service::install_apk_file_with_progress(apk_path, |evt| {
+            let _ = app.emit("install-progress", evt);
+        })
+        .await,
+    )
 }
 
 #[tauri::command]
@@ -249,8 +278,30 @@ fn main() {
         return;
     }
 
+    let pending_install = if args.len() >= 3 && args[1] == "--install-apk" {
+        Some(PathBuf::from(&args[2]))
+    } else {
+        None
+    };
+    let is_installer_mode = pending_install.is_some();
+
     tauri::Builder::default()
+        .manage(PendingInstallState(Mutex::new(pending_install)))
+        .setup(move |app| {
+            if is_installer_mode {
+                if let Some(win) = app.get_webview_window("main") {
+                    let _ = win.set_title("BIFRÖST — App Installer");
+                    let _ = win.set_min_size(Some(tauri::LogicalSize::new(500.0, 440.0)));
+                    let _ = win.set_size(tauri::LogicalSize::new(560.0, 500.0));
+                    let _ = win.center();
+                }
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
+            get_pending_install,
+            close_installer_window,
+            preview_package_install,
             get_dashboard,
             start_heimdall,
             stop_heimdall,

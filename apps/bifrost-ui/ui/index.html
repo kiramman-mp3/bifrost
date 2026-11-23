@@ -56,6 +56,41 @@
             <span class="muted small-text">BIFRÖST will inspect the package offline for x86_64 compatibility before installing.</span>
           </div>
         </div>
+        <div id="installer-modal" class="installer-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="installer-question">
+          <div class="installer-dialog">
+            <div class="installer-header">
+              <div class="installer-icon-wrap" id="installer-icon-wrap">
+                <div class="brand-mark installer-icon-fallback" id="installer-icon-fallback"></div>
+                <img id="installer-icon-img" class="installer-icon hidden" alt="App icon" />
+              </div>
+              <div class="installer-title-block">
+                <span class="muted small-text" id="installer-question">Do you want to install this application?</span>
+                <h2 id="installer-app-title">Inspecting package…</h2>
+                <div class="muted small-text" id="installer-version-line"></div>
+              </div>
+            </div>
+
+            <div class="installer-meta" id="installer-meta"></div>
+
+            <div id="installer-progress-wrap" class="installer-progress-wrap hidden">
+              <div class="installer-progress-head">
+                <span id="installer-stage-label" class="small-text">Preparing installation…</span>
+                <span id="installer-percent-label" class="muted small-text">0%</span>
+              </div>
+              <div class="progress-track">
+                <div id="installer-progress-fill" class="progress-fill" style="width: 0%"></div>
+              </div>
+            </div>
+
+            <div id="installer-error" class="installer-error hidden"></div>
+
+            <div class="installer-actions">
+              <button class="btn" id="btn-installer-cancel" type="button">Cancel</button>
+              <button class="btn primary" id="btn-installer-confirm" type="button" disabled>Install</button>
+              <button class="btn primary hidden" id="btn-installer-launch" type="button">Launch App</button>
+            </div>
+          </div>
+        </div>
         <div id="toast-banner" class="toast hidden" role="status" aria-live="polite"></div>
 
         <!-- 1. DASHBOARD -->
