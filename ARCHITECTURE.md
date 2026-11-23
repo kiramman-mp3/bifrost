@@ -83,7 +83,7 @@ There is **no Midgard guest agent** and **no `virtio-vsock` channel** yet: every
 | Bifrost Core | `bifrost-core` | Implemented | Runtime state machine (`Stopped`, `Starting`, `Booting`, `Running`, `Degraded`, `Stopping`, `Failed`), versioned TOML config (`[runtime]`, `[display]`, `[desktop]`, `[network]`, `[logging]`, `[images]`), path guards, error taxonomy, `tracing` setup, host auto-tune. |
 | Diagnostics | `bifrost-diagnostics` | Implemented | `bifrost doctor`: Windows edition, CPU virtualization, live `WHvCreatePartition`, RAM, disk, DXGI GPU, host tooling (QEMU, EDK2, `adb`, `scrcpy`, images). |
 | Mimir | `mimir` (`bifrost.exe`) | Implemented | Administrative CLI; routes runtime and app commands through Heimdall IPC when the daemon is running, otherwise runs them locally. |
-| Heimdall | `heimdall` (`heimdall.exe`) | Implemented | Tokio daemon: Named Pipe server (`\\.\pipe\bifrost-heimdall-<user>`), periodic runtime/ADB health, `app_sync` (shortcuts for apps installed inside Android), `desktop_bridge` (Toast forwarding, clipboard auto-sync), optional HKCU login autostart. |
+| Heimdall | `heimdall` (`heimdall.exe`) | Implemented | Tokio daemon: Named Pipe server (`\\.\pipe\bifrost-heimdall-<user>`), periodic runtime/ADB health, `app_sync` (shortcuts for apps installed inside Android), `desktop_bridge` (native WinRT Toast forwarding, clipboard auto-sync), optional HKCU login autostart. |
 | Midgard | `bifrost-hypervisor`, `bifrost-runtime`, `bifrost-storage`, `android/midgard` | Implemented (QEMU-WHPX); Experimental (crosvm-WHPX) | Verified boot of `direct_kernel`, `bootable_image`, or `uefi_disks` bundles; persistent `userdata.img`; QMP shutdown; serial/VMM logs; DirectSound audio; optional headless `virtio-gpu-gl-pci`. |
 | Bridge | `bifrost-bridge`, `bifrost-process`, `bifrost-network` | Implemented | Loopback ADB wrapper, scoped shared folder (`/sdcard/BifrostShare`), Win32 clipboard, notification parsing + Toasts, guest processes, loopback port forwards, IPC framing and client. |
 | Valhalla | `valhalla` | Implemented | APK/APKM inspection (Zip-Slip, AXML, SHA-256, ADR-0004 ABI), `pm`/`am` install/launch/stop, Desktop & Start Menu `.lnk` + `.ico`, HKCU file association. |
@@ -100,7 +100,6 @@ BIFRÖST does not bundle a VMM or ADB. It drives the following external processe
 | `crosvm` (Windows build) | `bifrost-hypervisor` (optional backend) | BSD-3-Clause; no official Windows binary yet |
 | `adb` (Android platform-tools) | `bifrost-bridge` | Apache-2.0 |
 | `scrcpy >= 3.0` | `bifrost-display` | Apache-2.0 |
-| `powershell.exe` | Toasts, shortcuts, HKCU registration | Fixed scripts; all dynamic values passed via environment variables |
 
 ---
 
@@ -140,7 +139,7 @@ Launching an app or double-clicking an `.apk` while Midgard is stopped triggers 
 | **ADB transport** | Remote takeover of the Android guest | Bound to `127.0.0.1` by default; non-loopback requires `allow_non_loopback_adb = true` |
 | **Host → guest shell** | Command injection through `adb shell` (which evaluates arguments with `sh`) | Arbitrary data such as clipboard text is streamed through stdin to a fixed script (`run_adb_with_stdin`); other host-controlled values are quoted with `quote_android_shell_arg` or validated against strict character sets |
 | **APK & file operations** | Path traversal, Zip Slip, malicious install scripts | Path validation, Zip-Slip rejection for outer and inner archives, installs delegated strictly to Android `pm` |
-| **Host scripting (PowerShell)** | Script injection via app labels or notification text | Fixed static scripts; all dynamic data passed through environment variables; Toast XML is XML-escaped |
+| **Windows integration** | Script injection via app labels or notification text | No scripts at runtime: Toasts use WinRT under the `BIFROST.Bifrost` AppUserModelID, registry writes use `winreg`, `.lnk` files are written natively (`mslnk`), file pickers use `IFileOpenDialog` (`rfd`); Toast XML is XML-escaped |
 | **VM control (QMP)** | Local processes or other users powering off or controlling the VM | QMP is exposed only on a Windows named pipe with a random 128-bit name (`pipe:bifrost-qmp-<hex>`), never on TCP; other users only get read access through the default DACL, and the pipe accepts a single client |
 | **Runtime images** | Tampered or untrusted OS images | SHA-256 digest verification of every artifact before boot; Ed25519 signature must verify against `[images] trusted_keys`; unsigned bundles only with explicit `--allow-unsigned` (ADR-0006) |
 | **Destructive operations** | Accidental wipe of Android `userdata` | Separate persistent `userdata.img`; `--confirm` required for restore/wipe; uninstaller purges only with `-PurgeUserData -ConfirmPurge` |
