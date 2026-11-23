@@ -22,6 +22,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   - `uninstall-bifrost.ps1` also removes the AppUserModelID key.
 - **Breaking**: removed `bifrost images register --pubkey`; trusted keys come only from `bifrost.toml`.
 
+### Added
+- **Release pipeline (`.github/workflows/release.yml`, `build-release-bundle.ps1`)**: `vX.Y.Z` tags trigger an MSVC release build with quality gates, optional Authenticode signing (secrets-driven; signing happens before hashing), a Sigstore build-provenance attestation, and a GitHub Release whose notes come from this changelog. The packager also bundles the installer scripts and `LICENSE`, emits a versioned `.zip` with its `.sha256`, builds with `--locked`, and refuses to wipe an output directory that is not a previous bundle.
+
 ### Fixed
 - Non-Windows stubs in `valhalla` referenced a non-existent `BifrostError::Unsupported` field and would not compile off Windows.
 

@@ -39,6 +39,7 @@ main        # Stable releases only — never commit directly to main
    cargo build --workspace
    ```
 4. Integrate completed work into `develop` with `--no-ff`.
+5. Releases: prepare `release/vX.Y.Z` (version bump + `CHANGELOG.md` section), merge it into `main` and `develop`, then push the `vX.Y.Z` tag. Release binaries are built only by `.github/workflows/release.yml` (see `installer/README.md`).
 
 ## Rust Coding Standards
 
