@@ -21,8 +21,8 @@ use bifrost_process::{AndroidProcess, ProcessManager};
 use bifrost_runtime::{MidgardRuntime, RuntimeLogs, RuntimeRecord, StartOptions};
 use bifrost_storage::registry::DEFAULT_USERDATA_COMPAT_VERSION;
 use bifrost_storage::{
-    backup_userdata, restore_userdata, verify_manifest_file, BackupMetadata, ImageRegistry,
-    InstalledImageRecord,
+    backup_userdata, evaluate_manifest_trust, restore_userdata, verify_manifest_file,
+    BackupMetadata, ImageRegistry, InstalledImageRecord,
 };
 use serde::Serialize;
 use valhalla::manager::{InstallOutcome, LaunchOutcome};
@@ -745,13 +745,26 @@ pub fn list_images() -> Result<ImageRegistry> {
     ImageRegistry::load(&paths.images_dir)
 }
 
-/// Verifies a Midgard `manifest.json` bundle (SHA-256) and registers it in the local catalog.
-pub fn register_image(manifest_path: PathBuf) -> Result<InstalledImageRecord> {
-    let (_, _, paths) = load_config_and_paths()?;
+/// Verifies a Midgard `manifest.json` bundle (trust policy + SHA-256) and registers it.
+///
+/// A detached `manifest.json.sig` must verify against `[images] trusted_keys`; unsigned
+/// bundles are only accepted when the user explicitly ticks "allow unsigned".
+pub fn register_image(
+    manifest_path: PathBuf,
+    allow_unsigned: bool,
+) -> Result<InstalledImageRecord> {
+    let (_, config, paths) = load_config_and_paths()?;
     let safe_manifest = validate_host_file_path(&manifest_path, Some("json"))?;
+    let trust = evaluate_manifest_trust(
+        &safe_manifest,
+        None,
+        &config.images.trusted_keys,
+        allow_unsigned,
+    )?;
     let bundle = verify_manifest_file(&safe_manifest)?;
     let mut registry = ImageRegistry::load(&paths.images_dir)?;
-    let record = registry.register_bundle(&bundle, false, DEFAULT_USERDATA_COMPAT_VERSION)?;
+    let record =
+        registry.register_bundle(&bundle, trust.is_signed(), DEFAULT_USERDATA_COMPAT_VERSION)?;
     registry.save(&paths.images_dir)?;
     Ok(record)
 }
