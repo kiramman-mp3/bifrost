@@ -166,6 +166,7 @@ dependencies = [
  "bifrost-core",
  "getrandom 0.2.17",
  "hex",
+ "proptest",
  "serde",
  "serde_json",
  "tempfile",
@@ -180,6 +181,7 @@ name = "bifrost-core"
 version = "0.3.3"
 dependencies = [
  "directories",
+ "proptest",
  "serde",
  "serde_json",
  "tempfile",
@@ -231,6 +233,7 @@ version = "0.3.3"
 dependencies = [
  "bifrost-bridge",
  "bifrost-core",
+ "proptest",
  "serde",
 ]
 
@@ -240,6 +243,7 @@ version = "0.3.3"
 dependencies = [
  "bifrost-bridge",
  "bifrost-core",
+ "proptest",
  "serde",
 ]
 
@@ -263,6 +267,7 @@ dependencies = [
  "bifrost-core",
  "ed25519-dalek",
  "hex",
+ "proptest",
  "serde",
  "serde_json",
  "sha2 0.10.9",
