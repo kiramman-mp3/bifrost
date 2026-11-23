@@ -10,7 +10,7 @@
 
 **BIFRÖST** is an open-source, Rust-powered Android subsystem for Windows 11 x64 designed to run real Android applications with deep native desktop integration — *"A Bridge Between Worlds."*
 
-Inspired by Bifröst from Norse mythology and engineered as a modern, auditable, community-maintained successor to Microsoft's discontinued Windows Subsystem for Android (WSA), BIFRÖST v0.3.2 delivers **Milestones 0 through 8 plus full WSA-grade desktop integration** across a modular Rust workspace (`13` crates, `69` passing tests): native Windows 11 / WHPX + host tooling diagnostics, invisible headless auto-boot on app launch or APK/APKM install, QEMU-WHPX with DirectSound audio + `virtio-gpu-pci` / experimental headless `virtio-gpu-gl-pci` + `crosvm-WHPX` backend, Heimdall authenticated Named Pipe daemon with optional silent Windows login autostart + automatic in-Android shortcut sync + real-time Windows 11 Toast notifications + auto clipboard sync, unprivileged `HKCU` `.apk` / `.apkm` Explorer double-click & context menu handler, Valhalla APK/APKM split-bundle & ABI manager, WSA-style dedicated dynamically resizable per-app windows (`--flex-display`), Windows 11 Fluent Design 2 Tauri 2 desktop app (with native file/folder pickers, `.apk`/`.apkm` drag-and-drop, and Midgard Images & Recovery management), and unprivileged Windows installer.
+Inspired by Bifröst from Norse mythology and engineered as a modern, auditable, community-maintained successor to Microsoft's discontinued Windows Subsystem for Android (WSA), BIFRÖST v0.3.2 delivers **Milestones 0 through 8 plus full WSA-grade desktop integration** across a modular Rust workspace (`13` crates, `70` passing tests): native Windows 11 / WHPX + host tooling diagnostics, invisible headless auto-boot on app launch or APK/APKM install, QEMU-WHPX with dedicated `iothread` VirtIO block I/O + DirectSound audio + `virtio-gpu-pci` / experimental headless `virtio-gpu-gl-pci` (`blob=on,hostmem=256M`) + `crosvm-WHPX` backend, Heimdall authenticated Named Pipe daemon with optional silent Windows login autostart + automatic in-Android shortcut sync + real-time Windows 11 Toast notifications + auto clipboard sync, unprivileged `HKCU` `.apk` / `.apkm` Explorer double-click & context menu handler, Valhalla single-pass APK/APKM split-bundle & ABI manager, WSA-style dedicated dynamically resizable per-app windows (`--flex-display`, 60 FPS), Windows 11 Fluent Design 2 Tauri 2 desktop app (with host auto-tune, cached instant refreshes, native file/folder pickers, `.apk`/`.apkm` drag-and-drop, and Midgard Images & Recovery management), and unprivileged Windows installer.
 
 > [!TIP]
 > **Quick start (`v0.3.2`)**: Download the latest Windows x64 release bundle or run directly from source:
@@ -66,7 +66,7 @@ The `bifrost-ui` Windows 11 Fluent Design 2 desktop application (`apps/bifrost-u
 - **Frontend / Desktop UI**: Tauri 2 (`apps/bifrost-ui`), WebView2, offline-first HTML/CSS/ES with Windows 11 Fluent Design 2 styling (Dark & Light themes).
 - **Backend & Control Plane**: Rust (`edition = "2021"`, `rust-version = "1.80"`), Cargo workspace (`13` crates), `tokio`, `serde`, `serde_json`, `toml`, `tracing`, `thiserror`, `clap`, `sha2`, `ed25519-dalek`, `zip`, `windows` crate.
 - **Virtualization & Android Guest**: Windows Hypervisor Platform (`WHPX`), QEMU `11.1.0` (`q35,accel=whpx`, EDK2 UEFI `pflash`, VirtIO storage/net/serial/RNG, QMP) and `crosvm` (`whpx` + `gfxstream`), Android `x86_64` VirtIO / AOSP / LineageOS, `adb`, `scrcpy >= 3.0`.
-- **Testing & Quality Gates**: `cargo test --workspace` (`69` passing tests), `cargo clippy --workspace --all-targets -- -D warnings`, `cargo fmt --all -- --check`.
+- **Testing & Quality Gates**: `cargo test --workspace` (`70` passing tests), `cargo clippy --workspace --all-targets -- -D warnings`, `cargo fmt --all -- --check`.
 - **Distribution & CI**: PowerShell release packager (`build-release-bundle.ps1`), unprivileged SHA-256-verified Windows user-space installer/uninstaller (`install-bifrost.ps1`, `uninstall-bifrost.ps1`), and GitHub Actions Windows CI (`.github/workflows/ci.yml`).
 
 ---
@@ -326,13 +326,13 @@ cargo build --workspace
 |---|---|---|
 | `cargo fmt --all -- --check` | Verify Rust code formatting across workspace | **Implemented** |
 | `cargo clippy --workspace --all-targets -- -D warnings` | Run strict Clippy static analysis | **Implemented** |
-| `cargo test --workspace` | Execute unit & IPC tests (`69` tests across 13 workspace crates) | **Implemented** |
+| `cargo test --workspace` | Execute unit & IPC tests (`70` tests across 13 workspace crates) | **Implemented** |
 | `cargo run -p bifrost-ui` | Launch BIFRÖST Windows 11 Fluent Design desktop application | **Implemented** |
 | `heimdall run` | Start background Heimdall supervisor on owner-DACL Windows Named Pipe | **Implemented** |
 | `bifrost version [--json]` | Display BIFRÖST version, host target, and capability maturity | **Implemented** |
 | `bifrost status [--json]` | Display reconciled Midgard runtime state and live Heimdall IPC status | **Implemented** |
 | `bifrost daemon start \| status \| stop \| autostart` | Start detached Heimdall daemon, query health, stop over IPC, or toggle silent HKCU login autostart | **Implemented** |
-| `bifrost config init \| show \| validate` | Initialize, inspect, and validate `bifrost.toml` | **Implemented** |
+| `bifrost config init \| show \| validate \| autotune` | Initialize, inspect, validate, or host-autotune CPU/RAM in `bifrost.toml` | **Implemented** |
 | `bifrost doctor [--strict] [--json]` | Inspect Windows 11 edition, CPU, virtualization, WHPX, RAM, storage, GPU, and host runtime tooling | **Implemented** |
 | `bifrost runtime start \| stop \| restart \| verify` | Verify image SHA-256 digests and manage Midgard WHPX VM lifecycle | **Implemented** |
 | `bifrost logs [--tail N]` | Inspect Midgard serial console and VMM stderr logs | **Implemented** |
@@ -410,7 +410,7 @@ See [ROADMAP.md](ROADMAP.md) for detailed milestone exit criteria.
 
 | Contributor | Commits |
 |---|---:|
-| Johan Rodríguez | 141 |
+| Johan Rodríguez | 145 |
 
 ---
 
