@@ -11,7 +11,7 @@ use bifrost_storage::{DiskMedia, VerifiedBootMedia};
 use tracing::{info, warn};
 
 use crate::backend::{HypervisorBackend, VmLaunchInfo, VmSpec};
-use crate::qmp::{pipe_endpoint, validate_qmp_pipe_name, QmpSession};
+use crate::qmp::{socket_endpoint, validate_qmp_socket_path, QmpSession};
 
 /// QEMU-over-WHPX implementation of [`HypervisorBackend`].
 #[derive(Debug, Clone, Default)]
@@ -277,11 +277,15 @@ impl HypervisorBackend for QemuWhpxBackend {
         args.push("-device".to_string());
         args.push("virtio-net-pci,netdev=net0".to_string());
 
-        // QMP control channel for graceful ACPI shutdown over a randomly named Windows
-        // pipe (QMP has no authentication, so it must not listen on a TCP port).
-        validate_qmp_pipe_name(&spec.qmp_pipe_name)?;
+        // QMP control channel for graceful ACPI shutdown over a per-user AF_UNIX socket
+        // (QMP has no authentication, so it must not listen on a TCP port).
+        // `wait=off` keeps QEMU from blocking start-up until a client connects.
+        validate_qmp_socket_path(&spec.qmp_socket_path)?;
         args.push("-chardev".to_string());
-        args.push(format!("pipe,id=qmp0,path={}", spec.qmp_pipe_name));
+        args.push(format!(
+            "socket,id=qmp0,path={},server=on,wait=off",
+            spec.qmp_socket_path.display()
+        ));
         args.push("-mon".to_string());
         args.push("chardev=qmp0,mode=control".to_string());
 
@@ -429,7 +433,7 @@ impl HypervisorBackend for QemuWhpxBackend {
             command_line,
             serial_log_path: spec.serial_log_path.clone(),
             vmm_stderr_path: spec.vmm_stderr_path.clone(),
-            qmp_endpoint: pipe_endpoint(&spec.qmp_pipe_name),
+            qmp_endpoint: socket_endpoint(&spec.qmp_socket_path),
             adb_endpoint: format!("{}:{}", spec.adb_bind_address, spec.adb_port),
         })
     }
@@ -696,7 +700,9 @@ mod tests {
             interactive_console: false,
             serial_log_path: PathBuf::from(r"C:\data\logs\serial.log"),
             vmm_stderr_path: PathBuf::from(r"C:\data\logs\vmm.stderr.log"),
-            qmp_pipe_name: "bifrost-qmp-00112233445566778899aabbccddeeff".to_string(),
+            qmp_socket_path: PathBuf::from(
+                r"C:\data\run\qmp-00112233445566778899aabbccddeeff.sock",
+            ),
         }
     }
 
@@ -714,8 +720,9 @@ mod tests {
         assert!(joined.contains("cache=writeback,aio=threads"));
         assert!(joined.contains("virtio-blk-pci,drive=userdata,iothread=io0"));
         assert!(joined.contains("hostfwd=tcp:127.0.0.1:5555-:5555"));
-        assert!(joined
-            .contains("-chardev pipe,id=qmp0,path=bifrost-qmp-00112233445566778899aabbccddeeff"));
+        assert!(joined.contains(
+            r"-chardev socket,id=qmp0,path=C:\data\run\qmp-00112233445566778899aabbccddeeff.sock,server=on,wait=off"
+        ));
         assert!(joined.contains("-mon chardev=qmp0,mode=control"));
         assert!(!args.iter().any(|a| a == "-qmp"));
         assert!(joined.contains("-vga none"));
