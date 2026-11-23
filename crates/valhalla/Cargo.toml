@@ -26,3 +26,6 @@ zip.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 winreg.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
