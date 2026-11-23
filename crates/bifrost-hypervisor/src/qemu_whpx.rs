@@ -104,6 +104,8 @@ impl HypervisorBackend for QemuWhpxBackend {
             spec.cpu_cores.to_string(),
             "-device".to_string(),
             "virtio-rng-pci".to_string(),
+            "-object".to_string(),
+            "iothread,id=io0".to_string(),
             "-no-reboot".to_string(),
         ];
 
@@ -223,15 +225,23 @@ impl HypervisorBackend for QemuWhpxBackend {
                         stage_writable_copy(&disk.path, spec.userdata_disk.parent(), &staged_name)?
                     };
                     let ro = if disk.read_only { "on" } else { "off" };
+                    let cache_opts = if disk.read_only {
+                        ""
+                    } else {
+                        ",cache=writeback,aio=threads"
+                    };
                     args.push("-drive".to_string());
                     args.push(format!(
-                        "if=none,id={},file={},format={},readonly={ro},discard=unmap,detect-zeroes=unmap",
+                        "if=none,id={},file={},format={},readonly={ro},discard=unmap,detect-zeroes=unmap{cache_opts}",
                         disk.id,
                         path_to_arg(&effective_path)?,
                         disk.format.as_qemu_format()
                     ));
                     args.push("-device".to_string());
-                    args.push(format!("virtio-blk-pci,drive={},bootindex={idx}", disk.id));
+                    args.push(format!(
+                        "virtio-blk-pci,drive={},bootindex={idx},iothread=io0",
+                        disk.id
+                    ));
                 }
 
                 // VirtIO serial + USB HID peripherals expected by LineageOS virtio_x86_64.
@@ -250,12 +260,12 @@ impl HypervisorBackend for QemuWhpxBackend {
         if attach_separate_userdata {
             args.push("-drive".to_string());
             args.push(format!(
-                "if=none,id=userdata,file={},format={}",
+                "if=none,id=userdata,file={},format={},cache=writeback,aio=threads",
                 path_to_arg(&spec.userdata_disk)?,
                 spec.userdata_format.as_qemu_format()
             ));
             args.push("-device".to_string());
-            args.push("virtio-blk-pci,drive=userdata".to_string());
+            args.push("virtio-blk-pci,drive=userdata,iothread=io0".to_string());
         }
 
         // Networking with strictly scoped ADB port forwarding.
@@ -282,7 +292,7 @@ impl HypervisorBackend for QemuWhpxBackend {
         // use QEMU's `virtio-gpu-gl-pci` + `egl-headless` (ANGLE/virgl on Windows).
         let use_headless_gl = spec.headless && spec.graphics_mode == GraphicsMode::Gfxstream;
         let gpu_device = if use_headless_gl {
-            "virtio-gpu-gl-pci,xres=1280,yres=720"
+            "virtio-gpu-gl-pci,xres=1280,yres=720,blob=on,hostmem=256M"
         } else {
             "virtio-gpu-pci,xres=1280,yres=720"
         };
@@ -367,7 +377,13 @@ impl HypervisorBackend for QemuWhpxBackend {
             {
                 use std::os::windows::process::CommandExt;
                 const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
-                cmd.creation_flags(CREATE_NEW_PROCESS_GROUP);
+                const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+                let flags = if spec.headless {
+                    CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW
+                } else {
+                    CREATE_NEW_PROCESS_GROUP
+                };
+                cmd.creation_flags(flags);
             }
         }
 
@@ -679,8 +695,10 @@ mod tests {
         assert!(joined.contains("q35,accel=whpx,kernel-irqchip=off"));
         assert!(joined.contains("-kernel C:\\images\\bzImage"));
         assert!(joined.contains("-initrd C:\\images\\ramdisk.img"));
+        assert!(joined.contains("-object iothread,id=io0"));
         assert!(joined.contains("virtio-blk-pci,drive=super"));
-        assert!(joined.contains("virtio-blk-pci,drive=userdata"));
+        assert!(joined.contains("cache=writeback,aio=threads"));
+        assert!(joined.contains("virtio-blk-pci,drive=userdata,iothread=io0"));
         assert!(joined.contains("hostfwd=tcp:127.0.0.1:5555-:5555"));
         assert!(joined.contains("tcp:127.0.0.1:4444,server=on,wait=off"));
         assert!(joined.contains("-vga none"));
@@ -689,12 +707,14 @@ mod tests {
         assert!(joined.contains("hda-duplex,audiodev=snd0"));
         assert!(joined.contains("-display none"));
 
-        // Explicit Gfxstream in headless mode selects virtio-gpu-gl-pci + egl-headless.
+        // Explicit Gfxstream in headless mode selects virtio-gpu-gl-pci (blob + hostmem) + egl-headless.
         let mut gl_spec = sample_direct_kernel_spec();
         gl_spec.graphics_mode = GraphicsMode::Gfxstream;
         gl_spec.headless = true;
         let gl_joined = backend.build_args(&gl_spec).unwrap().join(" ");
-        assert!(gl_joined.contains("-device virtio-gpu-gl-pci,xres=1280,yres=720"));
+        assert!(
+            gl_joined.contains("-device virtio-gpu-gl-pci,xres=1280,yres=720,blob=on,hostmem=256M")
+        );
         assert!(gl_joined.contains("-display egl-headless"));
     }
 

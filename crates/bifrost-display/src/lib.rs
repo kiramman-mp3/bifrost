@@ -141,17 +141,15 @@ impl DisplayController {
         )))
     }
 
-    /// Enables Android freeform and resizable-activity settings required for clean independent windows.
+    /// Enables Android freeform and resizable-activity settings in a single `adb shell` call
+    /// to minimize per-app window launch latency.
     pub fn prepare_android_freeform(&self, serial: &str) -> Result<()> {
-        for (key, val) in [
-            ("enable_freeform_support", "1"),
-            ("force_resizable_activities", "1"),
-            ("enable_non_resizable_multi_window", "1"),
-        ] {
-            let _ = self
-                .adb
-                .run_adb(&["-s", serial, "shell", "settings", "put", "global", key, val])?;
-        }
+        let _ = self.adb.run_adb(&[
+            "-s",
+            serial,
+            "shell",
+            "settings put global enable_freeform_support 1 && settings put global force_resizable_activities 1 && settings put global enable_non_resizable_multi_window 1",
+        ])?;
         Ok(())
     }
 
@@ -188,6 +186,8 @@ impl DisplayController {
             "--no-vd-system-decorations".to_string(),
             "--display-ime-policy=local".to_string(),
             "--mouse-bind=b+++".to_string(),
+            "--max-fps=60".to_string(),
+            "--video-bit-rate=12M".to_string(),
             format!("--start-app=+{package}"),
             format!("--window-title={title}"),
         ])
@@ -286,6 +286,8 @@ mod tests {
         assert!(args.contains(&"--no-vd-system-decorations".to_string()));
         assert!(args.contains(&"--display-ime-policy=local".to_string()));
         assert!(args.contains(&"--mouse-bind=b+++".to_string()));
+        assert!(args.contains(&"--max-fps=60".to_string()));
+        assert!(args.contains(&"--video-bit-rate=12M".to_string()));
         assert!(args.contains(&"--start-app=+org.fdroid.fdroid".to_string()));
         assert!(!args.contains(&"--no-vd-destroy-content".to_string()));
 

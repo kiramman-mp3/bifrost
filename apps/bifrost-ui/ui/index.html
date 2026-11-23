@@ -215,8 +215,8 @@
             <div class="form-row">
               <label for="cfg-graphics">Graphics Mode</label>
               <select id="cfg-graphics">
-                <option value="auto">Auto (virtio-gpu + gfxstream / fallback)</option>
-                <option value="gfxstream">gfxstream (Hardware 3D)</option>
+                <option value="auto">Auto (virtio-gpu-pci 2D — Recommended Default)</option>
+                <option value="gfxstream">Hardware 3D Headless (virtio-gpu-gl + ANGLE/virgl, Experimental)</option>
                 <option value="swift_shader">SwiftShader (CPU Diagnostics)</option>
               </select>
             </div>
@@ -274,6 +274,7 @@
 
             <div class="actions full-span">
               <button class="btn primary" type="submit">Validate &amp; Save Configuration</button>
+              <button class="btn" id="btn-autotune-config" type="button">Auto-Tune for this PC</button>
               <span class="muted small-text" id="cfg-path-label"></span>
             </div>
           </form>

@@ -87,6 +87,36 @@ pub struct RuntimeConfig {
     pub data_dir: Option<PathBuf>,
 }
 
+impl RuntimeConfig {
+    /// Computes recommended `(cpu_cores, memory_mb)` allocations for a given host
+    /// while preserving generous headroom for Windows 11.
+    #[must_use]
+    pub fn recommend_for_host(logical_cores: u32, total_ram_bytes: u64) -> (u32, u64) {
+        const GIB: u64 = 1024 * 1024 * 1024;
+        let cpu_cores = if logical_cores >= 12 {
+            8
+        } else if logical_cores >= 8 {
+            6
+        } else if logical_cores >= 4 {
+            4
+        } else {
+            2
+        };
+
+        let memory_mb = if total_ram_bytes >= 28 * GIB {
+            8192
+        } else if total_ram_bytes >= 15 * GIB {
+            6144
+        } else if total_ram_bytes >= 10 * GIB {
+            4096
+        } else {
+            2048
+        };
+
+        (cpu_cores, memory_mb)
+    }
+}
+
 impl Default for RuntimeConfig {
     fn default() -> Self {
         Self {
@@ -353,5 +383,14 @@ mod tests {
         cfg.save_to_file(&file, true).unwrap();
         let reloaded = BifrostConfig::load_from_file(&file).unwrap();
         assert_eq!(cfg, reloaded);
+    }
+
+    #[test]
+    fn recommends_safe_host_tuned_cpu_and_memory() {
+        const GIB: u64 = 1024 * 1024 * 1024;
+        assert_eq!(RuntimeConfig::recommend_for_host(16, 32 * GIB), (8, 8192));
+        assert_eq!(RuntimeConfig::recommend_for_host(8, 16 * GIB), (6, 6144));
+        assert_eq!(RuntimeConfig::recommend_for_host(4, 12 * GIB), (4, 4096));
+        assert_eq!(RuntimeConfig::recommend_for_host(2, 8 * GIB), (2, 2048));
     }
 }

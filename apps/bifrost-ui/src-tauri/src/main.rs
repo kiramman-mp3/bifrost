@@ -65,6 +65,11 @@ fn save_config(config: BifrostConfig) -> Result<PathBuf, String> {
 }
 
 #[tauri::command]
+fn auto_tune_config() -> Result<BifrostConfig, String> {
+    map_err(service::auto_tune_config())
+}
+
+#[tauri::command]
 async fn start_runtime(manifest_path: PathBuf, headless: bool) -> Result<RuntimeRecord, String> {
     map_err(service::start_runtime(manifest_path, headless).await)
 }
@@ -252,6 +257,7 @@ fn main() {
             set_heimdall_autostart,
             get_doctor_report,
             save_config,
+            auto_tune_config,
             start_runtime,
             stop_runtime,
             restart_runtime,

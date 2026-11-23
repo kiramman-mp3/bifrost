@@ -4,6 +4,7 @@
 //! logic lives strictly in Rust here; the WebView frontend is purely presentational.
 
 use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
 
 use bifrost_bridge::{
     default_pipe_name, read_host_clipboard_text, AdbClient, AdbDevice, DaemonHealthReport,
@@ -69,6 +70,39 @@ pub fn load_config_and_paths() -> Result<(PathBuf, BifrostConfig, BifrostPaths)>
     Ok((config_path, config, paths))
 }
 
+static DOCTOR_CACHE: OnceLock<Mutex<Option<DoctorReport>>> = OnceLock::new();
+static AUTOSTART_CACHE: OnceLock<Mutex<Option<bool>>> = OnceLock::new();
+
+fn cached_doctor(config: &BifrostConfig, data_dir: &std::path::Path) -> DoctorReport {
+    let lock = DOCTOR_CACHE.get_or_init(|| Mutex::new(None));
+    if let Ok(guard) = lock.lock() {
+        if let Some(ref cached) = *guard {
+            return cached.clone();
+        }
+    }
+    let fresh = run_doctor(config, data_dir);
+    if let Ok(mut guard) = lock.lock() {
+        *guard = Some(fresh.clone());
+    }
+    fresh
+}
+
+fn cached_autostart() -> bool {
+    let lock = AUTOSTART_CACHE.get_or_init(|| Mutex::new(None));
+    if let Ok(guard) = lock.lock() {
+        if let Some(val) = *guard {
+            return val;
+        }
+    }
+    let val = query_heimdall_autostart()
+        .map(|s| s.enabled)
+        .unwrap_or(false);
+    if let Ok(mut guard) = lock.lock() {
+        *guard = Some(val);
+    }
+    val
+}
+
 fn heimdall_client(paths: &BifrostPaths) -> HeimdallClient {
     HeimdallClient::new(default_pipe_name(), &paths.data_dir)
 }
@@ -120,16 +154,14 @@ pub async fn get_dashboard_snapshot() -> Result<DashboardSnapshot> {
         AdbClient::new().list_devices().unwrap_or_default()
     };
 
-    let doctor = run_doctor(&config, &paths.data_dir);
+    let doctor = cached_doctor(&config, &paths.data_dir);
     let share_root = paths.data_dir.join("shared");
     let shared_file_count = SharedDirectoryBridge::new(share_root, AdbClient::new())
         .list_host_files()
         .map(|v| v.len())
         .unwrap_or(0);
     let clipboard_has_text = read_host_clipboard_text().ok().flatten().is_some();
-    let heimdall_autostart = query_heimdall_autostart()
-        .map(|s| s.enabled)
-        .unwrap_or(false);
+    let heimdall_autostart = cached_autostart();
 
     Ok(DashboardSnapshot {
         version: VersionInfo::current(),
@@ -151,7 +183,12 @@ pub async fn get_dashboard_snapshot() -> Result<DashboardSnapshot> {
 
 /// Enables or disables unprivileged Windows login autostart for Heimdall.
 pub fn set_heimdall_autostart(enabled: bool) -> Result<HeimdallAutostartStatus> {
-    apply_heimdall_autostart(enabled)
+    let status = apply_heimdall_autostart(enabled)?;
+    let lock = AUTOSTART_CACHE.get_or_init(|| Mutex::new(None));
+    if let Ok(mut guard) = lock.lock() {
+        *guard = Some(status.enabled);
+    }
+    Ok(status)
 }
 
 /// Starts the Heimdall background supervisor daemon cleanly detached without a console window.
@@ -224,10 +261,29 @@ fn locate_heimdall_bin() -> Result<PathBuf> {
     ))
 }
 
-/// Runs native Windows 11 compatibility checks (`bifrost doctor`).
+/// Runs fresh native Windows 11 compatibility checks (`bifrost doctor`) and refreshes cache.
 pub fn get_doctor_report() -> Result<DoctorReport> {
     let (_, config, paths) = load_config_and_paths()?;
-    Ok(run_doctor(&config, &paths.data_dir))
+    let report = run_doctor(&config, &paths.data_dir);
+    let lock = DOCTOR_CACHE.get_or_init(|| Mutex::new(None));
+    if let Ok(mut guard) = lock.lock() {
+        *guard = Some(report.clone());
+    }
+    Ok(report)
+}
+
+/// Computes and persists host-optimal CPU and RAM allocations into `bifrost.toml`.
+pub fn auto_tune_config() -> Result<BifrostConfig> {
+    let (config_path, mut config, paths) = load_config_and_paths()?;
+    let doctor = cached_doctor(&config, &paths.data_dir);
+    let (cpu_cores, memory_mb) = bifrost_core::config::RuntimeConfig::recommend_for_host(
+        doctor.snapshot.cpu.logical_cores,
+        doctor.snapshot.memory.total_bytes,
+    );
+    config.runtime.cpu_cores = cpu_cores;
+    config.runtime.memory_mb = memory_mb;
+    config.save_to_file(&config_path, true)?;
+    Ok(config)
 }
 
 /// Validates and persists updated configuration to `bifrost.toml`.
