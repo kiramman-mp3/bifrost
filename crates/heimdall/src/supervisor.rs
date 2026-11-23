@@ -96,21 +96,32 @@ impl SupervisorState {
             }
         };
 
+        // Skip spawning `adb.exe` altogether when Midgard is stopped (near-0% idle CPU).
         let adb_available = self.adb.locate_adb().is_ok();
-        let devices = if adb_available {
+        let devices = if adb_available && runtime_state.is_active() {
             self.adb.list_devices().unwrap_or_default()
         } else {
             Vec::new()
         };
 
-        // If Midgard is active and its loopback ADB endpoint appears online, probe Android guest health.
+        // Only probe full Android guest properties while booting or until boot_completed is confirmed;
+        // once running and online, reuse the cached guest_health to avoid 5 extra `adb getprop` calls per tick.
+        let prev_guest = self.health.read().await.guest_health.clone();
         let guest_health = if runtime_state.is_active() {
             if let Some(ref endpoint) = adb_endpoint {
-                if devices
+                let endpoint_online = devices
                     .iter()
-                    .any(|d| d.serial == *endpoint && d.state == "device")
-                {
-                    self.adb.probe_guest_health(endpoint).ok()
+                    .any(|d| d.serial == *endpoint && d.state == "device");
+                if endpoint_online {
+                    if runtime_state == RuntimeState::Running
+                        && prev_guest
+                            .as_ref()
+                            .is_some_and(|g| g.serial == *endpoint && g.boot_completed)
+                    {
+                        prev_guest
+                    } else {
+                        self.adb.probe_guest_health(endpoint).ok()
+                    }
                 } else {
                     None
                 }

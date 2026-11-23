@@ -27,9 +27,9 @@ Inspection of `C:\Program Files\qemu\` confirms official QEMU 11.1.0 for Windows
 - **Result**: QEMU starts but repeatedly logs `qemu: GtkGLArea console lacks DMABUF support.` because Windows lacks Linux `DMABUF` file-descriptor sharing required by GTK's GL scanout path.
 - **Decision**: Do **not** enable `gtk,gl=es` for graphical QEMU windows. Keep `-display gtk,zoom-to-fit=on` + `-device virtio-gpu-pci,xres=1280,yres=720` as the reliable default (verified full Android 17 / LineageOS 24.0 boot in ~28s, zero freeze).
 
-### 2.3 Headless ANGLE / virgl Probe (`-device virtio-gpu-gl-pci -display egl-headless`)
-- **Result**: Initialized cleanly on Intel Arc 140T over WHPX (`EGL_HEADLESS_ALIVE=True`, **empty stderr**).
-- **Decision**: Exposed as an opt-in experimental mode in `QemuWhpxBackend` when `runtime.graphics_mode = "gfxstream"` AND Midgard runs in `--headless` mode (the primary WSA-style zero-friction path where per-app rendering uses hardware `D3D11VA` decoding in `bifrost-display`).
+### 2.3 Headless ANGLE / virgl Probe (`-device virtio-gpu-gl-pci,blob=on,hostmem=256M -display egl-headless`)
+- **Result**: Initialized cleanly on Intel Arc 140T over WHPX alongside dedicated VirtIO block `iothread` (`-object iothread,id=io0`, `cache=writeback,aio=threads`) with zero graphics or block errors (`PROBE_ALIVE=True`).
+- **Decision**: Exposed as an opt-in experimental mode in `QemuWhpxBackend` when `runtime.graphics_mode = "gfxstream"` AND Midgard runs in `--headless` mode (the primary WSA-style zero-friction path where per-app rendering uses hardware `D3D11VA` decoding in `bifrost-display` at 60 FPS / 12 Mbps).
 
 ### 2.4 `crosvm-whpx` + `gfxstream` (ADR-0002 Target Backend)
 - **Host Integration Status**: `CrosvmWhpxBackend` is implemented and unit-tested in `crates/bifrost-hypervisor/src/crosvm_whpx.rs` (`--hypervisor whpx --gpu backend=gfxstream,egl=true,gles=true,vulkan=true`).

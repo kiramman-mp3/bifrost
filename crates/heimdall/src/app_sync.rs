@@ -9,7 +9,7 @@ use bifrost_bridge::AdbClient;
 use tracing::{debug, info, warn};
 use valhalla::{parse_resolved_activity, validate_package_name, ShortcutManager, ValhallaManager};
 
-const SYNC_EVERY_N_TICKS: u64 = 3;
+const SYNC_EVERY_N_TICKS: u64 = 6;
 
 /// Stateful background synchronizer embedded inside Heimdall's health loop.
 #[derive(Debug, Default)]
