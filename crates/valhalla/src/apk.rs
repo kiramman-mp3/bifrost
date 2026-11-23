@@ -51,6 +51,8 @@ pub struct ApkInspection {
     #[serde(default)]
     pub package_name: Option<String>,
     #[serde(default)]
+    pub app_name: Option<String>,
+    #[serde(default)]
     pub is_split_bundle: bool,
     #[serde(default)]
     pub split_apk_count: usize,
@@ -122,6 +124,7 @@ pub fn inspect_apk(path: impl AsRef<Path>) -> Result<ApkInspection> {
         has_android_manifest: single.has_android_manifest,
         has_dex: single.has_dex,
         package_name: single.package_name,
+        app_name: None,
         is_split_bundle: false,
         split_apk_count: 1,
         detected_abis,
@@ -258,6 +261,7 @@ fn inspect_apkm_bundle(
         has_android_manifest,
         has_dex,
         package_name,
+        app_name: extracted.info_app_name,
         is_split_bundle: true,
         split_apk_count: extracted.all_split_apks.len(),
         detected_abis,
@@ -269,6 +273,7 @@ struct ExtractedApkm {
     outer_entry_count: usize,
     all_split_apks: Vec<PathBuf>,
     info_package_name: Option<String>,
+    info_app_name: Option<String>,
 }
 
 fn is_base_apk_path(path: &Path) -> bool {
@@ -292,6 +297,7 @@ fn extract_apkm_entries(apkm_path: &Path, dest_dir: &Path) -> Result<ExtractedAp
     let outer_entry_count = archive.len();
     let mut all_split_apks = Vec::new();
     let mut info_package_name = None;
+    let mut info_app_name = None;
 
     for idx in 0..outer_entry_count {
         let mut entry = archive.by_index(idx).map_err(|err| {
@@ -316,6 +322,12 @@ fn extract_apkm_entries(apkm_path: &Path, dest_dir: &Path) -> Result<ExtractedAp
                     if let Some(pname) = json["pname"].as_str() {
                         if validate_package_name(pname).is_ok() {
                             info_package_name = Some(pname.to_string());
+                        }
+                    }
+                    if let Some(aname) = json["app_name"].as_str() {
+                        let trimmed = aname.trim();
+                        if !trimmed.is_empty() {
+                            info_app_name = Some(trimmed.to_string());
                         }
                     }
                 }
@@ -362,6 +374,7 @@ fn extract_apkm_entries(apkm_path: &Path, dest_dir: &Path) -> Result<ExtractedAp
         outer_entry_count,
         all_split_apks,
         info_package_name,
+        info_app_name,
     })
 }
 
@@ -829,7 +842,10 @@ mod tests {
         build_test_apk(
             &apkm,
             &[
-                ("info.json", br#"{"pname":"com.example.splitapp"}"#),
+                (
+                    "info.json",
+                    br#"{"pname":"com.example.splitapp","app_name":"Split Demo"}"#,
+                ),
                 ("base.apk", &std::fs::read(&base_apk).unwrap()),
                 (
                     "split_config.x86_64.apk",
@@ -849,6 +865,7 @@ mod tests {
             inspected.package_name.as_deref(),
             Some("com.example.splitapp")
         );
+        assert_eq!(inspected.app_name.as_deref(), Some("Split Demo"));
         assert!(inspected.abi_compatibility.is_supported());
         assert_eq!(inspected.detected_abis, vec!["arm64-v8a", "x86_64"]);
 

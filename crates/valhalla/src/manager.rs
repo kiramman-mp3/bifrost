@@ -222,9 +222,9 @@ impl ValhallaManager {
         });
 
         let shortcuts = if let Some(ref pkg) = resolved_package {
-            match ShortcutManager::discover()
-                .and_then(|mgr| mgr.create_for_app(pkg, None, Some(&inspection.path)))
-            {
+            match ShortcutManager::discover().and_then(|mgr| {
+                mgr.create_for_app(pkg, inspection.app_name.as_deref(), Some(&inspection.path))
+            }) {
                 Ok(rec) => Some(rec),
                 Err(err) => {
                     warn!(
