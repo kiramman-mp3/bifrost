@@ -8,7 +8,7 @@ use bifrost_core::{BifrostError, Result};
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
-use crate::apk::{extract_compatible_apkm_splits, inspect_apk, ApkInspection};
+use crate::apk::{inspect_and_stage_package, ApkInspection};
 use crate::package::{
     parse_dumpsys_package, parse_pm_list_packages, parse_resolved_activity, validate_package_name,
     InstalledPackage, PackageDetails,
@@ -143,16 +143,17 @@ impl ValhallaManager {
         Ok(details)
     }
 
-    /// Inspects and installs an APK file using Android's native `PackageManager`.
+    /// Inspects and installs an `.apk` or `.apkm` split bundle using Android's native `PackageManager`.
     ///
-    /// Enforces path traversal protection, ZIP/`AndroidManifest.xml` validation,
-    /// and ADR-0004 `x86_64` ABI verification before invoking `adb install -r`.
+    /// Performs single-pass ZIP/ABI validation, icon capture, and split staging before invoking
+    /// `adb install -r` or `adb install-multiple -r` (avoiding redundant decompression).
     pub fn install_apk(
         &self,
         serial: Option<&str>,
         apk_path: impl AsRef<Path>,
     ) -> Result<InstallOutcome> {
-        let inspection = inspect_apk(apk_path)?;
+        let staged = inspect_and_stage_package(apk_path, true)?;
+        let inspection = staged.inspection;
         if !inspection.abi_compatibility.is_supported() {
             return Err(BifrostError::UnsupportedAbi {
                 path: inspection.path,
@@ -172,17 +173,18 @@ impl ValhallaManager {
         };
 
         let pm_output = if inspection.is_split_bundle {
-            let stage_dir = tempfile::TempDir::new().map_err(|source| BifrostError::Io {
-                context: "creating staging dir for .apkm split installation".to_string(),
-                source,
-            })?;
-            let splits = extract_compatible_apkm_splits(&inspection.path, stage_dir.path())?;
+            if staged.compatible_splits.is_empty() {
+                return Err(BifrostError::Package(format!(
+                    "split bundle '{}' has no x86_64-compatible split APKs to install",
+                    inspection.path.display()
+                )));
+            }
             info!(
                 serial = %target,
                 apkm = %inspection.path.display(),
-                splits = splits.len(),
+                splits = staged.compatible_splits.len(),
                 sha256 = %inspection.sha256,
-                "installing verified .apkm split bundle via Android PackageManager (install-multiple)"
+                "installing verified .apkm split bundle via Android PackageManager (single-pass install-multiple)"
             );
             let mut owned_args = vec![
                 "-s".to_string(),
@@ -190,7 +192,7 @@ impl ValhallaManager {
                 "install-multiple".to_string(),
                 "-r".to_string(),
             ];
-            for split in &splits {
+            for split in &staged.compatible_splits {
                 owned_args.push(split.to_string_lossy().to_string());
             }
             let arg_refs: Vec<&str> = owned_args.iter().map(String::as_str).collect();
@@ -223,7 +225,12 @@ impl ValhallaManager {
 
         let shortcuts = if let Some(ref pkg) = resolved_package {
             match ShortcutManager::discover().and_then(|mgr| {
-                mgr.create_for_app(pkg, inspection.app_name.as_deref(), Some(&inspection.path))
+                mgr.create_for_app_with_icon(
+                    pkg,
+                    inspection.app_name.as_deref(),
+                    Some(&inspection.path),
+                    staged.icon_png.as_deref(),
+                )
             }) {
                 Ok(rec) => Some(rec),
                 Err(err) => {
@@ -238,6 +245,9 @@ impl ValhallaManager {
         } else {
             None
         };
+
+        // `_stage_dir` drops automatically here after `adb install-multiple` finishes.
+        drop(staged._stage_dir);
 
         Ok(InstallOutcome {
             serial: target,
