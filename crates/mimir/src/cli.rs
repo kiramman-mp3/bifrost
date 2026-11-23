@@ -421,12 +421,13 @@ pub enum ImagesAction {
         /// Path to `manifest.json`.
         #[arg(long)]
         manifest: PathBuf,
-        /// Optional 64-byte hex Ed25519 signature over `manifest.json`.
+        /// 64-byte hex Ed25519 signature over `manifest.json` (defaults to a detached
+        /// `manifest.json.sig`). Must verify against a key in `[images] trusted_keys`.
         #[arg(long)]
         signature: Option<String>,
-        /// Optional 32-byte hex Ed25519 public key (required when `--signature` is set).
+        /// Explicitly register a bundle without a signature (recorded as `sha256-only`).
         #[arg(long)]
-        pubkey: Option<String>,
+        allow_unsigned: bool,
         /// Userdata compatibility schema epoch (defaults to 1).
         #[arg(long, default_value_t = 1)]
         userdata_compat: u32,
