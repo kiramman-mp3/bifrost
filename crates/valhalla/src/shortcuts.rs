@@ -115,6 +115,18 @@ impl ShortcutManager {
         explicit_name: Option<&str>,
         apk_path: Option<&Path>,
     ) -> Result<ShortcutRecord> {
+        self.create_for_app_with_icon(package_name, explicit_name, apk_path, None)
+    }
+
+    /// Creates (or updates) Windows shortcuts using optional pre-extracted PNG icon bytes
+    /// to avoid re-opening large `.apk`/`.apkm` archives during installation.
+    pub fn create_for_app_with_icon(
+        &self,
+        package_name: &str,
+        explicit_name: Option<&str>,
+        apk_path: Option<&Path>,
+        preextracted_icon_png: Option<&[u8]>,
+    ) -> Result<ShortcutRecord> {
         validate_package_name(package_name)?;
 
         let display_name = derive_display_name(package_name, explicit_name, apk_path);
@@ -125,7 +137,8 @@ impl ShortcutManager {
             .map(Path::to_path_buf)
             .unwrap_or_else(|| self.data_dir.clone());
 
-        let (icon_file, icon_location) = self.prepare_icon(package_name, apk_path, &bifrost_exe);
+        let (icon_file, icon_location) =
+            self.prepare_icon(package_name, apk_path, preextracted_icon_png, &bifrost_exe);
         let description = format!("Launch {display_name} ({package_name}) via BIFRÖST");
 
         let (desktop_shortcut, start_menu_shortcut) = create_windows_shortcuts_via_com(
@@ -198,18 +211,25 @@ impl ShortcutManager {
         &self,
         package_name: &str,
         apk_path: Option<&Path>,
+        preextracted_icon_png: Option<&[u8]>,
         bifrost_exe: &Path,
     ) -> (Option<PathBuf>, String) {
-        if let Some(apk) = apk_path {
-            if let Some(png_bytes) = extract_apk_icon_png(apk) {
-                if let Some(ico_bytes) = wrap_png_as_ico(&png_bytes) {
-                    let icons_dir = self.icons_dir();
-                    if fs::create_dir_all(&icons_dir).is_ok() {
-                        let ico_path = icons_dir.join(format!("{package_name}.ico"));
-                        if fs::write(&ico_path, ico_bytes).is_ok() {
-                            let loc = format!("{},0", ico_path.display());
-                            return (Some(ico_path), loc);
-                        }
+        let extracted_owned;
+        let png_opt = match preextracted_icon_png {
+            Some(bytes) => Some(bytes),
+            None => {
+                extracted_owned = apk_path.and_then(extract_apk_icon_png);
+                extracted_owned.as_deref()
+            }
+        };
+        if let Some(png_bytes) = png_opt {
+            if let Some(ico_bytes) = wrap_png_as_ico(png_bytes) {
+                let icons_dir = self.icons_dir();
+                if fs::create_dir_all(&icons_dir).is_ok() {
+                    let ico_path = icons_dir.join(format!("{package_name}.ico"));
+                    if fs::write(&ico_path, ico_bytes).is_ok() {
+                        let loc = format!("{},0", ico_path.display());
+                        return (Some(ico_path), loc);
                     }
                 }
             }

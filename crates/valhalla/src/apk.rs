@@ -5,7 +5,7 @@
 
 use std::collections::BTreeSet;
 use std::fs::File;
-use std::io::Read;
+use std::io::{BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 
 use bifrost_core::{validate_host_file_path, BifrostError, Result};
@@ -15,7 +15,7 @@ use zip::ZipArchive;
 
 use crate::package::validate_package_name;
 
-const HASH_BUF_BYTES: usize = 64 * 1024;
+const IO_BUF_BYTES: usize = 512 * 1024;
 const MAX_MANIFEST_BYTES: usize = 8 * 1024 * 1024;
 const MAX_ICON_PNG_BYTES: usize = 2 * 1024 * 1024;
 
@@ -85,9 +85,26 @@ pub fn is_apkm_bundle(path: &Path) -> bool {
         .is_some_and(|e| e.eq_ignore_ascii_case("apkm"))
 }
 
+/// Result of single-pass package inspection and split staging ready for installation.
+pub(crate) struct StagedPackage {
+    pub inspection: ApkInspection,
+    pub compatible_splits: Vec<PathBuf>,
+    pub icon_png: Option<Vec<u8>>,
+    pub _stage_dir: Option<tempfile::TempDir>,
+}
+
 /// Validates host path safety, ZIP integrity, `AndroidManifest.xml` presence,
 /// SHA-256 digest, and `x86_64` ABI compatibility for a local `.apk` or `.apkm` file.
 pub fn inspect_apk(path: impl AsRef<Path>) -> Result<ApkInspection> {
+    Ok(inspect_and_stage_package(path, false)?.inspection)
+}
+
+/// Performs single-pass inspection, ABI validation, optional launcher icon extraction,
+/// and split-APK staging for `.apk` and `.apkm` packages without redundant decompression.
+pub(crate) fn inspect_and_stage_package(
+    path: impl AsRef<Path>,
+    capture_icon: bool,
+) -> Result<StagedPackage> {
     let safe_path = validate_package_file_path(path)?;
     let metadata = std::fs::metadata(&safe_path).map_err(|source| BifrostError::Io {
         context: format!("inspecting package '{}'", safe_path.display()),
@@ -102,10 +119,10 @@ pub fn inspect_apk(path: impl AsRef<Path>) -> Result<ApkInspection> {
 
     let sha256 = sha256_file(&safe_path)?;
     if is_apkm_bundle(&safe_path) {
-        return inspect_apkm_bundle(safe_path, metadata.len(), sha256);
+        return inspect_and_stage_apkm_bundle(safe_path, metadata.len(), sha256, capture_icon);
     }
 
-    let single = inspect_single_apk_archive(&safe_path)?;
+    let single = inspect_single_apk_archive(&safe_path, capture_icon)?;
     if !single.has_android_manifest {
         return Err(BifrostError::Package(format!(
             "archive '{}' is missing required AndroidManifest.xml",
@@ -115,20 +132,26 @@ pub fn inspect_apk(path: impl AsRef<Path>) -> Result<ApkInspection> {
 
     let detected_abis: Vec<String> = single.abis.into_iter().collect();
     let abi_compatibility = classify_abis(&detected_abis);
+    let compatible_splits = vec![safe_path.clone()];
 
-    Ok(ApkInspection {
-        path: safe_path,
-        size_bytes: metadata.len(),
-        sha256,
-        entry_count: single.entry_count,
-        has_android_manifest: single.has_android_manifest,
-        has_dex: single.has_dex,
-        package_name: single.package_name,
-        app_name: None,
-        is_split_bundle: false,
-        split_apk_count: 1,
-        detected_abis,
-        abi_compatibility,
+    Ok(StagedPackage {
+        inspection: ApkInspection {
+            path: safe_path,
+            size_bytes: metadata.len(),
+            sha256,
+            entry_count: single.entry_count,
+            has_android_manifest: single.has_android_manifest,
+            has_dex: single.has_dex,
+            package_name: single.package_name,
+            app_name: None,
+            is_split_bundle: false,
+            split_apk_count: 1,
+            detected_abis,
+            abi_compatibility,
+        },
+        compatible_splits,
+        icon_png: single.best_icon_png,
+        _stage_dir: None,
     })
 }
 
@@ -138,9 +161,10 @@ struct SingleApkSummary {
     has_dex: bool,
     package_name: Option<String>,
     abis: BTreeSet<String>,
+    best_icon_png: Option<Vec<u8>>,
 }
 
-fn inspect_single_apk_archive(path: &Path) -> Result<SingleApkSummary> {
+fn inspect_single_apk_archive(path: &Path, capture_icon: bool) -> Result<SingleApkSummary> {
     let file = File::open(path).map_err(|source| BifrostError::Io {
         context: format!("opening APK '{}'", path.display()),
         source,
@@ -158,6 +182,8 @@ fn inspect_single_apk_archive(path: &Path) -> Result<SingleApkSummary> {
     let mut has_dex = false;
     let mut package_name = None;
     let mut abis = BTreeSet::new();
+    let mut best_icon_score: u64 = 0;
+    let mut best_icon_png: Option<Vec<u8>> = None;
 
     for idx in 0..entry_count {
         let mut entry = archive.by_index(idx).map_err(|err| {
@@ -189,6 +215,22 @@ fn inspect_single_apk_archive(path: &Path) -> Result<SingleApkSummary> {
                     abis.insert(abi.to_string());
                 }
             }
+        } else if capture_icon
+            && name.starts_with("res/")
+            && name.ends_with(".png")
+            && !name.ends_with(".9.png")
+            && entry.size() > 0
+            && entry.size() <= MAX_ICON_PNG_BYTES as u64
+        {
+            let mut bytes = Vec::new();
+            if entry.read_to_end(&mut bytes).is_ok() {
+                if let Some(score) = score_icon_candidate(&name, &bytes) {
+                    if score > best_icon_score {
+                        best_icon_score = score;
+                        best_icon_png = Some(bytes);
+                    }
+                }
+            }
         }
     }
 
@@ -198,7 +240,26 @@ fn inspect_single_apk_archive(path: &Path) -> Result<SingleApkSummary> {
         has_dex,
         package_name,
         abis,
+        best_icon_png,
     })
+}
+
+fn score_icon_candidate(name: &str, bytes: &[u8]) -> Option<u64> {
+    let (w, h) = png_dimensions(bytes)?;
+    if w != h || !(48..=512).contains(&w) {
+        return None;
+    }
+    let lower = name.to_ascii_lowercase();
+    let mut score: u64 = u64::from(w) * 100 + bytes.len() as u64;
+    if lower.contains("ic_launcher") && !lower.contains("background") {
+        score += 10_000_000;
+    } else if lower.contains("launcher") || lower.contains("app_icon") {
+        score += 5_000_000;
+    }
+    if matches!(w, 192 | 256 | 512 | 144 | 96) {
+        score += 1_000_000;
+    }
+    Some(score)
 }
 
 fn classify_abis(detected_abis: &[String]) -> AbiCompatibility {
@@ -215,30 +276,41 @@ fn classify_abis(detected_abis: &[String]) -> AbiCompatibility {
     }
 }
 
-fn inspect_apkm_bundle(
+fn inspect_and_stage_apkm_bundle(
     safe_path: PathBuf,
     size_bytes: u64,
     sha256: String,
-) -> Result<ApkInspection> {
-    let tmp = tempfile::TempDir::new().map_err(|source| BifrostError::Io {
-        context: "creating temp dir for .apkm inspection".to_string(),
+    capture_icon: bool,
+) -> Result<StagedPackage> {
+    let stage_dir = tempfile::TempDir::new().map_err(|source| BifrostError::Io {
+        context: "creating staging dir for .apkm bundle".to_string(),
         source,
     })?;
-    let extracted = extract_apkm_entries(&safe_path, tmp.path())?;
+    let extracted = extract_apkm_entries(&safe_path, stage_dir.path(), capture_icon)?;
 
     let mut has_android_manifest = false;
     let mut has_dex = false;
     let mut package_name = extracted.info_package_name;
     let mut abi_set = BTreeSet::new();
+    let mut compatible_splits = Vec::with_capacity(extracted.all_split_apks.len());
+    let mut icon_png = extracted.top_level_icon_png;
 
     for split_path in &extracted.all_split_apks {
-        let summary = inspect_single_apk_archive(split_path)?;
+        let need_split_icon = capture_icon && icon_png.is_none() && is_base_apk_path(split_path);
+        let summary = inspect_single_apk_archive(split_path, need_split_icon)?;
         has_android_manifest |= summary.has_android_manifest;
         has_dex |= summary.has_dex;
         if package_name.is_none() || is_base_apk_path(split_path) {
             if let Some(pkg) = summary.package_name {
                 package_name = Some(pkg);
             }
+        }
+        if icon_png.is_none() {
+            icon_png = summary.best_icon_png;
+        }
+        let is_foreign_abi_split = !summary.abis.is_empty() && !summary.abis.contains("x86_64");
+        if !is_foreign_abi_split {
+            compatible_splits.push(split_path.clone());
         }
         abi_set.extend(summary.abis);
     }
@@ -253,19 +325,24 @@ fn inspect_apkm_bundle(
     let detected_abis: Vec<String> = abi_set.into_iter().collect();
     let abi_compatibility = classify_abis(&detected_abis);
 
-    Ok(ApkInspection {
-        path: safe_path,
-        size_bytes,
-        sha256,
-        entry_count: extracted.outer_entry_count,
-        has_android_manifest,
-        has_dex,
-        package_name,
-        app_name: extracted.info_app_name,
-        is_split_bundle: true,
-        split_apk_count: extracted.all_split_apks.len(),
-        detected_abis,
-        abi_compatibility,
+    Ok(StagedPackage {
+        inspection: ApkInspection {
+            path: safe_path,
+            size_bytes,
+            sha256,
+            entry_count: extracted.outer_entry_count,
+            has_android_manifest,
+            has_dex,
+            package_name,
+            app_name: extracted.info_app_name,
+            is_split_bundle: true,
+            split_apk_count: extracted.all_split_apks.len(),
+            detected_abis,
+            abi_compatibility,
+        },
+        compatible_splits,
+        icon_png,
+        _stage_dir: Some(stage_dir),
     })
 }
 
@@ -274,6 +351,7 @@ struct ExtractedApkm {
     all_split_apks: Vec<PathBuf>,
     info_package_name: Option<String>,
     info_app_name: Option<String>,
+    top_level_icon_png: Option<Vec<u8>>,
 }
 
 fn is_base_apk_path(path: &Path) -> bool {
@@ -282,7 +360,11 @@ fn is_base_apk_path(path: &Path) -> bool {
         .is_some_and(|n| n.eq_ignore_ascii_case("base.apk"))
 }
 
-fn extract_apkm_entries(apkm_path: &Path, dest_dir: &Path) -> Result<ExtractedApkm> {
+fn extract_apkm_entries(
+    apkm_path: &Path,
+    dest_dir: &Path,
+    capture_icon: bool,
+) -> Result<ExtractedApkm> {
     let file = File::open(apkm_path).map_err(|source| BifrostError::Io {
         context: format!("opening .apkm bundle '{}'", apkm_path.display()),
         source,
@@ -298,6 +380,8 @@ fn extract_apkm_entries(apkm_path: &Path, dest_dir: &Path) -> Result<ExtractedAp
     let mut all_split_apks = Vec::new();
     let mut info_package_name = None;
     let mut info_app_name = None;
+    let mut top_level_icon_png = None;
+    let mut copy_buf = vec![0u8; IO_BUF_BYTES];
 
     for idx in 0..outer_entry_count {
         let mut entry = archive.by_index(idx).map_err(|err| {
@@ -335,6 +419,22 @@ fn extract_apkm_entries(apkm_path: &Path, dest_dir: &Path) -> Result<ExtractedAp
             continue;
         }
 
+        if capture_icon
+            && name.eq_ignore_ascii_case("icon.png")
+            && entry.size() > 0
+            && entry.size() <= MAX_ICON_PNG_BYTES as u64
+        {
+            let mut bytes = Vec::new();
+            if entry.read_to_end(&mut bytes).is_ok() {
+                if let Some((w, h)) = png_dimensions(&bytes) {
+                    if w == h && (48..=512).contains(&w) {
+                        top_level_icon_png = Some(bytes);
+                    }
+                }
+            }
+            continue;
+        }
+
         if name.to_ascii_lowercase().ends_with(".apk") {
             let file_name = Path::new(&name)
                 .file_name()
@@ -344,12 +444,30 @@ fn extract_apkm_entries(apkm_path: &Path, dest_dir: &Path) -> Result<ExtractedAp
                     reason: "invalid nested APK filename inside .apkm".to_string(),
                 })?;
             let out_path = dest_dir.join(file_name);
-            let mut out_file = File::create(&out_path).map_err(|source| BifrostError::Io {
+            let out_file = File::create(&out_path).map_err(|source| BifrostError::Io {
                 context: format!("extracting split APK '{}'", out_path.display()),
                 source,
             })?;
-            std::io::copy(&mut entry, &mut out_file).map_err(|source| BifrostError::Io {
-                context: format!("writing split APK '{}'", out_path.display()),
+            let mut writer = BufWriter::with_capacity(IO_BUF_BYTES, out_file);
+            loop {
+                let n = entry
+                    .read(&mut copy_buf)
+                    .map_err(|source| BifrostError::Io {
+                        context: format!("reading split APK '{name}' from .apkm"),
+                        source,
+                    })?;
+                if n == 0 {
+                    break;
+                }
+                writer
+                    .write_all(&copy_buf[..n])
+                    .map_err(|source| BifrostError::Io {
+                        context: format!("writing split APK '{}'", out_path.display()),
+                        source,
+                    })?;
+            }
+            writer.flush().map_err(|source| BifrostError::Io {
+                context: format!("flushing split APK '{}'", out_path.display()),
                 source,
             })?;
             all_split_apks.push(out_path);
@@ -375,35 +493,8 @@ fn extract_apkm_entries(apkm_path: &Path, dest_dir: &Path) -> Result<ExtractedAp
         all_split_apks,
         info_package_name,
         info_app_name,
+        top_level_icon_png,
     })
-}
-
-/// Extracts all `x86_64`-compatible split `.apk` files from an `.apkm` bundle into `dest_dir`
-/// for installation via `adb install-multiple -r`.
-///
-/// Filters out foreign ABI-only splits (such as `split_config.arm64_v8a.apk`) when
-/// they contain native `.so` libraries without `x86_64`, preventing Android `PackageManager`
-/// `INSTALL_FAILED_NO_MATCHING_ABIS` errors on multi-ABI `.apkm` bundles.
-pub(crate) fn extract_compatible_apkm_splits(
-    apkm_path: &Path,
-    dest_dir: &Path,
-) -> Result<Vec<PathBuf>> {
-    let extracted = extract_apkm_entries(apkm_path, dest_dir)?;
-    let mut compatible = Vec::new();
-    for split_path in extracted.all_split_apks {
-        let summary = inspect_single_apk_archive(&split_path)?;
-        let is_foreign_abi_split = !summary.abis.is_empty() && !summary.abis.contains("x86_64");
-        if !is_foreign_abi_split {
-            compatible.push(split_path);
-        }
-    }
-    if compatible.is_empty() {
-        return Err(BifrostError::Package(format!(
-            "split bundle '{}' has no x86_64-compatible split APKs to install",
-            apkm_path.display()
-        )));
-    }
-    Ok(compatible)
 }
 
 /// Extracts the highest-quality PNG launcher icon embedded in an `.apk` or `.apkm` archive.
@@ -435,7 +526,7 @@ fn extract_apkm_icon_png(apkm_path: &Path) -> Option<Vec<u8>> {
 
     // Fall back to scanning `base.apk` inside the `.apkm` bundle.
     let tmp = tempfile::TempDir::new().ok()?;
-    let extracted = extract_apkm_entries(apkm_path, tmp.path()).ok()?;
+    let extracted = extract_apkm_entries(apkm_path, tmp.path(), false).ok()?;
     for split in extracted.all_split_apks {
         if let Some(png) = extract_single_apk_icon_png(&split) {
             return Some(png);
@@ -470,27 +561,11 @@ fn extract_single_apk_icon_png(apk_path: &Path) -> Option<Vec<u8>> {
         if entry.read_to_end(&mut bytes).is_err() {
             continue;
         }
-        let Some((w, h)) = png_dimensions(&bytes) else {
-            continue;
-        };
-        if w != h || !(48..=512).contains(&w) {
-            continue;
-        }
-
-        let lower = name.to_ascii_lowercase();
-        let mut score: u64 = u64::from(w) * 100 + bytes.len() as u64;
-        if lower.contains("ic_launcher") && !lower.contains("background") {
-            score += 10_000_000;
-        } else if lower.contains("launcher") || lower.contains("app_icon") {
-            score += 5_000_000;
-        }
-        if matches!(w, 192 | 256 | 512 | 144 | 96) {
-            score += 1_000_000;
-        }
-
-        if score > best_score {
-            best_score = score;
-            best_png = Some(bytes);
+        if let Some(score) = score_icon_candidate(&name, &bytes) {
+            if score > best_score {
+                best_score = score;
+                best_png = Some(bytes);
+            }
         }
     }
 
@@ -679,7 +754,7 @@ fn sha256_file(path: &Path) -> Result<String> {
         source,
     })?;
     let mut hasher = Sha256::new();
-    let mut buf = [0u8; HASH_BUF_BYTES];
+    let mut buf = vec![0u8; IO_BUF_BYTES];
     loop {
         let n = file.read(&mut buf).map_err(|source| BifrostError::Io {
             context: format!("reading APK '{}'", path.display()),
@@ -858,20 +933,19 @@ mod tests {
             ],
         );
 
-        let inspected = inspect_apk(&apkm).unwrap();
-        assert!(inspected.is_split_bundle);
-        assert_eq!(inspected.split_apk_count, 3);
+        let staged = inspect_and_stage_package(&apkm, true).unwrap();
+        assert!(staged.inspection.is_split_bundle);
+        assert_eq!(staged.inspection.split_apk_count, 3);
         assert_eq!(
-            inspected.package_name.as_deref(),
+            staged.inspection.package_name.as_deref(),
             Some("com.example.splitapp")
         );
-        assert_eq!(inspected.app_name.as_deref(), Some("Split Demo"));
-        assert!(inspected.abi_compatibility.is_supported());
-        assert_eq!(inspected.detected_abis, vec!["arm64-v8a", "x86_64"]);
+        assert_eq!(staged.inspection.app_name.as_deref(), Some("Split Demo"));
+        assert!(staged.inspection.abi_compatibility.is_supported());
+        assert_eq!(staged.inspection.detected_abis, vec!["arm64-v8a", "x86_64"]);
 
-        let stage = TempDir::new().unwrap();
-        let compat = extract_compatible_apkm_splits(&apkm, stage.path()).unwrap();
-        let names: Vec<String> = compat
+        let names: Vec<String> = staged
+            .compatible_splits
             .iter()
             .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
             .collect();
