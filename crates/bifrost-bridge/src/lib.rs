@@ -7,6 +7,7 @@ pub mod clipboard;
 pub mod files;
 pub mod ipc;
 pub mod notifications;
+pub mod toast;
 
 pub use adb::{quote_android_shell_arg, AdbClient, AdbDevice, GuestHealth};
 pub use client::HeimdallClient;
@@ -24,3 +25,4 @@ pub use notifications::{
     build_windows_toast_xml, dispatch_windows_toast, list_active_notifications,
     parse_dumpsys_notifications, AndroidNotification,
 };
+pub use toast::{ensure_toast_identity, show_toast_xml, BIFROST_AUMID};

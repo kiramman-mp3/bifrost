@@ -1,8 +1,6 @@
 //! Android active notification parsing and XML-safe Windows toast payload rendering.
 
-use std::process::Command;
-
-use bifrost_core::{BifrostError, Result};
+use bifrost_core::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::adb::AdbClient;
@@ -82,50 +80,12 @@ pub fn build_windows_toast_xml(notif: &AndroidNotification) -> String {
     )
 }
 
-/// Dispatches an Android notification as a native Windows 11 Toast notification via WinRT.
+/// Dispatches an Android notification as a native Windows 11 Toast notification.
 ///
-/// Passes the XML-escaped toast payload strictly via an environment variable into a fixed
-/// PowerShell script to eliminate any script injection risk.
-#[cfg(windows)]
+/// Uses WinRT directly under the BIFRÖST AppUserModelID (see [`crate::toast`]); the
+/// notification text is XML-escaped by [`build_windows_toast_xml`].
 pub fn dispatch_windows_toast(notif: &AndroidNotification) -> Result<()> {
-    const SCRIPT: &str = r#"
-$ErrorActionPreference = 'Stop'
-[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
-[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
-$xml = New-Object Windows.Data.Xml.Dom.XmlDocument
-$xml.LoadXml($env:BIFROST_TOAST_XML)
-$toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
-$appId = '{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\WindowsPowerShell\v1.0\powershell.exe'
-$notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($appId)
-$notifier.Show($toast)
-"#;
-
-    let xml = build_windows_toast_xml(notif);
-    let output = Command::new("powershell.exe")
-        .args(["-NoProfile", "-NonInteractive", "-Command", SCRIPT])
-        .env("BIFROST_TOAST_XML", xml)
-        .output()
-        .map_err(|source| BifrostError::Io {
-            context: "dispatching Windows 11 Toast notification".to_string(),
-            source,
-        })?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(BifrostError::Bridge(format!(
-            "failed showing Windows 11 Toast notification: {stderr}"
-        )));
-    }
-    Ok(())
-}
-
-/// Non-Windows stub returning `Unsupported`.
-#[cfg(not(windows))]
-pub fn dispatch_windows_toast(_notif: &AndroidNotification) -> Result<()> {
-    Err(BifrostError::Unsupported {
-        feature: "Windows 11 Toast notifications".to_string(),
-        milestone: "Windows 11 host only".to_string(),
-    })
+    crate::toast::show_toast_xml(&build_windows_toast_xml(notif))
 }
 
 fn extract_token_value(line: &str, prefix: &str) -> Option<String> {
