@@ -14,7 +14,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - **Clipboard via stdin (`bifrost-bridge`)**: clipboard text is now streamed through `adb` stdin into a fixed `cmd clipboard set-text "$(cat)"` script (`AdbClient::run_adb_with_stdin`). It never appears on a command line, which also removes the ~32K Windows command-line limit that broke large syncs.
 
 ### Changed
+- **No PowerShell at runtime (`bifrost-bridge`, `valhalla`, `bifrost-ui`)**: replaced every runtime `powershell.exe` invocation with native APIs:
+  - Toasts use WinRT directly under a registered `BIFROST.Bifrost` AppUserModelID (`HKCU\Software\Classes\AppUserModelId`), so they show "BIFRÖST" instead of "Windows PowerShell".
+  - HKCU `.apk`/`.apkm` association and Heimdall login autostart use `winreg`; the cycle is tested against a scratch registry subtree.
+  - Desktop and Start Menu `.lnk` files are written natively with `mslnk`, and the Desktop is resolved through the Known Folder API (OneDrive redirection aware).
+  - The UI's Browse dialogs use the native `IFileOpenDialog` through `rfd`.
+  - `uninstall-bifrost.ps1` also removes the AppUserModelID key.
 - **Breaking**: removed `bifrost images register --pubkey`; trusted keys come only from `bifrost.toml`.
+
+### Fixed
+- Non-Windows stubs in `valhalla` referenced a non-existent `BifrostError::Unsupported` field and would not compile off Windows.
 
 ### Documentation
 - Rewrote `ARCHITECTURE.md` to reflect the implemented system, added ADR-0005 (scrcpy per-app windows) and ADR-0006 (image trust store), amended ADR-0001/0003, extended `ROADMAP.md` with v0.1.0–v0.3.3 and next steps, and aligned `SECURITY.md`, `README.md`, `CONTRIBUTING.md` and `CLAUDE.md` with the code (`76` passing workspace tests across 13 crates).

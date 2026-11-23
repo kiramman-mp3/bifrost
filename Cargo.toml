@@ -46,4 +46,6 @@ toml = "0.8"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
 windows = "0.58"
+winreg = "0.56"
+mslnk = "0.1.8"
 zip = { version = "2.2", default-features = false, features = ["deflate"] }

@@ -8,7 +8,6 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use bifrost_core::{BifrostError, BifrostPaths, Result};
 use serde::{Deserialize, Serialize};
@@ -141,7 +140,7 @@ impl ShortcutManager {
             self.prepare_icon(package_name, apk_path, preextracted_icon_png, &bifrost_exe);
         let description = format!("Launch {display_name} ({package_name}) via BIFRÖST");
 
-        let (desktop_shortcut, start_menu_shortcut) = create_windows_shortcuts_via_com(
+        let (desktop_shortcut, start_menu_shortcut) = create_windows_shortcuts(
             &display_name,
             &target_exe,
             &args,
@@ -389,8 +388,82 @@ pub(crate) fn locate_bifrost_cli() -> Result<PathBuf> {
     ))
 }
 
+/// Resolves the current user's Desktop and Start Menu `Programs` folders.
+///
+/// The Desktop comes from the Known Folder API (via `directories`), so OneDrive or
+/// policy redirection is honoured; `Programs` lives under Roaming AppData.
+fn shortcut_folders() -> Result<(PathBuf, PathBuf)> {
+    let user_dirs = directories::UserDirs::new().ok_or_else(|| {
+        BifrostError::Runtime("unable to resolve the user's Desktop folder".to_string())
+    })?;
+    let desktop = user_dirs
+        .desktop_dir()
+        .map(Path::to_path_buf)
+        .ok_or_else(|| BifrostError::Runtime("user has no Desktop folder".to_string()))?;
+    let base = directories::BaseDirs::new().ok_or_else(|| {
+        BifrostError::Runtime("unable to resolve the user's AppData folder".to_string())
+    })?;
+    let programs = base
+        .config_dir()
+        .join("Microsoft")
+        .join("Windows")
+        .join("Start Menu")
+        .join("Programs")
+        .join("BIFRÖST Apps");
+    Ok((desktop, programs))
+}
+
+/// Splits a Shell icon location (`C:\path\file.ico,0`) into path and index.
+fn split_icon_location(icon_location: &str) -> (String, i32) {
+    if let Some((path, index)) = icon_location.rsplit_once(',') {
+        if let Ok(index) = index.trim().parse::<i32>() {
+            return (path.to_string(), index);
+        }
+    }
+    (icon_location.to_string(), 0)
+}
+
+/// Writes one `.lnk` file in the native Shell Link binary format (no COM, no scripts).
+fn write_shell_link(
+    lnk_path: &Path,
+    target_exe: &Path,
+    arguments: &str,
+    work_dir: &Path,
+    icon_location: &str,
+    description: &str,
+) -> Result<()> {
+    // `mslnk` unwraps UTF-8 conversions internally; reject non-UTF-8 paths up front.
+    let (Some(target_str), Some(work_dir_str)) = (target_exe.to_str(), work_dir.to_str()) else {
+        return Err(BifrostError::Runtime(format!(
+            "shortcut target '{}' is not a valid UTF-8 path",
+            target_exe.display()
+        )));
+    };
+    let mut link = mslnk::ShellLink::new(target_str).map_err(|err| {
+        BifrostError::Runtime(format!(
+            "failed preparing shortcut to '{target_str}': {err}"
+        ))
+    })?;
+    let (icon_path, icon_index) = split_icon_location(icon_location);
+    link.set_arguments((!arguments.is_empty()).then(|| arguments.to_string()));
+    link.set_working_dir(Some(work_dir_str.to_string()));
+    link.set_icon_location(Some(icon_path));
+    link.set_name(Some(description.to_string()));
+    link.header_mut().set_icon_index(icon_index);
+    // Matches the former WScript `WindowStyle = 7`: the launcher is a GUI-subsystem
+    // helper that must not steal focus before the Android window appears.
+    link.header_mut()
+        .set_show_command(mslnk::ShowCommand::ShowMinNoActive);
+    link.create_lnk(lnk_path).map_err(|err| {
+        BifrostError::Runtime(format!(
+            "failed writing shortcut '{}': {err}",
+            lnk_path.display()
+        ))
+    })
+}
+
 #[cfg(windows)]
-fn create_windows_shortcuts_via_com(
+fn create_windows_shortcuts(
     display_name: &str,
     target_exe: &Path,
     arguments: &str,
@@ -398,71 +471,31 @@ fn create_windows_shortcuts_via_com(
     icon_location: &str,
     description: &str,
 ) -> Result<(PathBuf, PathBuf)> {
-    // Fixed static script reading all inputs exclusively from environment variables
-    // to prevent any command or PowerShell string interpolation injection.
-    const SCRIPT: &str = r#"
-$ErrorActionPreference = 'Stop'
-$OutputEncoding = [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$desktopDir = [Environment]::GetFolderPath('Desktop')
-$startMenuDir = Join-Path ([Environment]::GetFolderPath('Programs')) 'BIFRÖST Apps'
-New-Item -ItemType Directory -Force -Path $startMenuDir | Out-Null
-
-$fileName = "$env:BIFROST_SC_NAME.lnk"
-$desktopLnk = Join-Path $desktopDir $fileName
-$startMenuLnk = Join-Path $startMenuDir $fileName
-
-$shell = New-Object -ComObject WScript.Shell
-foreach ($lnkPath in @($desktopLnk, $startMenuLnk)) {
-    $sc = $shell.CreateShortcut($lnkPath)
-    $sc.TargetPath = $env:BIFROST_SC_TARGET
-    $sc.Arguments = $env:BIFROST_SC_ARGS
-    $sc.WorkingDirectory = $env:BIFROST_SC_WORKDIR
-    $sc.IconLocation = $env:BIFROST_SC_ICON
-    $sc.Description = $env:BIFROST_SC_DESC
-    $sc.WindowStyle = 7
-    $sc.Save()
-}
-Write-Output $desktopLnk
-Write-Output $startMenuLnk
-"#;
-
-    let output = Command::new("powershell.exe")
-        .args(["-NoProfile", "-NonInteractive", "-Command", SCRIPT])
-        .env("BIFROST_SC_NAME", display_name)
-        .env("BIFROST_SC_TARGET", target_exe)
-        .env("BIFROST_SC_ARGS", arguments)
-        .env("BIFROST_SC_WORKDIR", work_dir)
-        .env("BIFROST_SC_ICON", icon_location)
-        .env("BIFROST_SC_DESC", description)
-        .output()
-        .map_err(|source| BifrostError::Io {
-            context: "invoking PowerShell WScript.Shell to create Windows shortcuts".to_string(),
-            source,
-        })?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        warn!(error = %stderr, "failed creating Windows shortcuts");
-        return Err(BifrostError::Runtime(format!(
-            "failed creating Windows Desktop/Start Menu shortcuts: {stderr}"
-        )));
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let mut lines = stdout.lines().map(str::trim).filter(|l| !l.is_empty());
-    let desktop = lines
-        .next()
-        .map(PathBuf::from)
-        .ok_or_else(|| BifrostError::Runtime("missing desktop shortcut path output".to_string()))?;
-    let start_menu = lines.next().map(PathBuf::from).ok_or_else(|| {
-        BifrostError::Runtime("missing start menu shortcut path output".to_string())
+    let (desktop_dir, start_menu_dir) = shortcut_folders()?;
+    fs::create_dir_all(&start_menu_dir).map_err(|source| BifrostError::Io {
+        context: format!("creating '{}'", start_menu_dir.display()),
+        source,
     })?;
 
-    Ok((desktop, start_menu))
+    let file_name = format!("{display_name}.lnk");
+    let desktop_lnk = desktop_dir.join(&file_name);
+    let start_menu_lnk = start_menu_dir.join(&file_name);
+    for lnk in [&desktop_lnk, &start_menu_lnk] {
+        write_shell_link(
+            lnk,
+            target_exe,
+            arguments,
+            work_dir,
+            icon_location,
+            description,
+        )
+        .inspect_err(|err| warn!(error = %err, "failed creating Windows shortcut"))?;
+    }
+    Ok((desktop_lnk, start_menu_lnk))
 }
 
 #[cfg(not(windows))]
-fn create_windows_shortcuts_via_com(
+fn create_windows_shortcuts(
     _display_name: &str,
     _target_exe: &Path,
     _arguments: &str,
@@ -472,7 +505,7 @@ fn create_windows_shortcuts_via_com(
 ) -> Result<(PathBuf, PathBuf)> {
     Err(BifrostError::Unsupported {
         feature: "Windows Desktop/Start Menu shortcuts".to_string(),
-        milestone: "Windows 11 host only".to_string(),
+        planned_milestone: "Windows 11 host only".to_string(),
     })
 }
 
@@ -520,5 +553,89 @@ mod tests {
             derive_display_name("org.fdroid.fdroid", Some("Custom F-Droid"), None),
             "Custom F-Droid"
         );
+    }
+
+    /// Asks the real Windows Shell (WScript.Shell, read-only) to parse a link written by
+    /// `write_shell_link`. Run with `cargo test -p valhalla shortcuts -- --ignored`.
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "invokes the Windows Shell through PowerShell"]
+    fn live_windows_shell_reads_written_link() {
+        let dir = tempfile::tempdir().unwrap();
+        // Copy a real executable into a non-ASCII folder, like `Programs\BIFRÖST`.
+        let unicode_dir = dir.path().join("BIFRÖST Ünïcödé");
+        fs::create_dir_all(&unicode_dir).unwrap();
+        let target = unicode_dir.join("bifrost-ui.exe");
+        fs::copy(std::env::current_exe().unwrap(), &target).unwrap();
+        let lnk = dir.path().join("BIFRÖST Live Test.lnk");
+        write_shell_link(
+            &lnk,
+            &target,
+            "--launch-app com.example.app",
+            dir.path(),
+            &format!("{},0", target.display()),
+            "Launch via BIFRÖST",
+        )
+        .unwrap();
+
+        let script = "$OutputEncoding=[Console]::OutputEncoding=[Text.Encoding]::UTF8;\
+            $s=(New-Object -ComObject WScript.Shell).CreateShortcut($env:LNK);\
+            $s.TargetPath;$s.Arguments;$s.Description;$s.IconLocation;$s.WindowStyle";
+        let out = std::process::Command::new("powershell.exe")
+            .args(["-NoProfile", "-NonInteractive", "-Command", script])
+            .env("LNK", &lnk)
+            .output()
+            .unwrap();
+        let text = String::from_utf8_lossy(&out.stdout);
+        let lines: Vec<&str> = text.lines().map(str::trim).collect();
+        assert_eq!(
+            lines[0].to_lowercase(),
+            target.display().to_string().to_lowercase()
+        );
+        assert_eq!(lines[1], "--launch-app com.example.app");
+        assert_eq!(lines[2], "Launch via BIFRÖST");
+        assert_eq!(lines[3], format!("{},0", target.display()));
+        assert_eq!(lines[4], "7");
+    }
+
+    #[test]
+    fn splits_shell_icon_locations() {
+        assert_eq!(
+            split_icon_location(r"C:\BIFRÖST\icons\app.ico,0"),
+            (r"C:\BIFRÖST\icons\app.ico".to_string(), 0)
+        );
+        assert_eq!(
+            split_icon_location(r"C:\x\bifrost-ui.exe,3"),
+            (r"C:\x\bifrost-ui.exe".to_string(), 3)
+        );
+        assert_eq!(
+            split_icon_location(r"C:\a,b\icon.ico"),
+            (r"C:\a,b\icon.ico".to_string(), 0)
+        );
+    }
+
+    #[test]
+    fn writes_unicode_shell_link_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = std::env::current_exe().unwrap();
+        let lnk = dir.path().join("Ünïcödé App.lnk");
+        write_shell_link(
+            &lnk,
+            &target,
+            "--launch-app com.example.app",
+            dir.path(),
+            r"C:\BIFRÖST\icons\app.ico,0",
+            "Launch Ünïcödé App via BIFRÖST",
+        )
+        .unwrap();
+
+        let bytes = fs::read(&lnk).unwrap();
+        // Shell Link header: size 0x4C followed by the fixed LinkCLSID.
+        assert_eq!(&bytes[..4], &[0x4C, 0, 0, 0]);
+        let utf16 = |s: &str| -> Vec<u8> { s.encode_utf16().flat_map(u16::to_le_bytes).collect() };
+        let contains = |needle: &[u8]| bytes.windows(needle.len()).any(|w| w == needle);
+        assert!(contains(&utf16("--launch-app com.example.app")));
+        assert!(contains(&utf16(r"C:\BIFRÖST\icons\app.ico")));
+        assert!(contains(&utf16("Launch Ünïcödé App via BIFRÖST")));
     }
 }

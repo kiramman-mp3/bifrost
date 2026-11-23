@@ -191,6 +191,7 @@ BIFRÖST/
 │   │       ├── files.rs                           # Scoped host <-> Android shared directory bridge
 │   │       ├── clipboard.rs                       # Audited Win32 CF_UNICODETEXT clipboard & Android sync
 │   │       ├── notifications.rs                   # Android notification parser & XML-escaped Toast XML
+│   │       ├── toast.rs                           # Native WinRT Toasts under the BIFROST.Bifrost AppUserModelID
 │   │       ├── ipc.rs                             # Bounded JSON frames, 256-bit auth tokens & IPC schemas
 │   │       └── client.rs                          # Async Named Pipe HeimdallClient
 │   ├── bifrost-display/                           # Per-app Android VirtualDisplay & independent Windows 11 window launcher

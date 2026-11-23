@@ -46,7 +46,7 @@ main        # Stable releases only — never commit directly to main
 - Use `thiserror` for structured library errors and `anyhow` only at top-level CLI/daemon boundaries where appropriate.
 - Avoid `unsafe` Rust unless interfacing directly with Windows/FFI APIs; document every `unsafe` block with an explicit `// SAFETY:` invariant comment.
 - Never put arbitrary host data on an `adb shell` command line: stream it through stdin (`AdbClient::run_adb_with_stdin`) or quote it with `bifrost_bridge::quote_android_shell_arg`, or validate it against a strict character set (see `SECURITY.md`).
-- Never interpolate dynamic values into PowerShell scripts; pass them through environment variables to a fixed script.
+- Prefer native APIs over spawning `powershell.exe` (WinRT via the `windows` crate, `winreg`, `mslnk`, `rfd`). If a script is unavoidable (installers, tests), never interpolate dynamic values into it; pass them through environment variables to a fixed script.
 - Keep component naming faithful to [ARCHITECTURE.md](ARCHITECTURE.md) without inventing unnecessary mythology names for ordinary abstractions.
 
 ## Architecture Decision Records (ADRs)
