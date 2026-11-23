@@ -262,7 +262,9 @@ mod tests {
             interactive_console: false,
             serial_log_path: PathBuf::from(r"C:\logs\serial.log"),
             vmm_stderr_path: PathBuf::from(r"C:\logs\stderr.log"),
-            qmp_pipe_name: "bifrost-qmp-00112233445566778899aabbccddeeff".to_string(),
+            qmp_socket_path: PathBuf::from(
+                r"C:\data\run\qmp-00112233445566778899aabbccddeeff.sock",
+            ),
         };
 
         let args = CrosvmWhpxBackend::new().build_args(&spec).unwrap();

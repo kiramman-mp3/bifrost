@@ -13,7 +13,7 @@ Security is a foundational requirement of **BIFRÖST**, not an optional feature.
 7. **Data Persistence & Destructive Safeguards**: Android `userdata` lives on an isolated persistent disk across compatible upgrades; destructive actions (wipe, reset, disk deletion) require explicit user confirmation.
 8. **Memory Safety & `unsafe` Auditing**: Avoid `unsafe` Rust wherever possible. Every `unsafe` block must include a `// SAFETY:` comment explaining the upheld invariants and must be reviewed explicitly.
 9. **No Data on Guest Shell Command Lines**: `adb shell` evaluates its arguments with the Android `sh` interpreter. Arbitrary host data (clipboard text) is streamed through stdin into a fixed script; any other host-controlled value must be quoted with `quote_android_shell_arg` or validated against a strict character set.
-10. **Unauthenticated VMM Monitors Stay Off the Network**: QEMU's QMP monitor has no authentication, so it is exposed only on a randomly named Windows pipe, never on a TCP port.
+10. **Unauthenticated VMM Monitors Stay Off the Network**: QEMU's QMP monitor has no authentication, so it is exposed only on a randomly named AF_UNIX socket file inside the user's profile (protected by its ACL), never on a TCP port.
 11. **Clean-Room Distribution**: BIFRÖST never bundles or redistributes proprietary Google Apps / Play Services or unauthorized proprietary ARM translation binaries (`libhoudini`, `libndk_translation`).
 
 ## Reporting a Vulnerability

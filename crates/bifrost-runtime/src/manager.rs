@@ -5,7 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use bifrost_core::{BifrostConfig, BifrostError, BifrostPaths, Result, RuntimeState};
-use bifrost_hypervisor::qmp::generate_qmp_pipe_name;
+use bifrost_hypervisor::qmp::{allocate_qmp_socket_path, remove_stale_qmp_socket};
 use bifrost_hypervisor::{HypervisorBackend, QemuWhpxBackend, VmSpec};
 use bifrost_storage::{ensure_userdata_disk, verify_manifest_file, ImageRegistry, VerifiedBundle};
 use serde::{Deserialize, Serialize};
@@ -154,7 +154,7 @@ impl<B: HypervisorBackend> MidgardRuntime<B> {
         let userdata =
             ensure_userdata_disk(self.userdata_disk_path(), self.config.runtime.storage_gb)?;
 
-        let qmp_pipe_name = generate_qmp_pipe_name()?;
+        let qmp_socket_path = allocate_qmp_socket_path(&self.paths.data_dir.join("run"))?;
         let spec = VmSpec {
             instance_id: self.instance_id.clone(),
             cpu_cores: self.config.runtime.cpu_cores,
@@ -170,7 +170,7 @@ impl<B: HypervisorBackend> MidgardRuntime<B> {
             interactive_console: options.interactive_console,
             serial_log_path: self.serial_log_path(),
             vmm_stderr_path: self.vmm_stderr_path(),
-            qmp_pipe_name,
+            qmp_socket_path,
         };
 
         let launch = self.backend.spawn(&spec)?;
@@ -220,6 +220,9 @@ impl<B: HypervisorBackend> MidgardRuntime<B> {
             self.backend.terminate_force(pid)?;
         }
 
+        if let Some(ref qmp) = record.qmp_endpoint {
+            remove_stale_qmp_socket(qmp);
+        }
         record.state = RuntimeState::Stopped;
         record.pid = None;
         record.note = Some(if force {
@@ -384,7 +387,7 @@ mod tests {
                 command_line: vec!["mock-qemu.exe".to_string()],
                 serial_log_path: spec.serial_log_path.clone(),
                 vmm_stderr_path: spec.vmm_stderr_path.clone(),
-                qmp_endpoint: format!("pipe:{}", spec.qmp_pipe_name),
+                qmp_endpoint: format!("unix:{}", spec.qmp_socket_path.display()),
                 adb_endpoint: format!("{}:{}", spec.adb_bind_address, spec.adb_port),
             })
         }
