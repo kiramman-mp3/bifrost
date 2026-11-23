@@ -9,8 +9,9 @@ pub mod package;
 pub mod shortcuts;
 
 pub use apk::{
-    extract_apk_icon_png, extract_manifest_package, inspect_apk, is_apkm_bundle,
-    validate_package_file_path, wrap_png_as_ico, AbiCompatibility, ApkInspection,
+    extract_apk_icon_png, extract_manifest_metadata, extract_manifest_package, inspect_apk,
+    inspect_package_preview, is_apkm_bundle, validate_package_file_path, wrap_png_as_ico,
+    AbiCompatibility, ApkInspection,
 };
 pub use file_assoc::{
     build_apk_open_command, build_heimdall_autostart_command, query_heimdall_autostart,

@@ -4,6 +4,16 @@ const invoke = window.__TAURI__?.core?.invoke;
 
 let lastDashboard = null;
 let lastDoctor = null;
+let standaloneInstallerMode = false;
+let currentInstallerPreview = null;
+let currentInstalledPackage = null;
+let installerBusy = false;
+
+function formatBytes(bytes) {
+  if (!bytes || bytes <= 0) return "0 MB";
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
+  return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+}
 
 function showToast(message, isError = false) {
   const el = document.getElementById("toast-banner");
@@ -64,21 +74,7 @@ function setupDragDrop() {
     if (apkFile) {
       activateSection("apps");
       document.getElementById("apk-path-input").value = apkFile;
-      try {
-        const info = await invoke("inspect_apk_file", { apkPath: apkFile });
-        const box = document.getElementById("apk-inspect-output");
-        box.textContent = JSON.stringify(info, null, 2);
-        box.classList.remove("hidden");
-        const abiKind = info?.abi_compatibility?.kind || "unknown";
-        showToast(
-          abiKind === "unsupported_native_abi"
-            ? `APK '${info.package_name || apkFile}' is ARM64-only (unsupported per ADR-0004).`
-            : `APK '${info.package_name || "ready"}' inspected (${abiKind}) — click "Install APK" to install.`,
-          abiKind === "unsupported_native_abi"
-        );
-      } catch (err) {
-        showToast(String(err), true);
-      }
+      await openInstallDialog(apkFile);
       return;
     }
 
@@ -473,6 +469,175 @@ async function refreshApps() {
   }
 }
 
+function setupInstallProgressListener() {
+  const listen = window.__TAURI__?.event?.listen;
+  if (!listen) return;
+  listen("install-progress", (event) => {
+    const p = event?.payload;
+    if (!p) return;
+    setInstallerProgress(p.percent ?? 0, p.stage || "Installing…", Boolean(p.indeterminate));
+  });
+}
+
+function setInstallerProgress(percent, stage, indeterminate) {
+  const wrap = document.getElementById("installer-progress-wrap");
+  const fill = document.getElementById("installer-progress-fill");
+  const stageEl = document.getElementById("installer-stage-label");
+  const pctEl = document.getElementById("installer-percent-label");
+  wrap.classList.remove("hidden");
+  stageEl.textContent = stage;
+  pctEl.textContent = indeterminate ? "Working…" : `${percent}%`;
+  fill.classList.toggle("indeterminate", indeterminate);
+  if (!indeterminate) {
+    fill.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+  }
+}
+
+function closeInstallDialog() {
+  if (installerBusy) return;
+  if (standaloneInstallerMode) {
+    invoke?.("close_installer_window");
+    return;
+  }
+  document.getElementById("installer-modal").classList.add("hidden");
+  currentInstallerPreview = null;
+  currentInstalledPackage = null;
+}
+
+async function openInstallDialog(apkPath) {
+  const modal = document.getElementById("installer-modal");
+  const questionEl = document.getElementById("installer-question");
+  const titleEl = document.getElementById("installer-app-title");
+  const verEl = document.getElementById("installer-version-line");
+  const metaEl = document.getElementById("installer-meta");
+  const iconImg = document.getElementById("installer-icon-img");
+  const iconFallback = document.getElementById("installer-icon-fallback");
+  const progressWrap = document.getElementById("installer-progress-wrap");
+  const errorEl = document.getElementById("installer-error");
+  const cancelBtn = document.getElementById("btn-installer-cancel");
+  const confirmBtn = document.getElementById("btn-installer-confirm");
+  const launchBtn = document.getElementById("btn-installer-launch");
+
+  currentInstallerPreview = null;
+  currentInstalledPackage = null;
+  installerBusy = false;
+
+  questionEl.textContent = "Inspecting Android package…";
+  titleEl.textContent = "Please wait";
+  verEl.textContent = apkPath;
+  metaEl.innerHTML = "";
+  iconImg.classList.add("hidden");
+  iconFallback.classList.remove("hidden");
+  progressWrap.classList.add("hidden");
+  errorEl.classList.add("hidden");
+  cancelBtn.disabled = false;
+  cancelBtn.textContent = "Cancel";
+  confirmBtn.disabled = true;
+  confirmBtn.classList.remove("hidden");
+  confirmBtn.textContent = "Install";
+  launchBtn.classList.add("hidden");
+  modal.classList.remove("hidden");
+
+  try {
+    const preview = await invoke("preview_package_install", { apkPath });
+    currentInstallerPreview = preview;
+
+    const verSuffix = preview.new_version ? ` v${preview.new_version}` : "";
+    questionEl.textContent = preview.is_update
+      ? "Do you want to update this application?"
+      : "Do you want to install this application?";
+    titleEl.textContent = `${preview.display_name}${verSuffix}`;
+
+    if (preview.is_update) {
+      const fromVer = preview.installed_version ? `v${preview.installed_version}` : "installed";
+      const toVer = preview.new_version ? `v${preview.new_version}` : "new build";
+      verEl.textContent = `Update: ${fromVer} → ${toVer} (${preview.package_name || "unknown package"})`;
+    } else {
+      verEl.textContent = preview.package_name || preview.path;
+    }
+
+    if (preview.icon_data_url) {
+      iconImg.src = preview.icon_data_url;
+      iconImg.classList.remove("hidden");
+      iconFallback.classList.add("hidden");
+    }
+
+    const abiLabel = !preview.abi_supported
+      ? `Unsupported ABI (${preview.detected_abis.join(", ")})`
+      : preview.detected_abis.length
+        ? "x86_64 Native"
+        : "Pure ART";
+    const chips = [
+      `<span class="meta-chip ${preview.abi_supported ? "ok" : "err"}">${escapeHtml(abiLabel)}</span>`,
+      `<span class="meta-chip">${escapeHtml(formatBytes(preview.size_bytes))}</span>`,
+      `<span class="meta-chip">${preview.is_split_bundle ? `Split Bundle (${preview.split_apk_count} APKs)` : "Single APK"}</span>`,
+    ];
+    metaEl.innerHTML = chips.join("");
+
+    if (!preview.abi_supported) {
+      errorEl.textContent =
+        "This package only contains non-x86_64 native libraries (ARM64 translation is unsupported per ADR-0004).";
+      errorEl.classList.remove("hidden");
+      confirmBtn.disabled = true;
+    } else {
+      confirmBtn.textContent = preview.is_update ? "Update" : "Install";
+      confirmBtn.disabled = false;
+    }
+  } catch (err) {
+    questionEl.textContent = "Unable to inspect package";
+    titleEl.textContent = "Invalid package";
+    errorEl.textContent = String(err);
+    errorEl.classList.remove("hidden");
+    confirmBtn.disabled = true;
+  }
+}
+
+async function runConfirmedInstall() {
+  if (!currentInstallerPreview || installerBusy) return;
+  installerBusy = true;
+  const cancelBtn = document.getElementById("btn-installer-cancel");
+  const confirmBtn = document.getElementById("btn-installer-confirm");
+  const launchBtn = document.getElementById("btn-installer-launch");
+  const errorEl = document.getElementById("installer-error");
+
+  cancelBtn.disabled = true;
+  confirmBtn.disabled = true;
+  errorEl.classList.add("hidden");
+  setInstallerProgress(8, "Starting installation…", false);
+
+  try {
+    const res = await invoke("install_apk_file", { apkPath: currentInstallerPreview.path });
+    currentInstalledPackage = res.package_name || currentInstallerPreview.package_name;
+    setInstallerProgress(
+      100,
+      currentInstallerPreview.is_update
+        ? `${currentInstallerPreview.display_name} updated successfully!`
+        : `${currentInstallerPreview.display_name} installed successfully!`,
+      false
+    );
+    confirmBtn.classList.add("hidden");
+    cancelBtn.disabled = false;
+    cancelBtn.textContent = "Close";
+    if (currentInstalledPackage) {
+      launchBtn.classList.remove("hidden");
+    }
+    if (!standaloneInstallerMode) {
+      showToast(
+        `${currentInstallerPreview.is_update ? "Updated" : "Installed"} ${currentInstallerPreview.display_name} on ${res.serial}`
+      );
+      await refreshApps();
+    }
+  } catch (err) {
+    document.getElementById("installer-progress-wrap").classList.add("hidden");
+    errorEl.textContent = String(err);
+    errorEl.classList.remove("hidden");
+    cancelBtn.disabled = false;
+    confirmBtn.disabled = false;
+  } finally {
+    installerBusy = false;
+  }
+}
+
 function wireEvents() {
   document.getElementById("btn-refresh-all").addEventListener("click", refreshAll);
   document.getElementById("btn-heimdall-toggle").addEventListener("click", async () => {
@@ -663,19 +828,28 @@ function wireEvents() {
     }
   });
 
+  document.getElementById("btn-installer-cancel").addEventListener("click", closeInstallDialog);
+  document.getElementById("btn-installer-confirm").addEventListener("click", runConfirmedInstall);
+  document.getElementById("btn-installer-launch").addEventListener("click", async () => {
+    if (!currentInstalledPackage) return;
+    const pkg = currentInstalledPackage;
+    try {
+      await invoke("launch_app_window", { package: pkg, width: null, height: null, dpi: null });
+      closeInstallDialog();
+    } catch (err) {
+      const errEl = document.getElementById("installer-error");
+      errEl.textContent = String(err);
+      errEl.classList.remove("hidden");
+    }
+  });
+
   document.getElementById("btn-install-apk").addEventListener("click", async () => {
     const apkPath = document.getElementById("apk-path-input").value.trim();
     if (!apkPath) {
-      showToast("Enter a local .apk path first.", true);
+      showToast("Enter a local .apk or .apkm path first.", true);
       return;
     }
-    try {
-      const res = await invoke("install_apk_file", { apkPath });
-      showToast(`Installed APK on ${res.serial}`);
-      await refreshApps();
-    } catch (err) {
-      showToast(String(err), true);
-    }
+    await openInstallDialog(apkPath);
   });
 
   document.getElementById("btn-autotune-config").addEventListener("click", async () => {
@@ -754,10 +928,25 @@ function wireEvents() {
   });
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   setupNavigation();
   setupTheme();
   setupDragDrop();
+  setupInstallProgressListener();
   wireEvents();
+
+  if (invoke) {
+    try {
+      const pendingPath = await invoke("get_pending_install");
+      if (pendingPath) {
+        standaloneInstallerMode = true;
+        document.body.classList.add("installer-mode");
+        await openInstallDialog(pendingPath);
+        return;
+      }
+    } catch {
+      // Fall through to full dashboard mode if not invoked via --install-apk.
+    }
+  }
   refreshAll();
 });

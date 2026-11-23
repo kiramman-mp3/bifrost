@@ -53,6 +53,8 @@ pub struct ApkInspection {
     #[serde(default)]
     pub app_name: Option<String>,
     #[serde(default)]
+    pub version_name: Option<String>,
+    #[serde(default)]
     pub is_split_bundle: bool,
     #[serde(default)]
     pub split_apk_count: usize,
@@ -97,6 +99,13 @@ pub(crate) struct StagedPackage {
 /// SHA-256 digest, and `x86_64` ABI compatibility for a local `.apk` or `.apkm` file.
 pub fn inspect_apk(path: impl AsRef<Path>) -> Result<ApkInspection> {
     Ok(inspect_and_stage_package(path, false)?.inspection)
+}
+
+/// Inspects a local `.apk` or `.apkm` package and extracts its PNG launcher icon in a
+/// single pass for graphical installer preview dialogs.
+pub fn inspect_package_preview(path: impl AsRef<Path>) -> Result<(ApkInspection, Option<Vec<u8>>)> {
+    let staged = inspect_and_stage_package(path, true)?;
+    Ok((staged.inspection, staged.icon_png))
 }
 
 /// Performs single-pass inspection, ABI validation, optional launcher icon extraction,
@@ -144,6 +153,7 @@ pub(crate) fn inspect_and_stage_package(
             has_dex: single.has_dex,
             package_name: single.package_name,
             app_name: None,
+            version_name: single.version_name,
             is_split_bundle: false,
             split_apk_count: 1,
             detected_abis,
@@ -160,6 +170,7 @@ struct SingleApkSummary {
     has_android_manifest: bool,
     has_dex: bool,
     package_name: Option<String>,
+    version_name: Option<String>,
     abis: BTreeSet<String>,
     best_icon_png: Option<Vec<u8>>,
 }
@@ -181,6 +192,7 @@ fn inspect_single_apk_archive(path: &Path, capture_icon: bool) -> Result<SingleA
     let mut has_android_manifest = false;
     let mut has_dex = false;
     let mut package_name = None;
+    let mut version_name = None;
     let mut abis = BTreeSet::new();
     let mut best_icon_score: u64 = 0;
     let mut best_icon_png: Option<Vec<u8>> = None;
@@ -204,7 +216,9 @@ fn inspect_single_apk_archive(path: &Path, capture_icon: bool) -> Result<SingleA
             if entry.size() <= MAX_MANIFEST_BYTES as u64 {
                 let mut raw = Vec::new();
                 if entry.read_to_end(&mut raw).is_ok() {
-                    package_name = extract_manifest_package(&raw);
+                    let (pkg, ver) = extract_manifest_metadata(&raw);
+                    package_name = pkg;
+                    version_name = ver;
                 }
             }
         } else if name.ends_with(".dex") && !name.contains('/') {
@@ -239,6 +253,7 @@ fn inspect_single_apk_archive(path: &Path, capture_icon: bool) -> Result<SingleA
         has_android_manifest,
         has_dex,
         package_name,
+        version_name,
         abis,
         best_icon_png,
     })
@@ -291,6 +306,7 @@ fn inspect_and_stage_apkm_bundle(
     let mut has_android_manifest = false;
     let mut has_dex = false;
     let mut package_name = extracted.info_package_name;
+    let mut version_name = extracted.info_version_name;
     let mut abi_set = BTreeSet::new();
     let mut compatible_splits = Vec::with_capacity(extracted.all_split_apks.len());
     let mut icon_png = extracted.top_level_icon_png;
@@ -303,6 +319,11 @@ fn inspect_and_stage_apkm_bundle(
         if package_name.is_none() || is_base_apk_path(split_path) {
             if let Some(pkg) = summary.package_name {
                 package_name = Some(pkg);
+            }
+        }
+        if version_name.is_none() || is_base_apk_path(split_path) {
+            if let Some(ver) = summary.version_name {
+                version_name = Some(ver);
             }
         }
         if icon_png.is_none() {
@@ -335,6 +356,7 @@ fn inspect_and_stage_apkm_bundle(
             has_dex,
             package_name,
             app_name: extracted.info_app_name,
+            version_name,
             is_split_bundle: true,
             split_apk_count: extracted.all_split_apks.len(),
             detected_abis,
@@ -351,6 +373,7 @@ struct ExtractedApkm {
     all_split_apks: Vec<PathBuf>,
     info_package_name: Option<String>,
     info_app_name: Option<String>,
+    info_version_name: Option<String>,
     top_level_icon_png: Option<Vec<u8>>,
 }
 
@@ -380,6 +403,7 @@ fn extract_apkm_entries(
     let mut all_split_apks = Vec::new();
     let mut info_package_name = None;
     let mut info_app_name = None;
+    let mut info_version_name = None;
     let mut top_level_icon_png = None;
     let mut copy_buf = vec![0u8; IO_BUF_BYTES];
 
@@ -412,6 +436,12 @@ fn extract_apkm_entries(
                         let trimmed = aname.trim();
                         if !trimmed.is_empty() {
                             info_app_name = Some(trimmed.to_string());
+                        }
+                    }
+                    if let Some(ver) = json["release_version"].as_str() {
+                        let trimmed = ver.trim();
+                        if !trimmed.is_empty() {
+                            info_version_name = Some(trimmed.to_string());
                         }
                     }
                 }
@@ -493,6 +523,7 @@ fn extract_apkm_entries(
         all_split_apks,
         info_package_name,
         info_app_name,
+        info_version_name,
         top_level_icon_png,
     })
 }
@@ -612,17 +643,45 @@ fn png_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
 /// Extracts the Android `package` attribute from a binary AXML `AndroidManifest.xml`.
 #[must_use]
 pub fn extract_manifest_package(axml: &[u8]) -> Option<String> {
-    if axml.len() < 8 || read_u16_le(axml, 0)? != 0x0003 {
-        return None;
+    extract_manifest_metadata(axml).0
+}
+
+/// Extracts `(package, versionName)` from a binary AXML `AndroidManifest.xml`.
+#[must_use]
+pub fn extract_manifest_metadata(axml: &[u8]) -> (Option<String>, Option<String>) {
+    let Some(magic) = read_u16_le(axml, 0) else {
+        return (None, None);
+    };
+    if axml.len() < 8 || magic != 0x0003 {
+        return (None, None);
     }
-    let mut pos = usize::from(read_u16_le(axml, 2)?);
+    let Some(start) = read_u16_le(axml, 2) else {
+        return (None, None);
+    };
+    let mut pos = usize::from(start);
     let mut strings: Vec<String> = Vec::new();
+    let mut package_name: Option<String> = None;
+    let mut version_name: Option<String> = None;
 
     while pos + 8 <= axml.len() {
-        let chunk_type = read_u16_le(axml, pos)?;
-        let header_size = usize::from(read_u16_le(axml, pos + 2)?);
-        let chunk_size = read_u32_le(axml, pos + 4)? as usize;
-        if chunk_size < 8 || pos.checked_add(chunk_size)? > axml.len() {
+        let Some(chunk_type) = read_u16_le(axml, pos) else {
+            break;
+        };
+        let Some(header_raw) = read_u16_le(axml, pos + 2) else {
+            break;
+        };
+        let Some(chunk_raw) = read_u32_le(axml, pos + 4) else {
+            break;
+        };
+        let header_size = usize::from(header_raw);
+        let chunk_size = chunk_raw as usize;
+        if chunk_size < 8 {
+            break;
+        }
+        let Some(chunk_end) = pos.checked_add(chunk_size) else {
+            break;
+        };
+        if chunk_end > axml.len() {
             break;
         }
 
@@ -630,39 +689,58 @@ pub fn extract_manifest_package(axml: &[u8]) -> Option<String> {
             strings = parse_axml_string_pool(&axml[pos..pos + chunk_size], header_size)
                 .unwrap_or_default();
         } else if chunk_type == 0x0102 && !strings.is_empty() {
-            let ext = pos.checked_add(header_size)?;
-            if ext + 20 <= pos + chunk_size {
-                let name_idx = read_u32_le(axml, ext + 4)? as usize;
-                let attr_start = usize::from(read_u16_le(axml, ext + 8)?);
-                let attr_size = usize::from(read_u16_le(axml, ext + 10)?);
-                let attr_count = usize::from(read_u16_le(axml, ext + 12)?);
+            if let Some(ext) = pos.checked_add(header_size) {
+                if ext + 20 <= pos + chunk_size {
+                    let name_idx = read_u32_le(axml, ext + 4).unwrap_or(u32::MAX) as usize;
+                    let attr_start = usize::from(read_u16_le(axml, ext + 8).unwrap_or(0));
+                    let attr_size = usize::from(read_u16_le(axml, ext + 10).unwrap_or(0));
+                    let attr_count = usize::from(read_u16_le(axml, ext + 12).unwrap_or(0));
 
-                if strings.get(name_idx).map(String::as_str) == Some("manifest") && attr_size >= 20
-                {
-                    for i in 0..attr_count {
-                        let a_off = ext.checked_add(attr_start)?.checked_add(i * attr_size)?;
-                        if a_off + 20 > pos + chunk_size {
-                            break;
-                        }
-                        let attr_name_idx = read_u32_le(axml, a_off + 4)? as usize;
-                        if strings.get(attr_name_idx).map(String::as_str) == Some("package") {
-                            let raw_val_idx = read_u32_le(axml, a_off + 8)? as usize;
-                            let typed_type = axml[a_off + 15];
-                            let typed_data = read_u32_le(axml, a_off + 16)? as usize;
+                    if strings.get(name_idx).map(String::as_str) == Some("manifest")
+                        && attr_size >= 20
+                    {
+                        for i in 0..attr_count {
+                            let Some(a_off) = ext
+                                .checked_add(attr_start)
+                                .and_then(|v| v.checked_add(i * attr_size))
+                            else {
+                                break;
+                            };
+                            if a_off + 20 > pos + chunk_size {
+                                break;
+                            }
+                            let attr_name_idx =
+                                read_u32_le(axml, a_off + 4).unwrap_or(u32::MAX) as usize;
+                            let attr_name = strings.get(attr_name_idx).map(String::as_str);
+                            if matches!(attr_name, Some("package" | "versionName")) {
+                                let raw_val_idx =
+                                    read_u32_le(axml, a_off + 8).unwrap_or(u32::MAX) as usize;
+                                let typed_type = axml[a_off + 15];
+                                let typed_data =
+                                    read_u32_le(axml, a_off + 16).unwrap_or(u32::MAX) as usize;
 
-                            let candidate = strings.get(raw_val_idx).or_else(|| {
-                                if typed_type == 0x03 {
-                                    strings.get(typed_data)
-                                } else {
-                                    None
-                                }
-                            });
-                            if let Some(pkg) = candidate {
-                                if validate_package_name(pkg).is_ok() {
-                                    return Some(pkg.clone());
+                                let candidate = strings.get(raw_val_idx).or_else(|| {
+                                    if typed_type == 0x03 {
+                                        strings.get(typed_data)
+                                    } else {
+                                        None
+                                    }
+                                });
+                                if let Some(val) = candidate {
+                                    if attr_name == Some("package")
+                                        && validate_package_name(val).is_ok()
+                                    {
+                                        package_name = Some(val.clone());
+                                    } else if attr_name == Some("versionName") {
+                                        let trimmed = val.trim();
+                                        if !trimmed.is_empty() {
+                                            version_name = Some(trimmed.to_string());
+                                        }
+                                    }
                                 }
                             }
                         }
+                        break;
                     }
                 }
             }
@@ -671,7 +749,7 @@ pub fn extract_manifest_package(axml: &[u8]) -> Option<String> {
         pos += chunk_size;
     }
 
-    None
+    (package_name, version_name)
 }
 
 fn parse_axml_string_pool(chunk: &[u8], header_size: usize) -> Option<Vec<String>> {

@@ -37,9 +37,18 @@ pub struct HeimdallAutostartStatus {
     pub command: Option<String>,
 }
 
-/// Builds the quoted Windows Shell command line invoked for `.apk` files.
+/// Builds the quoted Windows Shell command line invoked for `.apk` / `.apkm` files.
+///
+/// Prefers the Fluent Design 2 graphical installer dialog (`bifrost-ui.exe --install-apk "%1"`)
+/// when `bifrost-ui.exe` is installed alongside `bifrost.exe`, falling back to `bifrost.exe install "%1"`.
 #[must_use]
 pub fn build_apk_open_command(bifrost_exe: &Path) -> String {
+    if let Some(dir) = bifrost_exe.parent() {
+        let ui_exe = dir.join("bifrost-ui.exe");
+        if ui_exe.is_file() {
+            return format!("\"{}\" --install-apk \"%1\"", ui_exe.display());
+        }
+    }
     format!("\"{}\" install \"%1\"", bifrost_exe.display())
 }
 
@@ -350,10 +359,10 @@ mod tests {
 
     #[test]
     fn builds_properly_quoted_apk_shell_command() {
-        let exe = PathBuf::from(r"C:\Users\johan\AppData\Local\Programs\BIFRÖST\bifrost.exe");
+        let exe = PathBuf::from(r"C:\NonExistentDir\BIFRÖST\bifrost.exe");
         assert_eq!(
             build_apk_open_command(&exe),
-            "\"C:\\Users\\johan\\AppData\\Local\\Programs\\BIFRÖST\\bifrost.exe\" install \"%1\""
+            "\"C:\\NonExistentDir\\BIFRÖST\\bifrost.exe\" install \"%1\""
         );
     }
 
