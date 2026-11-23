@@ -196,6 +196,9 @@ pub enum ConfigAction {
 
     /// Validate a configuration file against schema, bounds, and security rules.
     Validate,
+
+    /// Auto-tune CPU cores and RAM allocation in `bifrost.toml` for this Windows 11 host.
+    Autotune,
 }
 
 #[derive(Debug, Subcommand)]

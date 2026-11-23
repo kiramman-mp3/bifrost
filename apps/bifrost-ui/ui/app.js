@@ -678,6 +678,18 @@ function wireEvents() {
     }
   });
 
+  document.getElementById("btn-autotune-config").addEventListener("click", async () => {
+    try {
+      const tuned = await invoke("auto_tune_config");
+      showToast(
+        `Auto-tuned for this PC: ${tuned.runtime.cpu_cores} vCPUs, ${tuned.runtime.memory_mb} MB RAM. Restart Midgard to apply.`
+      );
+      await refreshAll();
+    } catch (err) {
+      showToast(String(err), true);
+    }
+  });
+
   document.getElementById("config-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     if (!lastDashboard) return;
