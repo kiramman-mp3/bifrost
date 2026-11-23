@@ -14,6 +14,8 @@ workspace = true
 [dependencies]
 bifrost-core = { path = "../bifrost-core" }
 bifrost-storage = { path = "../bifrost-storage" }
+getrandom.workspace = true
+hex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
