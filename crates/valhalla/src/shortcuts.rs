@@ -331,12 +331,28 @@ pub fn sanitize_shortcut_name(raw: &str) -> Option<String> {
         return None;
     }
 
-    let upper = trimmed.to_ascii_uppercase();
-    if RESERVED_WINDOWS_NAMES.contains(&upper.as_str()) {
-        return Some(format!("{trimmed} App"));
+    // Windows treats the part before the first '.' (ignoring trailing spaces) as the
+    // device name, so `CON.txt` or `NUL .x` are reserved too.
+    let (stem, rest) = trimmed.split_at(trimmed.find('.').unwrap_or(trimmed.len()));
+    if is_reserved_windows_stem(stem) {
+        return Some(format!("{} App{rest}", stem.trim_end()));
     }
 
     Some(trimmed)
+}
+
+/// Returns true when `stem` is a Windows reserved device name (`CON`, `NUL`, `COM1`,
+/// `LPT¹`, ...), compared case-insensitively and ignoring trailing spaces.
+fn is_reserved_windows_stem(stem: &str) -> bool {
+    let upper = stem.trim_end().to_ascii_uppercase();
+    if RESERVED_WINDOWS_NAMES.contains(&upper.as_str()) {
+        return true;
+    }
+    // Superscript digits are also reserved after COM/LPT (`COM¹`, `LPT³`).
+    let mut chars = upper.chars();
+    let prefix: String = chars.by_ref().take(3).collect();
+    let tail: String = chars.collect();
+    (prefix == "COM" || prefix == "LPT") && matches!(tail.as_str(), "¹" | "²" | "³")
 }
 
 /// Selects the cleanest launcher executable for Windows `.lnk` shortcuts.
