@@ -174,7 +174,7 @@ BIFRÖST/
 │   │   └── src/
 │   │       ├── lib.rs                             # #![forbid(unsafe_code)]
 │   │       ├── backend.rs                         # HypervisorBackend trait, VmSpec, VmLaunchInfo
-│   │       ├── qmp.rs                             # Pure-Rust loopback QMP client (system_powerdown)
+│   │       ├── qmp.rs                             # QMP client over a random named pipe (single session, timeouts)
 │   │       ├── qemu_whpx.rs                       # QEMU-WHPX arg builder (direct_kernel, ISO, UEFI pflash), launch & shutdown
 │   │       └── crosvm_whpx.rs                     # Target-evolution crosvm WHPX + gfxstream backend
 │   ├── bifrost-runtime/                           # Midgard lifecycle orchestration, state persistence & log reader

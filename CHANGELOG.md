@@ -10,6 +10,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - **Clipboard shell injection (`bifrost-bridge`)**: Windows clipboard text synced to Android (manually or automatically by Heimdall) was passed unquoted to `adb shell`, so the Android `sh` interpreter executed it. Added `quote_android_shell_arg` (POSIX single-quote escaping) with regression tests, and applied it to clipboard sync and the shared-folder `mkdir`.
 - **Image trust store (`bifrost-core`, `bifrost-storage`, `mimir`, `bifrost-ui`)**: Ed25519 manifest signatures now count only when they verify against `[images] trusted_keys` in `bifrost.toml` (detached `manifest.json.sig` supported). Invalid signatures are always rejected, and unsigned bundles require an explicit `--allow-unsigned` (CLI) or the "Allow unsigned bundle" checkbox (UI). See ADR-0006.
 
+- **QMP off TCP (`bifrost-hypervisor`, `bifrost-runtime`)**: QEMU's unauthenticated QMP monitor listened on `127.0.0.1:<port>`, so any local process or user could power off or control the VM. It now uses `-chardev pipe` with a random 128-bit name. Because QEMU's pipe accepts one client, graceful shutdown runs `system_powerdown` and `quit` in a single `QmpSession`, whose I/O runs on a worker thread with timeouts. VMs started by older versions (TCP endpoints) can still be shut down.
+- **Clipboard via stdin (`bifrost-bridge`)**: clipboard text is now streamed through `adb` stdin into a fixed `cmd clipboard set-text "$(cat)"` script (`AdbClient::run_adb_with_stdin`). It never appears on a command line, which also removes the ~32K Windows command-line limit that broke large syncs.
+
 ### Changed
 - **Breaking**: removed `bifrost images register --pubkey`; trusted keys come only from `bifrost.toml`.
 

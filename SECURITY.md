@@ -12,8 +12,9 @@ Security is a foundational requirement of **BIFRÖST**, not an optional feature.
 6. **Cryptographic Verification of Runtime Images**: Every Midgard artifact must pass SHA-256 digest verification before boot. Ed25519 manifest signatures are trusted **only** when they verify against a publisher key listed in `bifrost.toml` under `[images] trusted_keys`; a key supplied alongside the signature is never trusted on its own. Invalid or untrusted signatures are always rejected. Unsigned bundles are refused unless the user opts in explicitly per registration (`--allow-unsigned` or the UI checkbox), and they are then recorded as `sha256-only` (see [ADR-0006](docs/decisions/ADR-0006-image-trust-store.md)).
 7. **Data Persistence & Destructive Safeguards**: Android `userdata` lives on an isolated persistent disk across compatible upgrades; destructive actions (wipe, reset, disk deletion) require explicit user confirmation.
 8. **Memory Safety & `unsafe` Auditing**: Avoid `unsafe` Rust wherever possible. Every `unsafe` block must include a `// SAFETY:` comment explaining the upheld invariants and must be reviewed explicitly.
-9. **Quoted Guest Shell Arguments**: `adb shell` evaluates its arguments with the Android `sh` interpreter. Every host-controlled value passed to it (clipboard text, paths, labels) must be quoted with `quote_android_shell_arg` or validated against a strict character set.
-10. **Clean-Room Distribution**: BIFRÖST never bundles or redistributes proprietary Google Apps / Play Services or unauthorized proprietary ARM translation binaries (`libhoudini`, `libndk_translation`).
+9. **No Data on Guest Shell Command Lines**: `adb shell` evaluates its arguments with the Android `sh` interpreter. Arbitrary host data (clipboard text) is streamed through stdin into a fixed script; any other host-controlled value must be quoted with `quote_android_shell_arg` or validated against a strict character set.
+10. **Unauthenticated VMM Monitors Stay Off the Network**: QEMU's QMP monitor has no authentication, so it is exposed only on a randomly named Windows pipe, never on a TCP port.
+11. **Clean-Room Distribution**: BIFRÖST never bundles or redistributes proprietary Google Apps / Play Services or unauthorized proprietary ARM translation binaries (`libhoudini`, `libndk_translation`).
 
 ## Reporting a Vulnerability
 
