@@ -33,8 +33,13 @@ To also erase Android `userdata` and configuration, both explicit confirmation s
 ## Verified Runtime Updates & Recovery CLI
 
 ```powershell
-# Register a SHA-256 + Ed25519-verified Midgard runtime bundle
-bifrost images register --manifest path\to\manifest.json --signature <sig_hex> --pubkey <pub_hex>
+# Register a Midgard bundle signed by a publisher key listed in bifrost.toml:
+#   [images]
+#   trusted_keys = ["<64-hex-char Ed25519 public key>"]
+# The signature is read from --signature or from a detached manifest.json.sig.
+bifrost images register --manifest path\to\manifest.json --signature <sig_hex>
+# Unsigned bundles (SHA-256 only) require an explicit opt-in:
+bifrost images register --manifest path\to\manifest.json --allow-unsigned
 bifrost images list
 bifrost images use <image_id>
 

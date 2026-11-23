@@ -19,8 +19,10 @@ main        # Stable releases only — never commit directly to main
       ├── feature/<kebab-case-name>
       ├── fix/<kebab-case-name>
       ├── refactor/<kebab-case-name>
+      ├── perf/<kebab-case-name>
       ├── docs/<kebab-case-name>
-      └── chore/<kebab-case-name>
+      ├── chore/<kebab-case-name>
+      └── release/vX.Y.Z          # Version preparation, merged --no-ff into main and develop
 ```
 
 1. Branch from `develop`:
@@ -29,7 +31,7 @@ main        # Stable releases only — never commit directly to main
    git checkout -b feature/your-feature-name
    ```
 2. Make small, coherent commits following **Conventional Commits** (`feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`, `perf:`, `build:`, `ci:`).
-3. Verify formatting, lints, tests, and build before merging (once the Cargo workspace is active in Milestone 1+):
+3. Verify formatting, lints, tests, and build before merging (with the GNU toolchain in a non-ASCII checkout path such as `BIFRÖST`, set an ASCII `CARGO_TARGET_DIR` first):
    ```bash
    cargo fmt --all -- --check
    cargo clippy --workspace --all-targets -- -D warnings
@@ -43,6 +45,8 @@ main        # Stable releases only — never commit directly to main
 - Follow idiomatic Rust (`rustfmt` defaults and zero `clippy` warnings).
 - Use `thiserror` for structured library errors and `anyhow` only at top-level CLI/daemon boundaries where appropriate.
 - Avoid `unsafe` Rust unless interfacing directly with Windows/FFI APIs; document every `unsafe` block with an explicit `// SAFETY:` invariant comment.
+- Never pass host-controlled strings to `adb shell` unquoted: use `bifrost_bridge::quote_android_shell_arg` or validate against a strict character set (see `SECURITY.md`).
+- Never interpolate dynamic values into PowerShell scripts; pass them through environment variables to a fixed script.
 - Keep component naming faithful to [ARCHITECTURE.md](ARCHITECTURE.md) without inventing unnecessary mythology names for ordinary abstractions.
 
 ## Architecture Decision Records (ADRs)

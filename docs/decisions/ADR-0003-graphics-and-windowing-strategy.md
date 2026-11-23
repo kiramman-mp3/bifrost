@@ -27,3 +27,8 @@ Booting Android inside a VM provides only a single framebuffer surface and defau
 
 - **Positive**: Delivers real, usable independent Android windows in Milestone 6 without heavily forking Android's `SurfaceFlinger`, while keeping a clear upgrade path to zero-copy composition later.
 - **Negative / Trade-off**: Frame-transport multi-window (Stage 2) has slightly higher latency and memory bandwidth than zero-copy shared textures; requires careful DPI scaling and focus/input synchronization testing.
+
+## Amendments
+
+- **Stage 2 interim implementation**: Per-app windows currently use `scrcpy` VirtualDisplay streaming over loopback ADB, not a native vsock + Win32/D3D12 host. See [ADR-0005](ADR-0005-scrcpy-virtualdisplay-windowing.md).
+- **3D status**: `virtio-gpu-pci` (2D) is the verified default; `virtio-gpu-gl-pci` + `egl-headless` is experimental, and `crosvm` + `gfxstream` is not yet runnable on Windows. See [docs/research/gpu-3d-windows-evaluation.md](../research/gpu-3d-windows-evaluation.md).

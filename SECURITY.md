@@ -9,10 +9,11 @@ Security is a foundational requirement of **BIFRÖST**, not an optional feature.
 3. **Loopback-Only ADB by Default**: ADB ports bind strictly to `127.0.0.1` (or `virtio-vsock` tunnels) and are never exposed to `0.0.0.0` or public network interfaces by default.
 4. **Least Privilege**: `mimir`, `heimdall`, `bifrost-ui`, and VM processes run as standard unprivileged user processes. Administrator privileges are never requested during normal runtime execution.
 5. **Authenticated Local IPC**: All local IPC endpoints (`heimdall` Windows Named Pipes) enforce current-user SID DACLs and validate every incoming request schema.
-6. **Cryptographic Verification of Runtime Images**: Downloaded Midgard Android images and updates must pass mandatory SHA-256 digest and cryptographic signature verification before mounting or booting.
+6. **Cryptographic Verification of Runtime Images**: Every Midgard artifact must pass SHA-256 digest verification before boot. Ed25519 manifest signatures are trusted **only** when they verify against a publisher key listed in `bifrost.toml` under `[images] trusted_keys`; a key supplied alongside the signature is never trusted on its own. Invalid or untrusted signatures are always rejected. Unsigned bundles are refused unless the user opts in explicitly per registration (`--allow-unsigned` or the UI checkbox), and they are then recorded as `sha256-only` (see [ADR-0006](docs/decisions/ADR-0006-image-trust-store.md)).
 7. **Data Persistence & Destructive Safeguards**: Android `userdata` lives on an isolated persistent disk across compatible upgrades; destructive actions (wipe, reset, disk deletion) require explicit user confirmation.
 8. **Memory Safety & `unsafe` Auditing**: Avoid `unsafe` Rust wherever possible. Every `unsafe` block must include a `// SAFETY:` comment explaining the upheld invariants and must be reviewed explicitly.
-9. **Clean-Room Distribution**: BIFRÖST never bundles or redistributes proprietary Google Apps / Play Services or unauthorized proprietary ARM translation binaries (`libhoudini`, `libndk_translation`).
+9. **Quoted Guest Shell Arguments**: `adb shell` evaluates its arguments with the Android `sh` interpreter. Every host-controlled value passed to it (clipboard text, paths, labels) must be quoted with `quote_android_shell_arg` or validated against a strict character set.
+10. **Clean-Room Distribution**: BIFRÖST never bundles or redistributes proprietary Google Apps / Play Services or unauthorized proprietary ARM translation binaries (`libhoudini`, `libndk_translation`).
 
 ## Reporting a Vulnerability
 
