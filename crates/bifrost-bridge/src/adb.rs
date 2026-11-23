@@ -8,6 +8,27 @@ use bifrost_core::{BifrostError, Result};
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
+/// Quotes `arg` as a single POSIX `sh` word for `adb shell`.
+///
+/// `adb shell` joins its arguments with spaces and hands the resulting string to the
+/// Android `/system/bin/sh` interpreter, so any host-controlled value (clipboard text,
+/// paths, labels) must be quoted to prevent shell metacharacter injection. The value is
+/// wrapped in single quotes and every embedded `'` becomes `'\''`.
+#[must_use]
+pub fn quote_android_shell_arg(arg: &str) -> String {
+    let mut quoted = String::with_capacity(arg.len() + 2);
+    quoted.push('\'');
+    for ch in arg.chars() {
+        if ch == '\'' {
+            quoted.push_str(r"'\''");
+        } else {
+            quoted.push(ch);
+        }
+    }
+    quoted.push('\'');
+    quoted
+}
+
 /// An Android device or emulator instance reported by `adb devices -l`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AdbDevice {
@@ -291,6 +312,23 @@ fn find_on_path(binary_name: &str) -> Option<PathBuf> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod shell_quote_tests {
+    use super::quote_android_shell_arg;
+
+    #[test]
+    fn quotes_shell_metacharacters_as_single_word() {
+        assert_eq!(quote_android_shell_arg("hello"), "'hello'");
+        assert_eq!(quote_android_shell_arg(""), "''");
+        assert_eq!(
+            quote_android_shell_arg("x; rm -rf /sdcard/* $(id) `id` | cat"),
+            "'x; rm -rf /sdcard/* $(id) `id` | cat'"
+        );
+        assert_eq!(quote_android_shell_arg("it's"), r"'it'\''s'");
+        assert_eq!(quote_android_shell_arg("a\nb"), "'a\nb'");
+    }
 }
 
 #[cfg(test)]
