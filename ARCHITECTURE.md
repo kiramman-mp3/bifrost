@@ -118,7 +118,7 @@ sequenceDiagram
     Heimdall->>Heimdall: Validate state (Stopped -> Starting)
     Heimdall->>Storage: Verify manifest SHA-256 digests (image registered under trust policy)
     Storage-->>Heimdall: Bundle verified + userdata.img ready
-    Heimdall->>Hypervisor: Spawn QEMU (WHPX, VirtIO devices, CPU/RAM limits, QMP on a random named pipe)
+    Heimdall->>Hypervisor: Spawn QEMU (WHPX, VirtIO devices, CPU/RAM limits, QMP on a per-user AF_UNIX socket)
     Hypervisor->>Midgard: Boot kernel + Android init
     Heimdall->>Heimdall: Transition (Starting -> Booting)
     Midgard-->>Bridge: adbd reachable on 127.0.0.1
@@ -140,7 +140,7 @@ Launching an app or double-clicking an `.apk` while Midgard is stopped triggers 
 | **Host → guest shell** | Command injection through `adb shell` (which evaluates arguments with `sh`) | Arbitrary data such as clipboard text is streamed through stdin to a fixed script (`run_adb_with_stdin`); other host-controlled values are quoted with `quote_android_shell_arg` or validated against strict character sets |
 | **APK & file operations** | Path traversal, Zip Slip, malicious install scripts | Path validation, Zip-Slip rejection for outer and inner archives, installs delegated strictly to Android `pm` |
 | **Windows integration** | Script injection via app labels or notification text | No scripts at runtime: Toasts use WinRT under the `BIFROST.Bifrost` AppUserModelID, registry writes use `winreg`, `.lnk` files are written natively (`mslnk`), file pickers use `IFileOpenDialog` (`rfd`); Toast XML is XML-escaped |
-| **VM control (QMP)** | Local processes or other users powering off or controlling the VM | QMP is exposed only on a Windows named pipe with a random 128-bit name (`pipe:bifrost-qmp-<hex>`), never on TCP; other users only get read access through the default DACL, and the pipe accepts a single client |
+| **VM control (QMP)** | Local processes or other users powering off or controlling the VM | QMP is exposed only on an AF_UNIX socket file with a random 128-bit name (`unix:<data_dir>\run\qmp-<hex>.sock`, `%TEMP%\bifrost-run` fallback), never on TCP; Windows checks the file ACL on `connect` and the directory inherits the per-user `%LOCALAPPDATA%` ACL. `server=on,wait=off` keeps QEMU from blocking boot, and QEMU deletes the socket on exit |
 | **Runtime images** | Tampered or untrusted OS images | SHA-256 digest verification of every artifact before boot; Ed25519 signature must verify against `[images] trusted_keys`; unsigned bundles only with explicit `--allow-unsigned` (ADR-0006) |
 | **Destructive operations** | Accidental wipe of Android `userdata` | Separate persistent `userdata.img`; `--confirm` required for restore/wipe; uninstaller purges only with `-PurgeUserData -ConfirmPurge` |
 | **Privilege model** | Unnecessary elevation | Control plane, VM, installer and file associations run unprivileged (HKCU, `%LOCALAPPDATA%`); elevation only to enable the `HypervisorPlatform` feature |
