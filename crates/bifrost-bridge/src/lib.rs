@@ -12,7 +12,7 @@ pub use adb::{quote_android_shell_arg, AdbClient, AdbDevice, GuestHealth};
 pub use client::HeimdallClient;
 pub use clipboard::{
     read_host_clipboard_text, sync_clipboard_to_android, validate_clipboard_text,
-    write_host_clipboard_text, MAX_CLIPBOARD_BYTES,
+    write_host_clipboard_text, ANDROID_SET_CLIPBOARD_FROM_STDIN, MAX_CLIPBOARD_BYTES,
 };
 pub use files::{validate_guest_relative_path, SharedDirectoryBridge, SharedFileEntry};
 pub use ipc::{
