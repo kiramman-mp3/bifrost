@@ -21,3 +21,6 @@ sha2.workspace = true
 tempfile.workspace = true
 tracing.workspace = true
 zip.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+winreg.workspace = true
