@@ -60,6 +60,7 @@ pub struct BifrostConfig {
     pub desktop: DesktopConfig,
     pub network: NetworkConfig,
     pub logging: LoggingConfig,
+    pub images: ImagesConfig,
 }
 
 impl Default for BifrostConfig {
@@ -71,6 +72,7 @@ impl Default for BifrostConfig {
             desktop: DesktopConfig::default(),
             network: NetworkConfig::default(),
             logging: LoggingConfig::default(),
+            images: ImagesConfig::default(),
         }
     }
 }
@@ -128,6 +130,24 @@ impl Default for RuntimeConfig {
             data_dir: None,
         }
     }
+}
+
+/// Midgard runtime image trust policy.
+///
+/// `trusted_keys` is the local trust store of Ed25519 publisher public keys
+/// (32-byte lowercase hex). `bifrost images register` only marks a bundle as signed
+/// when its manifest signature verifies against one of these keys; unsigned bundles
+/// require an explicit per-registration `--allow-unsigned` opt-in.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ImagesConfig {
+    pub trusted_keys: Vec<String>,
+}
+
+/// Returns `true` when `key` is a 32-byte Ed25519 public key encoded as 64 hex characters.
+#[must_use]
+pub fn is_valid_ed25519_public_key_hex(key: &str) -> bool {
+    key.len() == 64 && key.chars().all(|c| c.is_ascii_hexdigit())
 }
 
 /// Windows 11 desktop integration automation settings.
@@ -329,6 +349,17 @@ impl BifrostConfig {
             });
         }
 
+        for key in &self.images.trusted_keys {
+            if !is_valid_ed25519_public_key_hex(key.trim()) {
+                return Err(BifrostError::ConfigValidation {
+                    field: "images.trusted_keys".to_string(),
+                    reason: format!(
+                        "'{key}' is not a 32-byte Ed25519 public key in hex (64 hex characters)"
+                    ),
+                });
+            }
+        }
+
         Ok(())
     }
 }
@@ -337,6 +368,24 @@ impl BifrostConfig {
 mod tests {
     use super::*;
     use tempfile::TempDir;
+
+    #[test]
+    fn validates_trusted_image_keys() {
+        let mut cfg = BifrostConfig::default();
+        assert!(cfg.images.trusted_keys.is_empty());
+
+        cfg.images.trusted_keys = vec!["ab".repeat(32)];
+        assert!(cfg.validate().is_ok());
+
+        cfg.images.trusted_keys = vec!["not-a-key".to_string()];
+        assert!(cfg.validate().is_err());
+
+        let parsed = BifrostConfig::from_toml_str(
+            "schema_version = 1\n[images]\ntrusted_keys = [\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"]\n",
+        )
+        .unwrap();
+        assert_eq!(parsed.images.trusted_keys.len(), 1);
+    }
 
     #[test]
     fn default_config_is_valid_and_roundtrips_toml() {

@@ -15,7 +15,8 @@ pub mod state;
 
 pub use capabilities::{ComponentCapability, FeatureStatus, VersionInfo};
 pub use config::{
-    BifrostConfig, DisplayConfig, GraphicsMode, LogLevel, NetworkConfig, RuntimeConfig,
+    is_valid_ed25519_public_key_hex, BifrostConfig, DisplayConfig, GraphicsMode, ImagesConfig,
+    LogLevel, NetworkConfig, RuntimeConfig,
 };
 pub use error::{BifrostError, Result};
 pub use paths::{
