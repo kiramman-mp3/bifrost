@@ -216,6 +216,8 @@ version = "0.3.3"
 dependencies = [
  "bifrost-core",
  "bifrost-storage",
+ "getrandom 0.2.17",
+ "hex",
  "serde",
  "serde_json",
  "tempfile",

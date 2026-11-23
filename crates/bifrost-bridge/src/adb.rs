@@ -200,6 +200,67 @@ impl AdbClient {
 
         Ok(stdout)
     }
+
+    /// Runs an ADB command and streams `input` to its standard input.
+    ///
+    /// Used to hand arbitrary data (e.g. clipboard text) to a fixed `adb shell` script,
+    /// so the data never becomes part of a command line: it cannot be interpreted by the
+    /// Android shell and is not limited by the Windows command-line length (~32K chars).
+    pub fn run_adb_with_stdin(&self, args: &[&str], input: &[u8]) -> Result<String> {
+        use std::io::Write;
+        use std::process::Stdio;
+
+        let adb_bin = self.locate_adb()?;
+        debug!(adb = %adb_bin.display(), args = ?args, stdin_bytes = input.len(), "invoking adb with stdin");
+
+        let mut child = Command::new(&adb_bin)
+            .args(args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|source| BifrostError::Io {
+                context: format!("executing '{}'", adb_bin.display()),
+                source,
+            })?;
+
+        // Feed stdin from a separate thread so a full stdout/stderr pipe cannot deadlock.
+        let mut stdin = child.stdin.take().ok_or_else(|| {
+            BifrostError::Bridge("adb child process has no stdin pipe".to_string())
+        })?;
+        let payload = input.to_vec();
+        let feeder = std::thread::spawn(move || {
+            let result = stdin.write_all(&payload);
+            drop(stdin); // EOF tells the guest-side `cat` that the input is complete.
+            result
+        });
+
+        let output = child
+            .wait_with_output()
+            .map_err(|source| BifrostError::Io {
+                context: format!("waiting for '{}'", adb_bin.display()),
+                source,
+            })?;
+        let fed = feeder
+            .join()
+            .map_err(|_| BifrostError::Bridge("adb stdin feeder thread panicked".to_string()))?;
+        fed.map_err(|source| BifrostError::Io {
+            context: "writing adb stdin".to_string(),
+            source,
+        })?;
+
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            return Err(BifrostError::Bridge(format!(
+                "adb {:?} failed (exit {:?}): {}",
+                args,
+                output.status.code(),
+                stderr.trim()
+            )));
+        }
+        Ok(stdout)
+    }
 }
 
 /// Parses stdout from `adb devices -l` into structured [`AdbDevice`] records.
@@ -312,6 +373,25 @@ fn find_on_path(binary_name: &str) -> Option<PathBuf> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod stdin_tests {
+    use super::AdbClient;
+
+    /// Uses `findstr` as a stand-in for `adb`: it echoes stdin, proving that large,
+    /// metacharacter-heavy payloads travel through stdin instead of the command line.
+    #[cfg(windows)]
+    #[test]
+    fn streams_large_payload_through_stdin() {
+        let client = AdbClient::with_binary(r"C:\Windows\System32\findstr.exe");
+        let line = "x; rm -rf /sdcard/* $(id) `id` | cat 'quoted' \"dq\"\n";
+        let payload = line.repeat(2000); // ~100 KB, far above the ~32K command-line cap
+        let out = client
+            .run_adb_with_stdin(&["/R", "^"], payload.as_bytes())
+            .unwrap();
+        assert_eq!(out.replace("\r\n", "\n"), payload);
+    }
 }
 
 #[cfg(test)]

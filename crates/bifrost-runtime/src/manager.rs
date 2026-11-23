@@ -1,10 +1,11 @@
 //! High-level Midgard Android runtime lifecycle coordinator.
 
 use std::fs;
-use std::net::TcpListener;
+
 use std::path::{Path, PathBuf};
 
 use bifrost_core::{BifrostConfig, BifrostError, BifrostPaths, Result, RuntimeState};
+use bifrost_hypervisor::qmp::generate_qmp_pipe_name;
 use bifrost_hypervisor::{HypervisorBackend, QemuWhpxBackend, VmSpec};
 use bifrost_storage::{ensure_userdata_disk, verify_manifest_file, ImageRegistry, VerifiedBundle};
 use serde::{Deserialize, Serialize};
@@ -153,7 +154,7 @@ impl<B: HypervisorBackend> MidgardRuntime<B> {
         let userdata =
             ensure_userdata_disk(self.userdata_disk_path(), self.config.runtime.storage_gb)?;
 
-        let qmp_port = allocate_loopback_port()?;
+        let qmp_pipe_name = generate_qmp_pipe_name()?;
         let spec = VmSpec {
             instance_id: self.instance_id.clone(),
             cpu_cores: self.config.runtime.cpu_cores,
@@ -169,7 +170,7 @@ impl<B: HypervisorBackend> MidgardRuntime<B> {
             interactive_console: options.interactive_console,
             serial_log_path: self.serial_log_path(),
             vmm_stderr_path: self.vmm_stderr_path(),
-            qmp_port,
+            qmp_pipe_name,
         };
 
         let launch = self.backend.spawn(&spec)?;
@@ -313,21 +314,6 @@ impl<B: HypervisorBackend> MidgardRuntime<B> {
     }
 }
 
-fn allocate_loopback_port() -> Result<u16> {
-    let listener = TcpListener::bind("127.0.0.1:0").map_err(|source| BifrostError::Io {
-        context: "allocating ephemeral loopback QMP port".to_string(),
-        source,
-    })?;
-    let port = listener
-        .local_addr()
-        .map_err(|source| BifrostError::Io {
-            context: "querying ephemeral loopback QMP port".to_string(),
-            source,
-        })?
-        .port();
-    Ok(port)
-}
-
 fn read_tail_lines(path: &Path, tail: usize) -> Result<Vec<String>> {
     if !path.exists() {
         return Ok(Vec::new());
@@ -398,7 +384,7 @@ mod tests {
                 command_line: vec!["mock-qemu.exe".to_string()],
                 serial_log_path: spec.serial_log_path.clone(),
                 vmm_stderr_path: spec.vmm_stderr_path.clone(),
-                qmp_endpoint: format!("127.0.0.1:{}", spec.qmp_port),
+                qmp_endpoint: format!("pipe:{}", spec.qmp_pipe_name),
                 adb_endpoint: format!("{}:{}", spec.adb_bind_address, spec.adb_port),
             })
         }

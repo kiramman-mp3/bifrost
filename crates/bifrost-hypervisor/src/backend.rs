@@ -23,7 +23,8 @@ pub struct VmSpec {
     pub interactive_console: bool,
     pub serial_log_path: PathBuf,
     pub vmm_stderr_path: PathBuf,
-    pub qmp_port: u16,
+    /// Random QMP named-pipe name (`bifrost-qmp-<hex>`), see [`crate::qmp`].
+    pub qmp_pipe_name: String,
 }
 
 /// Metadata returned after a hypervisor backend successfully spawns a VM process.
