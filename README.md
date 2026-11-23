@@ -102,6 +102,7 @@ For detailed component contracts, runtime boot sequences, and security boundarie
 ```bash
 BIFRÖST/
 ├── .github/workflows/ci.yml                       # Automated Windows x64 CI (fmt, clippy, test, release build)
+├── .github/workflows/release.yml                  # Tag-driven release: optional Authenticode signing, provenance, GitHub Release
 ├── .gitignore                                     # Rust, /dist/, Windows, disk images, logs, and secrets exclusions
 ├── Cargo.toml                                     # Cargo workspace manifest (13 crates, unsafe_code = "deny")
 ├── Cargo.lock                                     # Reproducible dependency lockfile
@@ -136,7 +137,7 @@ BIFRÖST/
 ├── installer/
 │   ├── README.md                                  # Distribution, installation, upgrade & recovery runbook
 │   └── windows/
-│       ├── build-release-bundle.ps1               # Reproducible release packager + BOM-free SHA-256 manifest
+│       ├── build-release-bundle.ps1               # Release packager: optional Authenticode signing, SHA-256 manifest, versioned zip
 │       ├── install-bifrost.ps1                    # Unprivileged user-space Windows installer (SHA-256 verified)
 │       └── uninstall-bifrost.ps1                  # Clean uninstaller preserving Android userdata by default
 ├── crates/
@@ -357,8 +358,9 @@ cargo build --workspace
 
 ## 📦 Deployment and Distribution
 
-Distribution tooling lives under [installer/](installer/README.md) and [.github/workflows/ci.yml](.github/workflows/ci.yml):
-- `installer/windows/build-release-bundle.ps1` builds `bifrost.exe`, `heimdall.exe`, and `bifrost-ui.exe` in release mode and emits a BOM-free `release-checksums.sha256` manifest.
+Distribution tooling lives under [installer/](installer/README.md), [.github/workflows/ci.yml](.github/workflows/ci.yml) and [.github/workflows/release.yml](.github/workflows/release.yml):
+- Pushing a `vX.Y.Z` tag runs the release workflow: quality gates, an MSVC release build, optional Authenticode signing (`WINDOWS_SIGNING_PFX_*` secrets), a Sigstore build-provenance attestation, and a GitHub Release with notes from the CHANGELOG.
+- `installer/windows/build-release-bundle.ps1` builds `bifrost.exe`, `heimdall.exe`, and `bifrost-ui.exe` in release mode, bundles the installer scripts and `LICENSE`, optionally signs them, and emits a BOM-free `release-checksums.sha256` manifest plus `bifrost-vX.Y.Z-win64.zip` (`-Zip`).
 - `installer/windows/install-bifrost.ps1` verifies every SHA-256 digest before installing unprivileged into `%LOCALAPPDATA%\Programs\BIFRÖST`, updating user `PATH`, and creating a Start Menu shortcut while preserving existing Android `userdata`.
 - `installer/windows/uninstall-bifrost.ps1` removes binaries and shortcuts cleanly while keeping `%LOCALAPPDATA%\bifrost` intact unless `-PurgeUserData -ConfirmPurge` is explicitly specified.
 - Midgard runtime bundles are SHA-256 verified; Ed25519 signatures are accepted only from publisher keys in `bifrost.toml` `[images] trusted_keys`, and unsigned bundles need `--allow-unsigned` (ADR-0006); no proprietary Google Play Services, GApps, `libhoudini`, or `libndk_translation` binaries are ever distributed.
