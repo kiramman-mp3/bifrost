@@ -206,8 +206,11 @@ fn list_images() -> Result<ImageRegistry, String> {
 }
 
 #[tauri::command]
-fn register_image(manifest_path: PathBuf) -> Result<InstalledImageRecord, String> {
-    map_err(service::register_image(manifest_path))
+fn register_image(
+    manifest_path: PathBuf,
+    allow_unsigned: bool,
+) -> Result<InstalledImageRecord, String> {
+    map_err(service::register_image(manifest_path, allow_unsigned))
 }
 
 #[tauri::command]

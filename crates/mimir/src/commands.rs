@@ -20,8 +20,8 @@ use bifrost_network::NetworkManager;
 use bifrost_process::ProcessManager;
 use bifrost_runtime::{MidgardRuntime, RuntimeLogs, RuntimeRecord, StartOptions};
 use bifrost_storage::{
-    backup_userdata, restore_userdata, verify_manifest_file, verify_manifest_signature_file,
-    wipe_userdata_disk, ImageRegistry,
+    backup_userdata, evaluate_manifest_trust, restore_userdata, verify_manifest_file,
+    wipe_userdata_disk, ImageRegistry, ImageTrust,
 };
 use serde::Serialize;
 use valhalla::manager::{InstallOutcome, LaunchOutcome};
@@ -1340,7 +1340,7 @@ fn handle_images(
     explicit_config: Option<&PathBuf>,
     as_json: bool,
 ) -> Result<String> {
-    let (_, _, _, paths) = load_effective_config_and_paths(explicit_config)?;
+    let (_, _, config, paths) = load_effective_config_and_paths(explicit_config)?;
     let mut registry = ImageRegistry::load(&paths.images_dir)?;
 
     match action {
@@ -1381,23 +1381,22 @@ fn handle_images(
         ImagesAction::Register {
             manifest,
             signature,
-            pubkey,
+            allow_unsigned,
             userdata_compat,
         } => {
-            let signature_verified = match (signature.as_deref(), pubkey.as_deref()) {
-                (Some(sig), Some(pk)) => {
-                    verify_manifest_signature_file(manifest, sig, pk)?;
-                    true
-                }
-                (Some(_), None) | (None, Some(_)) => {
-                    return Err(BifrostError::ConfigValidation {
-                        field: "signature/pubkey".to_string(),
-                        reason: "both --signature and --pubkey must be provided together"
-                            .to_string(),
-                    });
-                }
-                (None, None) => false,
-            };
+            let trust = evaluate_manifest_trust(
+                manifest,
+                signature.as_deref(),
+                &config.images.trusted_keys,
+                *allow_unsigned,
+            )?;
+            let signature_verified = trust.is_signed();
+            if let ImageTrust::UnsignedAllowed = trust {
+                tracing::warn!(
+                    manifest = %manifest.display(),
+                    "registering UNSIGNED Midgard image (sha256-only) by explicit --allow-unsigned"
+                );
+            }
 
             let bundle = verify_manifest_file(manifest)?;
             let record = registry.register_bundle(&bundle, signature_verified, *userdata_compat)?;

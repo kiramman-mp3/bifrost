@@ -728,8 +728,10 @@ function wireEvents() {
       return;
     }
     try {
-      const rec = await invoke("register_image", { manifestPath });
-      showToast(`Registered verified image '${rec.id}' (Android ${rec.android_version}).`);
+      const allowUnsigned = document.getElementById("img-allow-unsigned").checked;
+      const rec = await invoke("register_image", { manifestPath, allowUnsigned });
+      const trust = rec.signature_verified ? "trusted signature" : "UNSIGNED, sha256-only";
+      showToast(`Registered image '${rec.id}' (Android ${rec.android_version}, ${trust}).`);
       await refreshAll();
     } catch (err) {
       showToast(String(err), true);
