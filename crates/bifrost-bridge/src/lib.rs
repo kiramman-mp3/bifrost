@@ -8,7 +8,7 @@ pub mod files;
 pub mod ipc;
 pub mod notifications;
 
-pub use adb::{AdbClient, AdbDevice, GuestHealth};
+pub use adb::{quote_android_shell_arg, AdbClient, AdbDevice, GuestHealth};
 pub use client::HeimdallClient;
 pub use clipboard::{
     read_host_clipboard_text, sync_clipboard_to_android, validate_clipboard_text,
