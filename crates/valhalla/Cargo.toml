@@ -14,7 +14,9 @@ workspace = true
 [dependencies]
 bifrost-bridge = { path = "../bifrost-bridge" }
 bifrost-core = { path = "../bifrost-core" }
+directories.workspace = true
 hex.workspace = true
+mslnk.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
