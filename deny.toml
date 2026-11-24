@@ -1,0 +1,48 @@
+# cargo-deny policy for BIFRÖST (https://embarkstudios.github.io/cargo-deny/).
+# Run locally with `cargo deny check`; CI runs it on every push and pull request.
+
+[graph]
+# BIFRÖST ships Windows x64 binaries only; ignore dependencies that exist solely for
+# other platforms (GTK/WebKitGTK, Cocoa, Android NDK) pulled in by Tauri.
+targets = ["x86_64-pc-windows-msvc", "x86_64-pc-windows-gnu"]
+all-features = false
+
+[advisories]
+# RustSec advisory database: known vulnerabilities, unsound and yanked crates.
+yanked = "deny"
+ignore = []
+
+[licenses]
+# Everything here is compatible with distributing an Apache-2.0 project. Each entry is
+# present in the current dependency tree (`cargo deny list`), not a generic template.
+allow = [
+    "Apache-2.0",
+    "MIT",
+    "MIT-0",
+    "BSD-3-Clause",
+    "0BSD",
+    "Zlib",
+    "CC0-1.0",
+    "Unlicense",
+    "Unicode-3.0",
+    # File-level copyleft used by Tauri's HTML/CSS stack (cssparser, selectors). Allowed
+    # for unmodified dependencies; modifying those files would require sharing them.
+    "MPL-2.0",
+]
+confidence-threshold = 0.9
+
+[[licenses.clarify]]
+# Our own crates inherit `license.workspace = true` (Apache-2.0).
+crate = "bifrost-ui"
+expression = "Apache-2.0"
+license-files = []
+
+[bans]
+multiple-versions = "allow"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
