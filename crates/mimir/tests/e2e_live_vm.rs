@@ -50,13 +50,18 @@ fn bifrost(config: &Path, args: &[&str]) -> (bool, String) {
     (status.success(), text)
 }
 
-fn runtime_state(config: &Path) -> Option<String> {
+fn status_json(config: &Path) -> Option<Value> {
     let (ok, text) = bifrost(config, &["status"]);
     if !ok {
         return None;
     }
-    let json: Value = serde_json::from_str(text.trim()).ok()?;
-    json["runtime_state"].as_str().map(str::to_string)
+    serde_json::from_str(text.trim()).ok()
+}
+
+fn runtime_state(config: &Path) -> Option<String> {
+    status_json(config)?["runtime_state"]
+        .as_str()
+        .map(str::to_string)
 }
 
 /// Stops the VM even when an assertion fails, so a failed run never leaks QEMU.
@@ -124,22 +129,40 @@ fn live_vm_boot_clipboard_and_shutdown() {
         "QMP must use a per-user AF_UNIX socket: {record}"
     );
 
+    let adb = AdbClient::new();
     let started = Instant::now();
+    let mut left_trade_in_mode = false;
     loop {
-        match runtime_state(&config).as_deref() {
-            Some("running") => break,
-            Some("failed") => panic!("Midgard entered 'failed' during boot"),
-            _ if started.elapsed() > BOOT_TIMEOUT => {
-                panic!("Android did not finish booting within {BOOT_TIMEOUT:?}")
+        let status = status_json(&config).unwrap_or_default();
+        match (
+            status["runtime_state"].as_str(),
+            status["adb_access"].as_str(),
+        ) {
+            (Some("running"), _) => break,
+            (Some("failed"), _) => panic!("Midgard entered 'failed' during boot"),
+            // The staged bundle `userdata` has never run the setup wizard, so Android 16+
+            // starts adbd in trade-in mode. These disks are disposable, so switch to
+            // evaluation mode (skips the wizard; AOSP wipes data on the next reboot).
+            (_, Some("trade_in_mode")) if !left_trade_in_mode => {
+                // adbd restarts in full mode while serving this command, so the
+                // connection drops and adb exits 255; the next status poll verifies it.
+                let _ = adb.run_adb(&["-s", &endpoint, "shell", "tradeinmode", "evaluate"]);
+                left_trade_in_mode = true;
+                eprintln!("left Android trade-in mode after {:?}", started.elapsed());
             }
+            (_, Some("unauthorized")) => panic!(
+                "Midgard's adbd rejected this PC's ADB key: {}",
+                status["note"]
+            ),
+            _ if started.elapsed() > BOOT_TIMEOUT => panic!(
+                "Android did not finish booting within {BOOT_TIMEOUT:?}; last status: {status}"
+            ),
             _ => std::thread::sleep(Duration::from_secs(5)),
         }
     }
     eprintln!("booted in {:?}", started.elapsed());
 
     // 2. Guest sanity: x86_64 ABI and no ARM translator bundled.
-    let adb = AdbClient::new();
-    let _ = adb.connect_loopback(&endpoint);
     let abi = adb
         .run_adb(&["-s", &endpoint, "shell", "getprop", "ro.product.cpu.abi"])
         .expect("getprop abi");
@@ -165,7 +188,7 @@ fn live_vm_boot_clipboard_and_shutdown() {
         .expect("probe marker");
     assert_eq!(probe.trim(), "clean", "clipboard text was executed by sh");
 
-    // 4. Graceful shutdown over the QMP named pipe.
+    // 4. Graceful shutdown over the per-user QMP AF_UNIX socket.
     let (ok, out) = bifrost(&config, &["runtime", "stop"]);
     assert!(ok, "runtime stop failed:\n{out}");
     let stopping = Instant::now();
