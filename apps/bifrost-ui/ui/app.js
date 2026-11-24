@@ -124,8 +124,11 @@ function renderDashboard(data) {
   sidebarDot.className = "dot " + (state === "running" ? "ok" : data.heimdall_connected ? "warn" : "");
   document.getElementById("sidebar-runtime-label").textContent = `Midgard: ${state}`;
 
-  document.getElementById("dash-android").textContent =
-    data.runtime.android_version ? `Android ${data.runtime.android_version}` : "Not booted";
+  document.getElementById("dash-android").textContent = data.adb_access_hint
+    ? `ADB blocked: ${data.adb_access_hint}`
+    : data.runtime.android_version
+      ? `Android ${data.runtime.android_version}`
+      : "Not booted";
   document.getElementById("dash-image").textContent =
     data.runtime.image_id ? `Image: ${data.runtime.image_id}` : "Image: none loaded";
 

@@ -7,8 +7,8 @@ use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
 use bifrost_bridge::{
-    default_pipe_name, read_host_clipboard_text, AdbClient, AdbDevice, DaemonHealthReport,
-    HeimdallClient, IpcRequest, SharedDirectoryBridge, SharedFileEntry,
+    default_pipe_name, read_host_clipboard_text, AdbClient, AdbDevice, AdbEndpointState,
+    DaemonHealthReport, HeimdallClient, IpcRequest, SharedDirectoryBridge, SharedFileEntry,
 };
 use bifrost_core::{
     validate_host_file_path, BifrostConfig, BifrostError, BifrostPaths, Result, RuntimeState,
@@ -67,6 +67,8 @@ pub struct DashboardSnapshot {
     pub heimdall_health: Option<DaemonHealthReport>,
     pub heimdall_autostart: bool,
     pub runtime: RuntimeRecord,
+    /// Why ADB cannot reach the active guest, as an actionable sentence, if it cannot.
+    pub adb_access_hint: Option<String>,
     pub active_manifest_path: Option<PathBuf>,
     pub config: BifrostConfig,
     pub config_path: PathBuf,
@@ -148,10 +150,12 @@ pub async fn get_dashboard_snapshot() -> Result<DashboardSnapshot> {
         MidgardRuntime::with_default_backend(config.clone(), paths.clone()).status()?
     };
 
+    let mut adb_access = heimdall_health.as_ref().and_then(|h| h.adb_access);
     if !heimdall_connected && runtime.state == RuntimeState::Booting {
         if let Some(ref endpoint) = runtime.adb_endpoint {
             let adb = AdbClient::new();
-            if adb.ensure_connected(endpoint).unwrap_or(false)
+            adb_access = adb.diagnose_endpoint(endpoint).ok();
+            if adb_access == Some(AdbEndpointState::Ready)
                 && adb
                     .probe_guest_health(endpoint)
                     .is_ok_and(|g| g.boot_completed)
@@ -197,6 +201,9 @@ pub async fn get_dashboard_snapshot() -> Result<DashboardSnapshot> {
         heimdall_connected,
         heimdall_health,
         heimdall_autostart,
+        adb_access_hint: adb_access
+            .and_then(AdbEndpointState::remediation)
+            .map(str::to_string),
         runtime,
         active_manifest_path,
         config,

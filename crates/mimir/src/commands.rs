@@ -7,8 +7,8 @@ use std::path::PathBuf;
 
 use bifrost_bridge::{
     default_pipe_name, list_active_notifications, read_host_clipboard_text,
-    sync_clipboard_to_android, AdbClient, AdbDevice, DaemonHealthReport, HeimdallClient,
-    IpcRequest, SharedDirectoryBridge,
+    sync_clipboard_to_android, AdbClient, AdbDevice, AdbEndpointState, DaemonHealthReport,
+    HeimdallClient, IpcRequest, SharedDirectoryBridge,
 };
 use bifrost_core::{
     validate_host_file_path, BifrostConfig, BifrostError, BifrostPaths, Result, RuntimeState,
@@ -42,6 +42,8 @@ pub struct StatusReport {
     pub config_path: PathBuf,
     pub config_exists: bool,
     pub runtime: RuntimeRecord,
+    /// ADB access to the active guest (`ready`, `unauthorized`, `trade_in_mode`, `offline`).
+    pub adb_access: Option<AdbEndpointState>,
     pub note: String,
 }
 
@@ -267,10 +269,12 @@ async fn handle_status(explicit_config: Option<&PathBuf>, as_json: bool) -> Resu
     };
 
     // Reconcile `Booting` -> `Running` directly via loopback ADB when Heimdall is offline.
+    let mut adb_access = heimdall_health.as_ref().and_then(|h| h.adb_access);
     if !heimdall_connected && record.state == RuntimeState::Booting {
         if let Some(ref endpoint) = record.adb_endpoint {
             let adb = AdbClient::new();
-            if adb.ensure_connected(endpoint).unwrap_or(false)
+            adb_access = adb.diagnose_endpoint(endpoint).ok();
+            if adb_access == Some(AdbEndpointState::Ready)
                 && adb
                     .probe_guest_health(endpoint)
                     .is_ok_and(|g| g.boot_completed)
@@ -287,7 +291,10 @@ async fn handle_status(explicit_config: Option<&PathBuf>, as_json: bool) -> Resu
         .map(|h| h.runtime_state)
         .unwrap_or(record.state);
 
-    let note = if heimdall_connected {
+    let adb_hint = adb_access.and_then(AdbEndpointState::remediation);
+    let note = if let Some(hint) = adb_hint {
+        hint
+    } else if heimdall_connected {
         "Connected to Heimdall supervisor over authenticated Windows Named Pipe IPC."
     } else if record.state.is_active() {
         "Midgard VM is active; Heimdall daemon is not running (start with `bifrost daemon start`)."
@@ -302,6 +309,7 @@ async fn handle_status(explicit_config: Option<&PathBuf>, as_json: bool) -> Resu
         config_path,
         config_exists,
         runtime: record,
+        adb_access,
         note: note.to_string(),
     };
 

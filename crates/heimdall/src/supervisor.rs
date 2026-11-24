@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, RwLock};
 use std::time::{Duration, Instant};
 
-use bifrost_bridge::{AdbClient, DaemonHealthReport};
+use bifrost_bridge::{AdbClient, AdbEndpointState, DaemonHealthReport};
 use bifrost_core::config::DesktopConfig;
 use bifrost_core::RuntimeState;
 use bifrost_runtime::MidgardRuntime;
@@ -70,6 +70,7 @@ impl SupervisorState {
             guest_health: None,
             health_checks_completed: 0,
             pipe_name: pipe_name.clone(),
+            adb_access: None,
         };
 
         Self {
@@ -162,6 +163,26 @@ impl SupervisorState {
             None
         };
 
+        // Explain a guest that ADB cannot reach (unauthorized key, trade-in mode) instead
+        // of leaving Midgard silently stuck in `booting`.
+        let adb_access = match (&guest_health, &adb_endpoint) {
+            (Some(_), _) => Some(AdbEndpointState::Ready),
+            (None, Some(endpoint)) if adb_available && runtime_state.is_active() => {
+                self.adb.diagnose_endpoint(endpoint).ok()
+            }
+            _ => None,
+        };
+        let prev_access = self
+            .health
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .adb_access;
+        if adb_access != prev_access {
+            if let Some(hint) = adb_access.and_then(AdbEndpointState::remediation) {
+                warn!(state = ?adb_access, "{hint}");
+            }
+        }
+
         let effective_state = if runtime_state == RuntimeState::Booting
             && guest_health.as_ref().is_some_and(|g| g.boot_completed)
         {
@@ -173,6 +194,7 @@ impl SupervisorState {
 
         let mut guard = self.health.write().unwrap_or_else(PoisonError::into_inner);
         guard.uptime_secs = uptime_secs;
+        guard.adb_access = adb_access;
         guard.runtime_state = effective_state;
         guard.vm_pid = vm_pid;
         guard.adb_available = adb_available;
