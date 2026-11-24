@@ -26,6 +26,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - **Update notice (`bifrost-client`, `mimir`, `bifrost-ui`)**: `bifrost update` and a Settings card compare the running build with the latest GitHub release and explain how to upgrade with the SHA-256-verified release bundle. The check runs only on request, uses Windows' own `curl.exe` (HTTPS only, 15 s limit, no user or host data) and downloads or installs nothing.
 
+- **Live VM e2e workflow (Experimental)**: `.github/workflows/e2e-live-vm.yml` runs the `e2e_live_vm` test on a self-hosted Windows 11 runner labelled `whpx`, only on manual dispatch (never for pull requests), and fails instead of passing vacuously when no image manifest is configured. No runner is registered yet; see `docs/research/self-hosted-e2e-runner.md`.
+
 ### Fixed
 - **Status badges overflowed (`bifrost-ui`)**: long labels such as `IMPLEMENTED` spilled out of the fixed 74 px badge column in Settings; check lists now share one column sized to the longest badge.
 - **Blocking desktop commands ran on the window thread (`bifrost-ui`)**: synchronous Tauri commands execute on the main thread, so ADB calls (processes, port forwards), image SHA-256 hashing, `userdata.img` backup/restore and the doctor report froze the window while running. All 20 I/O commands now run on the blocking pool.

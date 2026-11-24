@@ -126,6 +126,7 @@ For detailed component contracts, runtime boot sequences, and security boundarie
 BIFRÖST/
 ├── .github/workflows/ci.yml                       # Automated Windows x64 CI (fmt, clippy, test, release build)
 ├── .github/workflows/release.yml                  # Tag-driven release: optional Authenticode signing, provenance, GitHub Release
+├── .github/workflows/e2e-live-vm.yml              # Manual live Midgard VM e2e on a self-hosted WHPX runner (Experimental)
 ├── .gitignore                                     # Rust, /dist/, Windows, disk images, logs, and secrets exclusions
 ├── Cargo.toml                                     # Cargo workspace manifest (14 crates, unsafe_code = "deny")
 ├── Cargo.lock                                     # Reproducible dependency lockfile
@@ -307,6 +308,7 @@ BIFRÖST/
     │   └── ADR-0006-image-trust-store.md          # Local Ed25519 trust store for Midgard images
     └── research/
         ├── feasibility-report.md                  # Technical feasibility & host baseline report
+        ├── self-hosted-e2e-runner.md              # Registering a WHPX runner for the live VM e2e workflow
         └── gpu-3d-windows-evaluation.md           # Empirical Windows 11 GPU 3D evaluation (ANGLE/virgl & crosvm-whpx)
 ```
 
