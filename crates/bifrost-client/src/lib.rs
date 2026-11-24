@@ -442,6 +442,97 @@ impl Session {
     }
 }
 
+/// How long a freshly spawned Heimdall may take to serve its Named Pipe.
+pub const HEIMDALL_START_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Outcome of [`Session::start_heimdall`].
+#[derive(Debug, Clone)]
+pub enum DaemonStart {
+    /// Heimdall was already serving its pipe.
+    AlreadyRunning(DaemonHealthReport),
+    /// Heimdall was spawned and answered within [`HEIMDALL_START_TIMEOUT`].
+    Started(DaemonHealthReport),
+}
+
+impl DaemonStart {
+    #[must_use]
+    pub fn health(&self) -> &DaemonHealthReport {
+        match self {
+            Self::AlreadyRunning(health) | Self::Started(health) => health,
+        }
+    }
+}
+
+impl Session {
+    /// Starts Heimdall detached (no console window) unless it already answers, then
+    /// waits for its authenticated pipe. `config` is forwarded as `--config`.
+    pub async fn start_heimdall(&self, config: Option<&Path>) -> Result<DaemonStart> {
+        if let Ok(health) = self.heimdall.health().await {
+            return Ok(DaemonStart::AlreadyRunning(health));
+        }
+        let heimdall_bin = locate_heimdall_binary()?;
+        let mut cmd = std::process::Command::new(&heimdall_bin);
+        cmd.arg("run")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+        if let Some(config) = config {
+            cmd.arg("--config").arg(config);
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            cmd.creation_flags(CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW);
+        }
+        cmd.spawn().map_err(|source| BifrostError::Io {
+            context: format!("spawning Heimdall daemon '{}'", heimdall_bin.display()),
+            source,
+        })?;
+
+        let poll = Duration::from_millis(250);
+        let deadline = tokio::time::Instant::now() + HEIMDALL_START_TIMEOUT;
+        while tokio::time::Instant::now() < deadline {
+            tokio::time::sleep(poll).await;
+            if let Ok(health) = self.heimdall.health().await {
+                return Ok(DaemonStart::Started(health));
+            }
+        }
+        Err(BifrostError::Ipc(format!(
+            "Heimdall daemon was spawned but did not become reachable over IPC within {}s",
+            HEIMDALL_START_TIMEOUT.as_secs()
+        )))
+    }
+}
+
+/// Finds `heimdall.exe` next to the running executable or in the per-user install dir.
+pub fn locate_heimdall_binary() -> Result<PathBuf> {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            for name in ["heimdall.exe", "heimdall"] {
+                let sibling = dir.join(name);
+                if sibling.is_file() {
+                    return Ok(sibling);
+                }
+            }
+        }
+    }
+    if let Ok(local) = std::env::var("LOCALAPPDATA") {
+        let installed = PathBuf::from(local)
+            .join("Programs")
+            .join("BIFRÖST")
+            .join("heimdall.exe");
+        if installed.is_file() {
+            return Ok(installed);
+        }
+    }
+    Err(BifrostError::Runtime(
+        r"heimdall executable not found next to this program or in %LOCALAPPDATA%\Programs\BIFRÖST"
+            .to_string(),
+    ))
+}
+
 /// Runs a blocking closure on Tokio's blocking pool, mapping a panicked task to an error.
 pub async fn blocking<T, F>(op: F) -> Result<T>
 where
