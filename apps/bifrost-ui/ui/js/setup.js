@@ -150,7 +150,30 @@ async function firstBoot(button) {
   });
 }
 
+async function checkForUpdates(button) {
+  const status = document.getElementById("update-status");
+  await runBusy(button, "Checking…", async () => {
+    try {
+      const info = await invoke("check_for_updates");
+      if (!info.update_available) {
+        status.textContent = `BIFRÖST ${info.current_version} is up to date (latest release: ${info.latest_version}).`;
+        return;
+      }
+      const bundle = info.bundle_asset ? ` (${info.bundle_asset})` : "";
+      status.innerHTML =
+        `BIFRÖST <strong>${escapeHtml(info.latest_version)}</strong> is available (installed: ${escapeHtml(info.current_version)}). ` +
+        `Download the release bundle${escapeHtml(bundle)} from <code>${escapeHtml(info.release_url)}</code> and run ` +
+        "<code>install-bifrost.ps1</code>; it verifies every file's SHA-256 and keeps your Android data.";
+    } catch (err) {
+      status.textContent = `Could not check for updates: ${err}`;
+    }
+  });
+}
+
 export function wireSetup() {
+  document.getElementById("btn-check-updates").addEventListener("click", (event) =>
+    checkForUpdates(event.currentTarget)
+  );
   document.getElementById("setup-steps").addEventListener("click", (event) => {
     const target = event.target.closest("button");
     if (!target) return;

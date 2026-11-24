@@ -113,6 +113,11 @@ async fn install_setup_tool(step_id: String) -> Result<SetupPlan, String> {
 }
 
 #[tauri::command]
+async fn check_for_updates() -> Result<bifrost_client::update::UpdateInfo, String> {
+    map_err(service::check_for_updates().await)
+}
+
+#[tauri::command]
 async fn start_first_boot() -> Result<RuntimeRecord, String> {
     map_err(service::start_first_boot().await)
 }
@@ -387,6 +392,7 @@ fn main() {
             get_setup_plan,
             install_setup_tool,
             start_first_boot,
+            check_for_updates,
             list_apps,
             get_app_info,
             inspect_apk_file,
