@@ -148,9 +148,24 @@ async fn handle_connection<S>(
     }
 }
 
+/// Runs a blocking supervisor operation on Tokio's blocking pool and serializes its result.
+async fn run_blocking<T, F>(state: &Arc<SupervisorState>, op: F) -> Result<serde_json::Value>
+where
+    T: serde::Serialize,
+    F: FnOnce(&SupervisorState) -> Result<T> + Send + 'static,
+{
+    let state = Arc::clone(state);
+    tokio::task::spawn_blocking(move || {
+        op(&state)
+            .and_then(|v| serde_json::to_value(v).map_err(|e| BifrostError::Ipc(e.to_string())))
+    })
+    .await
+    .map_err(|err| BifrostError::Ipc(format!("IPC worker task failed: {err}")))?
+}
+
 async fn dispatch_request(
     envelope: &IpcRequestEnvelope,
-    state: &SupervisorState,
+    state: &Arc<SupervisorState>,
     expected_token: &str,
     shutdown_tx: &watch::Sender<bool>,
 ) -> IpcResponseEnvelope {
@@ -172,97 +187,107 @@ async fn dispatch_request(
         return IpcResponseEnvelope::failure(envelope.request_id, "IPC authentication failed");
     }
 
-    let result: Result<serde_json::Value> = match &envelope.request {
+    // Every arm below performs blocking work (image hashing, VMM spawn, `adb.exe`
+    // round-trips), so it runs on Tokio's blocking pool instead of an async worker.
+    let request = envelope.request.clone();
+    let result: Result<serde_json::Value> = match request {
         IpcRequest::Ping => Ok(serde_json::json!({
             "pong": true,
             "daemon_pid": std::process::id(),
         })),
-        IpcRequest::DaemonHealth => {
-            let report = state.refresh_health().await;
-            serde_json::to_value(report).map_err(|err| BifrostError::Ipc(err.to_string()))
+        IpcRequest::DaemonShutdown => {
+            let _ = shutdown_tx.send(true);
+            Ok(serde_json::json!({ "shutting_down": true }))
         }
-        IpcRequest::RuntimeStatus => state
-            .runtime
-            .status()
-            .and_then(|r| serde_json::to_value(r).map_err(|e| BifrostError::Ipc(e.to_string()))),
+        IpcRequest::DaemonHealth => run_blocking(state, |s| Ok(s.refresh_health())).await,
+        IpcRequest::RuntimeStatus => run_blocking(state, |s| s.runtime.status()).await,
         IpcRequest::RuntimeStart {
             manifest_path,
             headless,
-        } => state
-            .runtime
-            .start(
-                manifest_path,
-                StartOptions {
-                    headless: *headless,
-                    interactive_console: false,
-                },
-            )
-            .and_then(|r| serde_json::to_value(r).map_err(|e| BifrostError::Ipc(e.to_string()))),
-        IpcRequest::RuntimeStop { force } => state
-            .runtime
-            .stop(*force)
-            .and_then(|r| serde_json::to_value(r).map_err(|e| BifrostError::Ipc(e.to_string()))),
+        } => {
+            run_blocking(state, move |s| {
+                s.runtime.start(
+                    manifest_path,
+                    StartOptions {
+                        headless,
+                        interactive_console: false,
+                    },
+                )
+            })
+            .await
+        }
+        IpcRequest::RuntimeStop { force } => {
+            run_blocking(state, move |s| s.runtime.stop(force)).await
+        }
         IpcRequest::RuntimeRestart {
             manifest_path,
             headless,
-        } => state
-            .runtime
-            .restart(
-                manifest_path.as_deref(),
-                StartOptions {
-                    headless: *headless,
-                    interactive_console: false,
-                },
-            )
-            .and_then(|r| serde_json::to_value(r).map_err(|e| BifrostError::Ipc(e.to_string()))),
-        IpcRequest::RuntimeLogs { tail } => state
-            .runtime
-            .read_logs(*tail)
-            .and_then(|l| serde_json::to_value(l).map_err(|e| BifrostError::Ipc(e.to_string()))),
-        IpcRequest::DevicesList => state
-            .adb
-            .list_devices()
-            .and_then(|d| serde_json::to_value(d).map_err(|e| BifrostError::Ipc(e.to_string()))),
+        } => {
+            run_blocking(state, move |s| {
+                s.runtime.restart(
+                    manifest_path.as_deref(),
+                    StartOptions {
+                        headless,
+                        interactive_console: false,
+                    },
+                )
+            })
+            .await
+        }
+        IpcRequest::RuntimeLogs { tail } => {
+            run_blocking(state, move |s| s.runtime.read_logs(tail)).await
+        }
+        IpcRequest::DevicesList => run_blocking(state, |s| s.adb.list_devices()).await,
         IpcRequest::AppsList {
             serial,
             third_party_only,
         } => {
-            let mgr = valhalla::ValhallaManager::with_adb(state.adb.clone());
-            mgr.list_packages(serial.as_deref(), *third_party_only)
-                .and_then(|p| serde_json::to_value(p).map_err(|e| BifrostError::Ipc(e.to_string())))
+            run_blocking(state, move |s| {
+                valhalla::ValhallaManager::with_adb(s.adb.clone())
+                    .list_packages(serial.as_deref(), third_party_only)
+            })
+            .await
         }
         IpcRequest::AppInfo { serial, package } => {
-            let mgr = valhalla::ValhallaManager::with_adb(state.adb.clone());
-            mgr.package_info(serial.as_deref(), package)
-                .and_then(|p| serde_json::to_value(p).map_err(|e| BifrostError::Ipc(e.to_string())))
+            run_blocking(state, move |s| {
+                valhalla::ValhallaManager::with_adb(s.adb.clone())
+                    .package_info(serial.as_deref(), &package)
+            })
+            .await
         }
         IpcRequest::AppInstall { serial, apk_path } => {
-            let mgr = valhalla::ValhallaManager::with_adb(state.adb.clone());
-            mgr.install_apk(serial.as_deref(), apk_path)
-                .and_then(|o| serde_json::to_value(o).map_err(|e| BifrostError::Ipc(e.to_string())))
+            run_blocking(state, move |s| {
+                valhalla::ValhallaManager::with_adb(s.adb.clone())
+                    .install_apk(serial.as_deref(), apk_path)
+            })
+            .await
         }
         IpcRequest::AppUninstall {
             serial,
             package,
             keep_data,
         } => {
-            let mgr = valhalla::ValhallaManager::with_adb(state.adb.clone());
-            mgr.uninstall_package(serial.as_deref(), package, *keep_data)
-                .map(|msg| serde_json::json!({ "package": package, "output": msg }))
+            run_blocking(state, move |s| {
+                valhalla::ValhallaManager::with_adb(s.adb.clone())
+                    .uninstall_package(serial.as_deref(), &package, keep_data)
+                    .map(|msg| serde_json::json!({ "package": package, "output": msg }))
+            })
+            .await
         }
         IpcRequest::AppLaunch { serial, package } => {
-            let mgr = valhalla::ValhallaManager::with_adb(state.adb.clone());
-            mgr.launch_app(serial.as_deref(), package)
-                .and_then(|o| serde_json::to_value(o).map_err(|e| BifrostError::Ipc(e.to_string())))
+            run_blocking(state, move |s| {
+                valhalla::ValhallaManager::with_adb(s.adb.clone())
+                    .launch_app(serial.as_deref(), &package)
+            })
+            .await
         }
         IpcRequest::AppStop { serial, package } => {
-            let mgr = valhalla::ValhallaManager::with_adb(state.adb.clone());
-            mgr.force_stop(serial.as_deref(), package)
-                .map(|()| serde_json::json!({ "package": package, "stopped": true }))
-        }
-        IpcRequest::DaemonShutdown => {
-            let _ = shutdown_tx.send(true);
-            Ok(serde_json::json!({ "shutting_down": true }))
+            run_blocking(state, move |s| {
+                valhalla::ValhallaManager::with_adb(s.adb.clone())
+                    .force_stop(serial.as_deref(), &package)
+                    .map(|()| serde_json::json!({ "package": package, "stopped": true }))
+            })
+            .await
         }
     };
 
