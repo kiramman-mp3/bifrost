@@ -64,7 +64,7 @@ The `bifrost-ui` Windows 11 Fluent Design 2 desktop application (`apps/bifrost-u
 ## 🛠️ Technologies Used
 
 - **Frontend / Desktop UI**: Tauri 2 (`apps/bifrost-ui`), WebView2, offline-first HTML/CSS/ES with Windows 11 Fluent Design 2 styling (Dark & Light themes).
-- **Backend & Control Plane**: Rust (`edition = "2021"`, `rust-version = "1.89"`), Cargo workspace (`13` crates), `tokio`, `serde`, `serde_json`, `toml`, `tracing`, `thiserror`, `clap`, `sha2`, `ed25519-dalek`, `zip`, `windows` crate.
+- **Backend & Control Plane**: Rust (`edition = "2021"`, `rust-version = "1.89"`), Cargo workspace (`14` crates), `tokio`, `serde`, `serde_json`, `toml`, `tracing`, `thiserror`, `clap`, `sha2`, `ed25519-dalek`, `zip`, `windows` crate.
 - **Virtualization & Android Guest**: Windows Hypervisor Platform (`WHPX`), QEMU `11.1.0` (`q35,accel=whpx`, EDK2 UEFI `pflash`, VirtIO storage/net/serial/RNG, QMP) and `crosvm` (`whpx` + `gfxstream`), Android `x86_64` VirtIO / AOSP / LineageOS, `adb`, `scrcpy >= 3.0`.
 - **Testing & Quality Gates**: `cargo test --workspace` (`116` passing tests: `94` unit/IPC + `22` property-based fuzz; `4` opt-in tests ignored by default), `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo fmt --all -- --check`, `cargo deny check` (`deny.toml`).
 - **Distribution & CI**: PowerShell release packager (`build-release-bundle.ps1`), unprivileged SHA-256-verified Windows user-space installer/uninstaller (`install-bifrost.ps1`, `uninstall-bifrost.ps1`), and GitHub Actions Windows CI (`.github/workflows/ci.yml`).
@@ -73,12 +73,15 @@ The `bifrost-ui` Windows 11 Fluent Design 2 desktop application (`apps/bifrost-u
 
 ## 🏗️ Architecture
 
-BIFRÖST separates presentation (`bifrost-ui`, `mimir`), supervision (`heimdall`), Windows ↔ Android communication (`bifrost-bridge`, `valhalla`, `bifrost-display`), and virtualization (`bifrost-hypervisor`, `bifrost-runtime`, `bifrost-storage`) across explicit security boundaries so no UI layer owns critical runtime logic.
+BIFRÖST separates presentation (`bifrost-ui`, `mimir`, both built on the shared `bifrost-client` session), supervision (`heimdall`), Windows ↔ Android communication (`bifrost-bridge`, `valhalla`, `bifrost-display`), and virtualization (`bifrost-hypervisor`, `bifrost-runtime`, `bifrost-storage`) across explicit security boundaries so no UI layer owns critical runtime logic.
 
 ```mermaid
 graph TD
-    UI[bifrost-ui - Tauri 2 Shell] --> IPC[Authenticated Local IPC - Named Pipes]
-    CLI[mimir - bifrost CLI] --> IPC
+    UI[bifrost-ui - Tauri 2 Shell] --> CLIENT[bifrost-client - Session facade]
+    CLI[mimir - bifrost CLI] --> CLIENT
+    CLIENT -->|daemon running| IPC[Authenticated Local IPC - Named Pipes]
+    CLIENT -->|daemon offline| VALHALLA
+    CLIENT -->|daemon offline| HYP
     IPC --> HEIMDALL[Heimdall Daemon & Supervisor]
     HEIMDALL --> CORE[bifrost-core - Models, Config, State]
     HEIMDALL --> VALHALLA[Valhalla - APK & Package Manager]
@@ -104,7 +107,7 @@ BIFRÖST/
 ├── .github/workflows/ci.yml                       # Automated Windows x64 CI (fmt, clippy, test, release build)
 ├── .github/workflows/release.yml                  # Tag-driven release: optional Authenticode signing, provenance, GitHub Release
 ├── .gitignore                                     # Rust, /dist/, Windows, disk images, logs, and secrets exclusions
-├── Cargo.toml                                     # Cargo workspace manifest (13 crates, unsafe_code = "deny")
+├── Cargo.toml                                     # Cargo workspace manifest (14 crates, unsafe_code = "deny")
 ├── Cargo.lock                                     # Reproducible dependency lockfile
 ├── LICENSE                                        # Apache License 2.0
 ├── ARCHITECTURE.md                                # System architecture, diagrams, and security boundaries
@@ -199,6 +202,9 @@ BIFRÖST/
 │   │       ├── toast.rs                           # Native WinRT Toasts under the BIFROST.Bifrost AppUserModelID
 │   │       ├── ipc.rs                             # Bounded JSON frames, 256-bit auth tokens & IPC schemas
 │   │       └── client.rs                          # Async Named Pipe HeimdallClient
+│   ├── bifrost-client/                            # Shared Session facade for mimir & bifrost-ui (Heimdall IPC or direct calls)
+│   │   ├── Cargo.toml
+│   │   └── src/lib.rs                             # Config loading, status reconciliation, headless auto-boot, Heimdall start
 │   ├── bifrost-display/                           # Per-app Android VirtualDisplay & independent Windows 11 window launcher
 │   │   ├── Cargo.toml
 │   │   └── src/lib.rs                             # #![forbid(unsafe_code)]

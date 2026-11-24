@@ -14,6 +14,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - **CI builds with `--locked`** (clippy, tests and release build), so a stale `Cargo.lock` fails CI as it already failed the release workflow.
 - **Workspace crates are marked `publish = false`**; none is published to crates.io.
 
+### Added
+- **`bifrost-client` crate**: a `Session` facade shared by Mimir and the desktop UI. It loads the effective config, probes Heimdall once, and routes status, runtime, logs, app and install operations over IPC when the daemon answers or directly otherwise. It also owns the headless auto-boot before app launch/install and the detached Heimdall start, which were duplicated in both front ends (`mimir` lost ~300 lines, `bifrost-ui`'s `service.rs` ~200).
+
+### Fixed
+- **UI froze a Tokio worker while auto-booting (`bifrost-ui`)**: launching an app window with Midgard stopped waited up to 90 s for ADB on an async worker. Direct ADB, runtime and Valhalla calls from the UI now run on the blocking pool.
+- **Install with no active image (`mimir`, `bifrost-ui`)**: installing while no device is online and no image is active now reports why Midgard could not auto-start, instead of failing later with "no device".
+
 ### Performance
 - **Toast identity registered once per process (`bifrost-bridge`)**: every notification used to rewrite the icon file and the HKCU AUMID values. Registration now runs until it succeeds once; failures are retried on the next toast. The toast icon is embedded from `crates/bifrost-bridge/assets` instead of reaching into the desktop app's directory.
 
