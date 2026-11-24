@@ -13,6 +13,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - **QMP off TCP (`bifrost-hypervisor`, `bifrost-runtime`)**: QEMU's unauthenticated QMP monitor listened on `127.0.0.1:<port>`, so any local process or user could power off or control the VM. It now uses `-chardev socket,server=on,wait=off` on an AF_UNIX socket file with a random 128-bit name inside the per-user data directory (`data_dir\run`, falling back to `%TEMP%\bifrost-run`), protected by the file ACL. QMP I/O runs on a worker thread with timeouts. A Windows named pipe was tried first during development, but QEMU's pipe chardev blocked VM start-up until a client connected; the live end-to-end test caught this before release. VMs started by older versions (TCP endpoints) can still be shut down.
 - **Clipboard via stdin (`bifrost-bridge`)**: clipboard text is now streamed through `adb` stdin into a fixed `cmd clipboard set-text "$(cat)"` script (`AdbClient::run_adb_with_stdin`). It never appears on a command line, which also removes the ~32K Windows command-line limit that broke large syncs.
 
+- **Pinned CI actions (`.github/workflows`)**: every third-party action in the CI, fuzz and release workflows is pinned to a full commit SHA (version kept as a comment), so a moved tag cannot change what builds and signs a release.
+
 ### Changed
 - **No PowerShell at runtime (`bifrost-bridge`, `valhalla`, `bifrost-ui`)**: replaced every runtime `powershell.exe` invocation with native APIs:
   - Toasts use WinRT directly under a registered `BIFROST.Bifrost` AppUserModelID (`HKCU\Software\Classes\AppUserModelId`), so they show "BIFRÖST" instead of "Windows PowerShell".
