@@ -80,6 +80,7 @@ pub async fn execute(cli: &Cli) -> Result<CommandOutput> {
             handle_config(action, cli.config.as_ref(), cli.json).map(CommandOutput::ok)
         }
         Command::Doctor { strict } => handle_doctor(cli.config.as_ref(), cli.json, *strict),
+        Command::Update => setup::handle_update(cli.json).await.map(CommandOutput::ok),
         Command::Setup { install } => {
             setup::handle_setup(cli.config.as_ref(), cli.json, install.as_deref())
                 .await

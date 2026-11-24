@@ -1,4 +1,4 @@
-//! `bifrost setup`: the first-run checklist and visible `winget` tool installs.
+//! `bifrost setup` (first-run checklist, visible `winget` installs) and `bifrost update`.
 
 use bifrost_client::setup::{install_tool, SetupAction, SetupPlan, SetupStepStatus};
 
@@ -77,4 +77,30 @@ fn render_setup_plan(plan: &SetupPlan, installed: Option<&str>) -> String {
         }
     }
     out
+}
+
+pub(super) async fn handle_update(as_json: bool) -> Result<String> {
+    let current = VersionInfo::current().version;
+    let info = blocking(move || bifrost_client::update::check_for_update(&current)).await?;
+    if as_json {
+        return serde_json::to_string_pretty(&info)
+            .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
+    }
+    if !info.update_available {
+        return Ok(format!(
+            "BIFRÖST {} is up to date (latest release: {}).",
+            info.current_version, info.latest_version
+        ));
+    }
+    let bundle = info
+        .bundle_asset
+        .as_deref()
+        .map_or_else(String::new, |a| format!(" ({a})"));
+    Ok(format!(
+        "BIFRÖST {} is available (installed: {}).\n\
+         Download the release bundle{bundle} from {}\n\
+         and run `install-bifrost.ps1 -BundleDir <extracted folder>`; it verifies every \
+         file's SHA-256 and keeps your Android data.",
+        info.latest_version, info.current_version, info.release_url
+    ))
 }

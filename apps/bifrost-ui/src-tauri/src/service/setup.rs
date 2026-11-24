@@ -34,3 +34,9 @@ pub async fn start_first_boot() -> Result<RuntimeRecord> {
         start_active_image(false).await
     }
 }
+
+/// Compares this build with the latest GitHub release (no download, no install).
+pub async fn check_for_updates() -> Result<bifrost_client::update::UpdateInfo> {
+    let current = VersionInfo::current().version;
+    blocking(move || bifrost_client::update::check_for_update(&current)).await
+}
