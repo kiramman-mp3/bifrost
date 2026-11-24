@@ -12,7 +12,7 @@ This document describes the architecture **as implemented**. Where the implement
 
 1. **Modular Rust Core**: All runtime orchestration, supervision, configuration, security boundaries, and IPC live in modular Rust crates inside a Cargo workspace.
 2. **Strict Separation of Concerns**:
-   - The desktop UI (`bifrost-ui`) is a presentation client; its Rust `service.rs` layer delegates to the same crates the CLI uses and never embeds VM lifecycle logic in the frontend.
+   - The desktop UI (`bifrost-ui`) is a presentation client; its Rust `service` module delegates to the same crates the CLI uses and never embeds VM lifecycle logic in the frontend.
    - `heimdall` supervises and coordinates subsystems without becoming a monolith containing business logic.
    - `bifrost-hypervisor` abstracts the VMM backend so Midgard is never permanently locked to a single hypervisor wrapper.
 3. **Windows 11 Home First-Class Support**: Core virtualization relies on the **Windows Hypervisor Platform (WHPX)** rather than Pro-only Hyper-V management APIs.
