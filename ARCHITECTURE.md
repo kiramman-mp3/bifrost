@@ -1,7 +1,7 @@
 # BIFRÖST System Architecture
 
-> **Status**: Implemented through `v0.3.3` (Milestones 0–8 + post-M8 desktop integration)
-> **Primary Language**: Rust (13-crate Cargo workspace, `111` unit/IPC/fuzz tests)
+> **Status**: Implemented through `v0.4.0` (Milestones 0–8 + post-M8 desktop integration)
+> **Primary Language**: Rust (13-crate Cargo workspace, `116` unit/IPC/fuzz tests)
 > **Target Platform**: Windows 11 x64 (Home, Pro, Enterprise)
 
 This document describes the architecture **as implemented**. Where the implementation deviates from the original Milestone 0 design, the deviation is called out and recorded in an ADR.
