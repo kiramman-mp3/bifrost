@@ -6,6 +6,7 @@ rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+publish.workspace = true
 description = "Loopback-safe Windows <-> Android networking and port-forwarding coordination for BIFRÖST."
 
 [lints]

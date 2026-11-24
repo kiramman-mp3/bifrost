@@ -6,6 +6,7 @@ rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+publish.workspace = true
 description = "Windows <-> Android communication layer: loopback ADB orchestration, device discovery, guest health checks, and authenticated local IPC protocol."
 
 [lints]
