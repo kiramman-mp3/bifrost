@@ -51,6 +51,50 @@ pub struct GuestHealth {
     pub model: Option<String>,
 }
 
+/// How far ADB access to Midgard's loopback endpoint gets, and what blocks it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AdbEndpointState {
+    /// No usable transport yet: Android is still booting or adbd is not running.
+    Offline,
+    /// adbd requires this PC's key to be approved in Android's "Allow USB debugging?"
+    /// dialog (provisioned `userdata`, `ro.adb.secure=1`).
+    Unauthorized,
+    /// Android 16+ trade-in mode: the setup wizard has not been completed, so adbd runs
+    /// in the `adbd_tradeinmode` SELinux domain and closes every service except
+    /// `tradeinmode`. Typical for a freshly provisioned `userdata` disk.
+    TradeInMode,
+    /// Full ADB access (`shell`, `sync`, `install`).
+    Ready,
+}
+
+impl AdbEndpointState {
+    /// Classifies an endpoint from its `adb devices` state and two shell probes.
+    #[must_use]
+    pub fn classify(device_state: Option<&str>, shell_ok: bool, tradeinmode_ok: bool) -> Self {
+        match device_state {
+            Some("unauthorized") => Self::Unauthorized,
+            Some("device") if shell_ok => Self::Ready,
+            Some("device") if tradeinmode_ok => Self::TradeInMode,
+            _ => Self::Offline,
+        }
+    }
+
+    /// What the user has to do when this state blocks ADB, if anything.
+    #[must_use]
+    pub const fn remediation(self) -> Option<&'static str> {
+        match self {
+            Self::Unauthorized => Some(
+                "Android has not authorized this PC for ADB. Restart Midgard with a visible                  display (`bifrost runtime restart`, without `--headless`) and accept                  \"Allow USB debugging\" with \"Always allow from this computer\".",
+            ),
+            Self::TradeInMode => Some(
+                "Android's initial setup has not been completed, so adbd runs in trade-in                  mode and refuses shell access. Restart Midgard with a visible display                  (`bifrost runtime restart`, without `--headless`) and finish the setup wizard.",
+            ),
+            Self::Offline | Self::Ready => None,
+        }
+    }
+}
+
 /// Safe wrapper around the host `adb` binary (never shells through `cmd`/`sh`).
 #[derive(Debug, Clone, Default)]
 pub struct AdbClient {
@@ -153,12 +197,46 @@ impl AdbClient {
                 .iter()
                 .any(|d| d.serial == endpoint && d.state == "device")
         };
-        if online(&self.list_devices()?) {
+        let devices = self.list_devices()?;
+        if online(&devices) {
             return Ok(true);
+        }
+        // A transport opened before adbd existed can linger as `offline` while
+        // `adb connect` keeps answering "already connected"; drop it and reconnect.
+        if devices
+            .iter()
+            .any(|d| d.serial == endpoint && d.state == "offline")
+        {
+            let _ = self.disconnect(endpoint);
         }
         // `adb connect` reports refusals on stdout with exit code 0; the re-list decides.
         let _ = self.connect_loopback(endpoint);
         Ok(online(&self.list_devices()?))
+    }
+
+    /// Attaches `endpoint` and reports how far ADB access gets (see [`AdbEndpointState`]).
+    pub fn diagnose_endpoint(&self, endpoint: &str) -> Result<AdbEndpointState> {
+        let _ = self.ensure_connected(endpoint)?;
+        let devices = self.list_devices()?;
+        let device_state = devices
+            .iter()
+            .find(|d| d.serial == endpoint)
+            .map(|d| d.state.as_str());
+        let probe = |args: &[&str]| {
+            let mut full = vec!["-s", endpoint, "shell"];
+            full.extend_from_slice(args);
+            self.run_adb(&full)
+        };
+        let shell_ok = device_state == Some("device")
+            && probe(&["echo", "bifrost-ok"]).is_ok_and(|out| out.trim() == "bifrost-ok");
+        let tradeinmode_ok = device_state == Some("device")
+            && !shell_ok
+            && probe(&["tradeinmode", "getstatus"]).is_ok();
+        Ok(AdbEndpointState::classify(
+            device_state,
+            shell_ok,
+            tradeinmode_ok,
+        ))
     }
 
     /// Disconnects ADB from an endpoint.
@@ -393,6 +471,48 @@ fn find_on_path(binary_name: &str) -> Option<PathBuf> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod endpoint_state_tests {
+    use super::AdbEndpointState as S;
+
+    #[test]
+    fn classifies_real_adb_observations() {
+        // Values observed against a live Midgard VM (LineageOS 24, Android 17).
+        assert_eq!(S::classify(None, false, false), S::Offline);
+        assert_eq!(S::classify(Some("offline"), false, false), S::Offline);
+        assert_eq!(
+            S::classify(Some("unauthorized"), false, false),
+            S::Unauthorized
+        );
+        // Fresh userdata: transport is `device` but every service except tradeinmode closes.
+        assert_eq!(S::classify(Some("device"), false, true), S::TradeInMode);
+        assert_eq!(S::classify(Some("device"), true, false), S::Ready);
+        assert_eq!(S::classify(Some("device"), false, false), S::Offline);
+    }
+
+    #[test]
+    fn only_blocking_states_carry_remediation() {
+        assert!(S::Unauthorized
+            .remediation()
+            .unwrap()
+            .contains("Allow USB debugging"));
+        assert!(S::TradeInMode
+            .remediation()
+            .unwrap()
+            .contains("setup wizard"));
+        assert!(S::Offline.remediation().is_none());
+        assert!(S::Ready.remediation().is_none());
+    }
+
+    #[test]
+    fn serializes_as_snake_case() {
+        assert_eq!(
+            serde_json::to_string(&S::TradeInMode).unwrap(),
+            "\"trade_in_mode\""
+        );
+    }
 }
 
 #[cfg(test)]
