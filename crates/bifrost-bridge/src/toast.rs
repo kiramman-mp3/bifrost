@@ -19,8 +19,13 @@ pub const BIFROST_AUMID: &str = "BIFROST.Bifrost";
 /// Display name shown by Windows as the toast source.
 pub const BIFROST_TOAST_DISPLAY_NAME: &str = "BIFRÖST";
 
+/// Toast icon owned by this crate, so it builds without the desktop app's directory.
 #[cfg(windows)]
-const TOAST_ICON_PNG: &[u8] = include_bytes!("../../../apps/bifrost-ui/src-tauri/icons/icon.png");
+const TOAST_ICON_PNG: &[u8] = include_bytes!("../assets/bifrost-toast.png");
+
+/// Set once the AUMID has been registered by this process.
+#[cfg(windows)]
+static TOAST_IDENTITY_READY: std::sync::OnceLock<()> = std::sync::OnceLock::new();
 
 /// Registry key (relative to `HKCU`) that declares the BIFRÖST AUMID.
 #[must_use]
@@ -29,14 +34,33 @@ pub fn aumid_registry_key(aumid: &str) -> String {
 }
 
 /// Registers (idempotently) the BIFRÖST AUMID with its display name and icon.
+///
+/// The icon file and registry values are written at most once per process; a failed
+/// attempt is not cached, so the next toast retries it.
 #[cfg(windows)]
 pub fn ensure_toast_identity() -> Result<()> {
-    let icon = ensure_toast_icon()?;
-    register_aumid(
-        &aumid_registry_key(BIFROST_AUMID),
-        BIFROST_TOAST_DISPLAY_NAME,
-        &icon,
-    )
+    run_once_on_success(&TOAST_IDENTITY_READY, || {
+        let icon = ensure_toast_icon()?;
+        register_aumid(
+            &aumid_registry_key(BIFROST_AUMID),
+            BIFROST_TOAST_DISPLAY_NAME,
+            &icon,
+        )
+    })
+}
+
+/// Runs `init` until it succeeds once, then skips it. Concurrent first callers may both
+/// run it, which is harmless because `init` is idempotent.
+#[cfg(windows)]
+fn run_once_on_success(
+    done: &std::sync::OnceLock<()>,
+    init: impl FnOnce() -> Result<()>,
+) -> Result<()> {
+    if done.get().is_none() {
+        init()?;
+        let _ = done.set(());
+    }
+    Ok(())
 }
 
 /// Non-Windows stub returning `Unsupported`.
@@ -141,6 +165,33 @@ mod tests {
         RegKey::predef(HKEY_CURRENT_USER)
             .delete_subkey_all(&key_path)
             .unwrap();
+    }
+
+    #[test]
+    fn identity_init_runs_once_after_success_and_retries_after_failure() {
+        let done = std::sync::OnceLock::new();
+        let mut calls = 0;
+        let fail = run_once_on_success(&done, || {
+            calls += 1;
+            Err(BifrostError::Bridge("registry unavailable".to_string()))
+        });
+        assert!(fail.is_err());
+        for _ in 0..3 {
+            run_once_on_success(&done, || {
+                calls += 1;
+                Ok(())
+            })
+            .unwrap();
+        }
+        assert_eq!(
+            calls, 2,
+            "one failed attempt, then exactly one successful one"
+        );
+    }
+
+    #[test]
+    fn embedded_toast_icon_is_a_png() {
+        assert!(TOAST_ICON_PNG.starts_with(&[0x89, b'P', b'N', b'G']));
     }
 
     /// Shows a real toast on the desktop. Run manually:
