@@ -219,7 +219,10 @@ async fn dispatch_request(
             let _ = shutdown_tx.send(true);
             Ok(serde_json::json!({ "shutting_down": true }))
         }
-        IpcRequest::DaemonHealth => run_blocking(state, |s| Ok(s.refresh_health())).await,
+        // Served from the monitor's last probe (refreshed every few seconds) so health
+        // checks stay instant even while a probe waits on `adb connect` to a booting VM.
+        IpcRequest::DaemonHealth => serde_json::to_value(state.health_snapshot())
+            .map_err(|e| BifrostError::Ipc(e.to_string())),
         IpcRequest::RuntimeStatus => run_blocking(state, |s| s.runtime.status()).await,
         IpcRequest::RuntimeStart {
             manifest_path,
