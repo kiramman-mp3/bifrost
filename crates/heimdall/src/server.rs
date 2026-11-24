@@ -24,14 +24,17 @@ pub async fn serve_named_pipe(
     shutdown_tx: watch::Sender<bool>,
     mut shutdown_rx: watch::Receiver<bool>,
 ) -> Result<()> {
-    use tokio::net::windows::named_pipe::ServerOptions;
-
-    use crate::pipe_security::OwnerOnlySecurityAttributes;
-
     fs::create_dir_all(&data_dir).map_err(|source| BifrostError::Io {
         context: format!("creating Heimdall data dir '{}'", data_dir.display()),
         source,
     })?;
+
+    let pipe_name = state.pipe_name.clone();
+
+    // Claim the pipe name *before* touching the token file. A second Heimdall started
+    // while one is already running fails here (`first_pipe_instance`) and must not
+    // overwrite the running daemon's token, which would lock every client out of it.
+    let mut server = create_pipe_instance(&pipe_name, true)?;
 
     let token = generate_auth_token()?;
     let token_path = token_file_path(&data_dir);
@@ -39,34 +42,22 @@ pub async fn serve_named_pipe(
         context: format!("writing Heimdall auth token '{}'", token_path.display()),
         source,
     })?;
-
     let auth_token = Arc::new(token);
-    let pipe_name = state.pipe_name.clone();
 
-    let mut first_instance = true;
     info!(pipe = %pipe_name, "Heimdall authenticated Named Pipe server listening");
 
     loop {
-        let server = {
-            let mut sec_attrs = OwnerOnlySecurityAttributes::new()?;
-            let mut opts = ServerOptions::new();
-            if first_instance {
-                opts.first_pipe_instance(true);
-                first_instance = false;
-            }
-
-            // SAFETY: `sec_attrs` owns a valid owner-only `SECURITY_ATTRIBUTES` for this synchronous
-            // Win32 pipe creation call and is dropped immediately before any `.await`.
-            #[allow(unsafe_code)]
-            unsafe { opts.create_with_security_attributes_raw(&pipe_name, sec_attrs.as_raw_mut()) }
-                .map_err(|source| BifrostError::Io {
-                    context: format!("creating Named Pipe '{pipe_name}'"),
-                    source,
-                })?
-        };
-
         tokio::select! {
             connect_res = server.connect() => {
+                // Always have the next instance listening before handing this one off.
+                let next = match create_pipe_instance(&pipe_name, false) {
+                    Ok(next) => next,
+                    Err(err) => {
+                        let _ = fs::remove_file(&token_path);
+                        return Err(err);
+                    }
+                };
+                let connected = std::mem::replace(&mut server, next);
                 if let Err(err) = connect_res {
                     warn!(error = %err, "Named Pipe client connect failed");
                     continue;
@@ -75,7 +66,7 @@ pub async fn serve_named_pipe(
                 let token_clone = Arc::clone(&auth_token);
                 let shutdown_clone = shutdown_tx.clone();
                 tokio::spawn(async move {
-                    handle_connection(server, state_clone, token_clone, shutdown_clone).await;
+                    handle_connection(connected, state_clone, token_clone, shutdown_clone).await;
                 });
             }
             changed = shutdown_rx.changed() => {
@@ -89,6 +80,35 @@ pub async fn serve_named_pipe(
 
     let _ = fs::remove_file(&token_path);
     Ok(())
+}
+
+/// Creates one owner-only Named Pipe server instance.
+#[cfg(windows)]
+fn create_pipe_instance(
+    pipe_name: &str,
+    first_instance: bool,
+) -> Result<tokio::net::windows::named_pipe::NamedPipeServer> {
+    use tokio::net::windows::named_pipe::ServerOptions;
+
+    use crate::pipe_security::OwnerOnlySecurityAttributes;
+
+    let mut sec_attrs = OwnerOnlySecurityAttributes::new()?;
+    let mut opts = ServerOptions::new();
+    opts.first_pipe_instance(first_instance);
+
+    // SAFETY: `sec_attrs` owns a valid owner-only `SECURITY_ATTRIBUTES` that outlives this
+    // synchronous Win32 pipe creation call; the descriptor is copied into the kernel object.
+    #[allow(unsafe_code)]
+    unsafe { opts.create_with_security_attributes_raw(pipe_name, sec_attrs.as_raw_mut()) }.map_err(
+        |source| BifrostError::Io {
+            context: if first_instance {
+                format!("creating Named Pipe '{pipe_name}' (is another Heimdall already running?)")
+            } else {
+                format!("creating Named Pipe '{pipe_name}'")
+            },
+            source,
+        },
+    )
 }
 
 #[cfg(not(windows))]
@@ -314,7 +334,26 @@ mod tests {
         let err = bad_client.health().await.unwrap_err();
         assert!(err.to_string().contains("authentication failed"));
 
-        // 3. Valid client triggers graceful shutdown and cleans up token file.
+        // 3. A second Heimdall on the same pipe must fail without replacing the token.
+        let token_before = fs::read_to_string(&tok_file).unwrap();
+        let dup_runtime = MidgardRuntime::with_default_backend(
+            BifrostConfig::default(),
+            BifrostPaths::from_root(tmp.path().join("bifrost")),
+        );
+        let dup_state = Arc::new(SupervisorState::new(
+            dup_runtime,
+            AdbClient::new(),
+            pipe_name.clone(),
+        ));
+        let (dup_tx, dup_rx) = watch::channel(false);
+        let dup_err = serve_named_pipe(dup_state, data_dir.clone(), dup_tx, dup_rx)
+            .await
+            .unwrap_err();
+        assert!(dup_err.to_string().contains("another Heimdall"));
+        assert_eq!(fs::read_to_string(&tok_file).unwrap(), token_before);
+        client.health().await.unwrap();
+
+        // 4. Valid client triggers graceful shutdown and cleans up token file.
         let shutdown_resp: serde_json::Value =
             client.send(IpcRequest::DaemonShutdown).await.unwrap();
         assert_eq!(shutdown_resp["shutting_down"], true);
