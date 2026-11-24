@@ -270,9 +270,10 @@ async fn handle_status(explicit_config: Option<&PathBuf>, as_json: bool) -> Resu
     if !heimdall_connected && record.state == RuntimeState::Booting {
         if let Some(ref endpoint) = record.adb_endpoint {
             let adb = AdbClient::new();
-            if adb
-                .probe_guest_health(endpoint)
-                .is_ok_and(|g| g.boot_completed)
+            if adb.ensure_connected(endpoint).unwrap_or(false)
+                && adb
+                    .probe_guest_health(endpoint)
+                    .is_ok_and(|g| g.boot_completed)
             {
                 let runtime_mgr = MidgardRuntime::with_default_backend(config, paths);
                 let _ = runtime_mgr.mark_running();

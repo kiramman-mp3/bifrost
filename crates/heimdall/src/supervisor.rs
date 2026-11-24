@@ -85,6 +85,17 @@ impl SupervisorState {
         }
     }
 
+    /// Returns the most recent health report with a live uptime, without probing.
+    pub fn health_snapshot(&self) -> DaemonHealthReport {
+        let mut report = self
+            .health
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        report.uptime_secs = self.started_at.elapsed().as_secs();
+        report
+    }
+
     /// Executes a single health probe updating runtime state, PID liveness, and ADB devices.
     ///
     /// Blocking: it reads runtime state from disk and shells out to `adb.exe`. Async
@@ -102,7 +113,18 @@ impl SupervisorState {
         // Skip spawning `adb.exe` altogether when Midgard is stopped (near-0% idle CPU).
         let adb_available = self.adb.locate_adb().is_ok();
         let devices = if adb_available && runtime_state.is_active() {
-            self.adb.list_devices().unwrap_or_default()
+            let mut devices = self.adb.list_devices().unwrap_or_default();
+            // Attach ADB to the configured endpoint when it is missing: ports outside the
+            // server's 5555–5585 auto-discovery range are otherwise never seen.
+            if let Some(ref endpoint) = adb_endpoint {
+                let online = devices
+                    .iter()
+                    .any(|d| d.serial == *endpoint && d.state == "device");
+                if !online && self.adb.ensure_connected(endpoint).unwrap_or(false) {
+                    devices = self.adb.list_devices().unwrap_or_default();
+                }
+            }
+            devices
         } else {
             Vec::new()
         };

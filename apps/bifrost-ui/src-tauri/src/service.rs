@@ -150,9 +150,11 @@ pub async fn get_dashboard_snapshot() -> Result<DashboardSnapshot> {
 
     if !heimdall_connected && runtime.state == RuntimeState::Booting {
         if let Some(ref endpoint) = runtime.adb_endpoint {
-            if AdbClient::new()
-                .probe_guest_health(endpoint)
-                .is_ok_and(|g| g.boot_completed)
+            let adb = AdbClient::new();
+            if adb.ensure_connected(endpoint).unwrap_or(false)
+                && adb
+                    .probe_guest_health(endpoint)
+                    .is_ok_and(|g| g.boot_completed)
             {
                 let _ = MidgardRuntime::with_default_backend(config.clone(), paths.clone())
                     .mark_running();
