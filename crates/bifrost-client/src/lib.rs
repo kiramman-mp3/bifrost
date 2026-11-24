@@ -7,6 +7,7 @@
 //! Tokio's blocking pool so async callers such as the Tauri UI never stall a worker.
 
 pub mod setup;
+pub mod update;
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
