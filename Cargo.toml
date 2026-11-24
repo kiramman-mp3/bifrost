@@ -19,10 +19,12 @@ members = [
 [workspace.package]
 version = "0.4.0"
 edition = "2021"
-rust-version = "1.80"
+rust-version = "1.89"
 authors = ["Johan Rodríguez"]
 license = "Apache-2.0"
 repository = "https://github.com/kiramman-mp3/bifrost"
+# Internal workspace crates; nothing is published to crates.io.
+publish = false
 
 [workspace.lints.rust]
 unsafe_code = "deny"
@@ -50,4 +52,4 @@ winreg = "0.56"
 mslnk = "0.1.8"
 proptest = { version = "1.5", default-features = false, features = ["std"] }
 uds_windows = "1.2"
-zip = { version = "2.2", default-features = false, features = ["deflate"] }
+zip = { version = "9.8", default-features = false, features = ["deflate-flate2-zlib-rs"] }

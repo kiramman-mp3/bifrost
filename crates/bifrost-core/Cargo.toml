@@ -6,6 +6,7 @@ rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+publish.workspace = true
 description = "Shared domain models, configuration, state machine, security path validation, and structured logging for BIFRÖST."
 
 [lints]

@@ -28,10 +28,24 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Run Clippy with warnings denied
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
       - name: Run workspace test suite
-        run: cargo test --workspace
+        run: cargo test --workspace --locked
 
       - name: Build release binaries
-        run: cargo build --release -p mimir -p heimdall -p bifrost-ui
+        run: cargo build --release --locked -p mimir -p heimdall -p bifrost-ui
+
+  supply-chain:
+    name: Dependency audit (cargo-deny)
+    # cargo-deny-action is a container action, so it needs a Linux runner; deny.toml
+    # pins the dependency graph to the Windows targets BIFRÖST actually ships.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Check advisories, licenses, bans and sources
+        uses: EmbarkStudios/cargo-deny-action@81891abc19297b21343b15ef67dc61e4aea74fda # v2.1.4
+        with:
+          command: check advisories licenses bans sources

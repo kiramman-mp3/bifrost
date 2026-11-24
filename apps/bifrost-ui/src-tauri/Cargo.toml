@@ -6,6 +6,7 @@ rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+publish.workspace = true
 description = "BIFRÖST — Windows 11 Fluent Design desktop application backed by Rust and Tauri 2."
 
 [lints]

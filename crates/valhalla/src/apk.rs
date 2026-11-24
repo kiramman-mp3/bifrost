@@ -201,7 +201,13 @@ fn inspect_single_apk_archive(path: &Path, capture_icon: bool) -> Result<SingleA
         let mut entry = archive.by_index(idx).map_err(|err| {
             BifrostError::Package(format!("failed reading APK entry #{idx}: {err}"))
         })?;
-        let name = entry.name().to_string();
+        // zip >= 9 rejects names it cannot decode; an APK with such an entry is malformed.
+        let name = entry
+            .name()
+            .map_err(|err| {
+                BifrostError::Package(format!("APK entry #{idx} has an invalid name: {err}"))
+            })?
+            .into_owned();
 
         // Reject Zip Slip traversal entries inside untrusted APKs.
         if name.contains("..") || name.starts_with('/') || name.starts_with('\\') {
@@ -411,7 +417,12 @@ fn extract_apkm_entries(
         let mut entry = archive.by_index(idx).map_err(|err| {
             BifrostError::Package(format!("failed reading .apkm entry #{idx}: {err}"))
         })?;
-        let name = entry.name().to_string();
+        let name = entry
+            .name()
+            .map_err(|err| {
+                BifrostError::Package(format!(".apkm entry #{idx} has an invalid name: {err}"))
+            })?
+            .into_owned();
 
         if name.contains("..") || name.starts_with('/') || name.starts_with('\\') {
             return Err(BifrostError::UnsafePath {
@@ -578,7 +589,10 @@ fn extract_single_apk_icon_png(apk_path: &Path) -> Option<Vec<u8>> {
             Ok(e) => e,
             Err(_) => continue,
         };
-        let name = entry.name().to_string();
+        // Best-effort icon scan: skip entries whose names cannot be decoded.
+        let Ok(name) = entry.name().map(std::borrow::Cow::into_owned) else {
+            continue;
+        };
         if !name.starts_with("res/")
             || !name.ends_with(".png")
             || name.ends_with(".9.png")

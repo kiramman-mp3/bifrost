@@ -6,6 +6,7 @@ rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+publish.workspace = true
 description = "Mimir — Administrative command-line interface (`bifrost`) for BIFRÖST."
 
 [lints]
