@@ -36,17 +36,18 @@ jobs:
       CARGO_TARGET_DIR: ${{ github.workspace }}\target
     steps:
       - name: Checkout tag
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ env.TAG }}
 
       - name: Install Rust stable toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable branch
         with:
+          toolchain: stable
           components: rustfmt, clippy
 
       - name: Cache Cargo registry
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
       - name: Verify tag matches workspace version
         shell: pwsh
@@ -97,7 +98,7 @@ jobs:
           if (Test-Path $pfx) { Remove-Item -Force $pfx }
 
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
           subject-path: |
             dist/bifrost-v${{ env.VERSION }}-win64.zip
