@@ -304,6 +304,7 @@ version = "0.4.0"
 dependencies = [
  "bifrost-bridge",
  "bifrost-core",
+ "bifrost-diagnostics",
  "bifrost-display",
  "bifrost-runtime",
  "serde",
@@ -327,6 +328,7 @@ dependencies = [
  "toml_edit 0.22.27",
  "tracing",
  "tracing-subscriber",
+ "winreg",
 ]
 
 [[package]]

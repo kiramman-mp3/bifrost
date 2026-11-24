@@ -6,6 +6,8 @@
 //! once, applies that rule for each operation, and runs every direct (blocking) call on
 //! Tokio's blocking pool so async callers such as the Tauri UI never stall a worker.
 
+pub mod setup;
+
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -173,6 +175,27 @@ impl Session {
         } else {
             blocking(direct).await
         }
+    }
+
+    /// The first-run checklist for this host, from `doctor` and the live runtime status.
+    pub async fn setup_plan(
+        &self,
+        doctor: &bifrost_diagnostics::DoctorReport,
+    ) -> Result<setup::SetupPlan> {
+        let status = self.status().await?;
+        let active = status.runtime_state.is_active();
+        let mut adb_access = status.adb_access;
+        // Older Heimdall builds and a direct `Running` record carry no ADB diagnosis.
+        if active && adb_access.is_none() {
+            if let Some(endpoint) = status.record.adb_endpoint.clone() {
+                adb_access =
+                    blocking(move || Ok(AdbClient::new().diagnose_endpoint(&endpoint).ok()))
+                        .await?;
+            }
+        }
+        Ok(setup::SetupPlan::evaluate(setup::SetupInputs::from_doctor(
+            doctor, active, adb_access,
+        )))
     }
 
     /// Current runtime status. Without Heimdall, a `Booting` VM whose adbd answers and

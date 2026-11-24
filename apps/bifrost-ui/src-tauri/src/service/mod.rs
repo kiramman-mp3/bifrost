@@ -39,12 +39,14 @@ mod dashboard;
 mod host;
 mod images;
 mod runtime;
+mod setup;
 
 pub use apps::*;
 pub use dashboard::*;
 pub use host::*;
 pub use images::*;
 pub use runtime::*;
+pub use setup::*;
 
 /// Resolves effective per-user BIFRÖST config and storage paths.
 pub fn load_config_and_paths() -> Result<(PathBuf, BifrostConfig, BifrostPaths)> {

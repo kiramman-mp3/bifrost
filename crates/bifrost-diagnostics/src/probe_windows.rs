@@ -2,6 +2,7 @@
 //!
 //! Every `unsafe` block is minimized and documented with explicit `// SAFETY:` invariants.
 
+use bifrost_core::find_on_path;
 use std::ffi::{c_void, OsStr};
 use std::mem::{size_of, zeroed};
 use std::os::windows::ffi::OsStrExt;
@@ -88,17 +89,6 @@ fn probe_tooling(target_storage_path: &Path) -> HostToolingInfo {
         registered_images_count,
         active_image_id,
     }
-}
-
-fn find_on_path(binary_name: &str) -> Option<PathBuf> {
-    let path_var = std::env::var_os("PATH")?;
-    for dir in std::env::split_paths(&path_var) {
-        let candidate = dir.join(binary_name);
-        if candidate.is_file() {
-            return Some(candidate);
-        }
-    }
-    None
 }
 
 fn locate_qemu() -> Option<PathBuf> {

@@ -11,6 +11,7 @@ pub mod config;
 pub mod error;
 pub mod logging;
 pub mod paths;
+pub mod search_path;
 pub mod state;
 
 pub use capabilities::{ComponentCapability, FeatureStatus, VersionInfo};
@@ -22,6 +23,7 @@ pub use error::{BifrostError, Result};
 pub use paths::{
     resolve_within_root, validate_host_file_path, validate_relative_safe_path, BifrostPaths,
 };
+pub use search_path::find_on_path;
 pub use state::{RuntimeState, RuntimeStateMachine};
 
 /// Official product display name.

@@ -41,6 +41,7 @@ mod desktop;
 mod images;
 mod recovery;
 mod runtime;
+mod setup;
 
 use apps::{handle_apps, handle_install, handle_uninstall};
 use config::handle_config;
@@ -79,6 +80,11 @@ pub async fn execute(cli: &Cli) -> Result<CommandOutput> {
             handle_config(action, cli.config.as_ref(), cli.json).map(CommandOutput::ok)
         }
         Command::Doctor { strict } => handle_doctor(cli.config.as_ref(), cli.json, *strict),
+        Command::Setup { install } => {
+            setup::handle_setup(cli.config.as_ref(), cli.json, install.as_deref())
+                .await
+                .map(CommandOutput::ok)
+        }
         Command::Runtime { action } => handle_runtime(action, cli.config.as_ref(), cli.json)
             .await
             .map(CommandOutput::ok),
@@ -260,6 +266,12 @@ mod tests {
         assert_eq!(out.exit_code, 0);
         let parsed: serde_json::Value = serde_json::from_str(&out.stdout).unwrap();
         assert_eq!(parsed["checks"].as_array().unwrap().len(), 8);
+    }
+
+    #[test]
+    fn setup_install_accepts_only_known_tools() {
+        assert!(Cli::try_parse_from(["bifrost", "setup", "--install", "adb"]).is_ok());
+        assert!(Cli::try_parse_from(["bifrost", "setup", "--install", "Evil.Package"]).is_err());
     }
 
     #[tokio::test]

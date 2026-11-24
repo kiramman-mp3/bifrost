@@ -4,6 +4,7 @@ import { invoke, state } from "./core.js";
 import { refreshAll } from "./data.js";
 import { wireEvents } from "./events.js";
 import { openInstallDialog, setupInstallProgressListener } from "./installer.js";
+import { maybeOpenSetup, wireSetup } from "./setup.js";
 import { setupDragDrop, setupNavigation, setupTheme } from "./shell.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -12,6 +13,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupDragDrop();
   setupInstallProgressListener();
   wireEvents();
+  wireSetup();
 
   if (invoke) {
     try {
@@ -27,4 +29,5 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
   refreshAll();
+  maybeOpenSetup();
 });
