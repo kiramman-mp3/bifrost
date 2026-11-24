@@ -739,9 +739,9 @@ mod tests {
         gl_spec.graphics_mode = GraphicsMode::Gfxstream;
         gl_spec.headless = true;
         let gl_joined = backend.build_args(&gl_spec).unwrap().join(" ");
-        assert!(
-            gl_joined.contains("-device virtio-gpu-gl-pci,addr=0x1e,xres=1280,yres=720,blob=on,hostmem=256M")
-        );
+        assert!(gl_joined.contains(
+            "-device virtio-gpu-gl-pci,addr=0x1e,xres=1280,yres=720,blob=on,hostmem=256M"
+        ));
         assert!(gl_joined.contains("-display egl-headless"));
     }
 
