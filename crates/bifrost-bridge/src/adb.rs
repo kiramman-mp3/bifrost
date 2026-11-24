@@ -1,5 +1,6 @@
 //! Loopback-safe ADB orchestration, device discovery, and Android guest health checks.
 
+use bifrost_core::find_on_path;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::process::Command;
@@ -497,17 +498,6 @@ fn non_empty(value: Option<String>) -> Option<String> {
             Some(t.to_string())
         }
     })
-}
-
-fn find_on_path(binary_name: &str) -> Option<PathBuf> {
-    let path_var = std::env::var_os("PATH")?;
-    for dir in std::env::split_paths(&path_var) {
-        let candidate = dir.join(binary_name);
-        if candidate.is_file() {
-            return Some(candidate);
-        }
-    }
-    None
 }
 
 #[cfg(test)]

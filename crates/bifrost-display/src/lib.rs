@@ -7,6 +7,7 @@
 
 #![forbid(unsafe_code)]
 
+use bifrost_core::find_on_path;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::thread;
@@ -249,17 +250,6 @@ impl DisplayController {
             spec,
         })
     }
-}
-
-fn find_on_path(binary_name: &str) -> Option<PathBuf> {
-    let path_var = std::env::var_os("PATH")?;
-    for dir in std::env::split_paths(&path_var) {
-        let candidate = dir.join(binary_name);
-        if candidate.is_file() {
-            return Some(candidate);
-        }
-    }
-    None
 }
 
 #[cfg(test)]
