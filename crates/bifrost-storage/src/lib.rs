@@ -10,6 +10,7 @@ pub mod recovery;
 pub mod registry;
 pub mod signature;
 pub mod trust;
+pub mod trust_store;
 pub mod verify;
 
 pub use disk::{ensure_userdata_disk, wipe_userdata_disk, UserdataDiskInfo};
@@ -25,6 +26,10 @@ pub use signature::{sign_bytes_ed25519, verify_bytes_ed25519, verify_manifest_si
 pub use trust::{
     detached_signature_path, evaluate_manifest_trust, evaluate_payload_trust, ImageTrust,
     DETACHED_SIGNATURE_SUFFIX,
+};
+pub use trust_store::{
+    describe_trusted_key, images_losing_trust, parse_trusted_key, with_trusted_key,
+    without_trusted_key, TrustedKeyInfo,
 };
 pub use verify::{
     sha256_file, verify_manifest_file, VerifiedBootMedia, VerifiedBundle, VerifiedDisk,
