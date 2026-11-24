@@ -53,7 +53,7 @@ flowchart TD
     end
 
     UI --> IPC
-    UI -->|"direct service.rs calls when daemon is down"| VAL
+    UI -->|"bifrost-client: direct calls when daemon is down"| VAL
     CLI --> IPC
     IPC --> SUP
     SUP --> CORE
@@ -82,7 +82,8 @@ There is **no Midgard guest agent** and **no `virtio-vsock` channel** yet: every
 |---|---|---|---|
 | Bifrost Core | `bifrost-core` | Implemented | Runtime state machine (`Stopped`, `Starting`, `Booting`, `Running`, `Degraded`, `Stopping`, `Failed`), versioned TOML config (`[runtime]`, `[display]`, `[desktop]`, `[network]`, `[logging]`, `[images]`), path guards, error taxonomy, `tracing` setup, host auto-tune. |
 | Diagnostics | `bifrost-diagnostics` | Implemented | `bifrost doctor`: Windows edition, CPU virtualization, live `WHvCreatePartition`, RAM, disk, DXGI GPU, host tooling (QEMU, EDK2, `adb`, `scrcpy`, images). |
-| Mimir | `mimir` (`bifrost.exe`) | Implemented | Administrative CLI; routes runtime and app commands through Heimdall IPC when the daemon is running, otherwise runs them locally. |
+| Client facade | `bifrost-client` | Implemented | `Session` shared by Mimir and the desktop UI: loads the effective config, probes Heimdall once, routes each runtime/app operation over IPC when the daemon answers or directly otherwise (blocking calls on Tokio's blocking pool), reconciles `Booting` → `Running` over ADB, auto-boots Midgard headless before app launch/install, and starts Heimdall detached. |
+| Mimir | `mimir` (`bifrost.exe`) | Implemented | Administrative CLI on top of `bifrost-client`. |
 | Heimdall | `heimdall` (`heimdall.exe`) | Implemented | Tokio daemon: Named Pipe server (`\\.\pipe\bifrost-heimdall-<user>`), periodic runtime/ADB health, `app_sync` (shortcuts for apps installed inside Android), `desktop_bridge` (native WinRT Toast forwarding, clipboard auto-sync), optional HKCU login autostart. |
 | Midgard | `bifrost-hypervisor`, `bifrost-runtime`, `bifrost-storage`, `android/midgard` | Implemented (QEMU-WHPX); Experimental (crosvm-WHPX) | Verified boot of `direct_kernel`, `bootable_image`, or `uefi_disks` bundles; persistent `userdata.img`; QMP shutdown; serial/VMM logs; DirectSound audio; optional headless `virtio-gpu-gl-pci`. |
 | Bridge | `bifrost-bridge`, `bifrost-process`, `bifrost-network` | Implemented | Loopback ADB wrapper, scoped shared folder (`/sdcard/BifrostShare`), Win32 clipboard, notification parsing + Toasts, guest processes, loopback port forwards, IPC framing and client. |
@@ -159,6 +160,7 @@ bifrost/
 │   ├── bifrost-hypervisor/     # HypervisorBackend trait, QEMU-WHPX, crosvm-WHPX, QMP
 │   ├── bifrost-runtime/        # Midgard lifecycle, runtime-state.json, logs
 │   ├── bifrost-bridge/         # ADB, files, clipboard, notifications, IPC framing + client
+│   ├── bifrost-client/         # Session facade shared by mimir and bifrost-ui
 │   ├── bifrost-display/        # Freeform + per-app VirtualDisplay windows (scrcpy)
 │   ├── bifrost-process/        # Guest process listing
 │   ├── bifrost-network/        # Loopback-only TCP port forwards

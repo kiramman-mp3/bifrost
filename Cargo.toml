@@ -8,6 +8,7 @@ members = [
     "crates/bifrost-runtime",
     "crates/bifrost-bridge",
     "crates/bifrost-display",
+    "crates/bifrost-client",
     "crates/bifrost-process",
     "crates/bifrost-network",
     "crates/valhalla",

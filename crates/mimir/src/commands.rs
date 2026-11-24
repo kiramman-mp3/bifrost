@@ -10,6 +10,7 @@ use bifrost_bridge::{
     sync_clipboard_to_android, AdbClient, AdbDevice, AdbEndpointState, DaemonHealthReport,
     HeimdallClient, IpcRequest, SharedDirectoryBridge,
 };
+use bifrost_client::{blocking, DaemonStart, LoadedConfig, Session, StatusSnapshot};
 use bifrost_core::{
     validate_host_file_path, BifrostConfig, BifrostError, BifrostPaths, Result, RuntimeState,
     VersionInfo,
@@ -18,14 +19,13 @@ use bifrost_diagnostics::{render_human_report, run_doctor, OverallReadiness};
 use bifrost_display::{AppWindowSpec, DisplayController};
 use bifrost_network::NetworkManager;
 use bifrost_process::ProcessManager;
-use bifrost_runtime::{MidgardRuntime, RuntimeLogs, RuntimeRecord, StartOptions};
+use bifrost_runtime::{MidgardRuntime, RuntimeRecord};
 use bifrost_storage::{
     backup_userdata, evaluate_manifest_trust, restore_userdata, verify_manifest_file,
     wipe_userdata_disk, ImageRegistry, ImageTrust,
 };
 use serde::Serialize;
-use valhalla::manager::{InstallOutcome, LaunchOutcome};
-use valhalla::{inspect_apk, AbiCompatibility, InstalledPackage, PackageDetails, ValhallaManager};
+use valhalla::{inspect_apk, AbiCompatibility, ValhallaManager};
 
 use crate::cli::{
     AppsAction, Cli, ClipboardAction, Command, ConfigAction, DaemonAction, DesktopAction,
@@ -178,52 +178,17 @@ fn resolve_config_path(explicit: Option<&PathBuf>) -> Result<PathBuf> {
 fn load_effective_config_and_paths(
     explicit_config: Option<&PathBuf>,
 ) -> Result<(PathBuf, bool, BifrostConfig, BifrostPaths)> {
-    let config_path = resolve_config_path(explicit_config)?;
-    let config_exists = config_path.exists();
-    let config = if config_exists {
-        BifrostConfig::load_from_file(&config_path)?
-    } else {
-        BifrostConfig::default()
-    };
-
-    let mut paths = BifrostPaths::discover()?;
-    if let Some(ref custom_data_dir) = config.runtime.data_dir {
-        paths.data_dir = custom_data_dir.clone();
-        paths.images_dir = custom_data_dir.join("images");
-        paths.logs_dir = custom_data_dir.join("logs");
-    }
-
-    Ok((config_path, config_exists, config, paths))
+    let loaded = LoadedConfig::load(explicit_config.map(PathBuf::as_path))?;
+    Ok((
+        loaded.config_path,
+        loaded.config_exists,
+        loaded.config,
+        loaded.paths,
+    ))
 }
 
 fn heimdall_client_for(paths: &BifrostPaths) -> HeimdallClient {
     HeimdallClient::new(default_pipe_name(), &paths.data_dir)
-}
-
-fn locate_heimdall_binary() -> Result<PathBuf> {
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            for name in ["heimdall.exe", "heimdall"] {
-                let sibling = dir.join(name);
-                if sibling.is_file() {
-                    return Ok(sibling);
-                }
-            }
-        }
-    }
-    if let Ok(local) = std::env::var("LOCALAPPDATA") {
-        let installed = PathBuf::from(local)
-            .join("Programs")
-            .join("BIFRÖST")
-            .join("heimdall.exe");
-        if installed.is_file() {
-            return Ok(installed);
-        }
-    }
-    Err(BifrostError::Runtime(
-        "heimdall executable not found next to bifrost.exe or in %LOCALAPPDATA%\\Programs\\BIFRÖST"
-            .to_string(),
-    ))
 }
 
 fn handle_version(as_json: bool) -> Result<String> {
@@ -253,43 +218,18 @@ fn handle_version(as_json: bool) -> Result<String> {
 }
 
 async fn handle_status(explicit_config: Option<&PathBuf>, as_json: bool) -> Result<String> {
-    let (config_path, config_exists, config, paths) =
-        load_effective_config_and_paths(explicit_config)?;
-    let client = heimdall_client_for(&paths);
-    let heimdall_health = client.health().await.ok();
-    let heimdall_connected = heimdall_health.is_some();
-
-    let mut record = if heimdall_connected {
-        client
-            .send::<RuntimeRecord>(IpcRequest::RuntimeStatus)
-            .await?
-    } else {
-        let runtime_mgr = MidgardRuntime::with_default_backend(config.clone(), paths.clone());
-        runtime_mgr.status()?
-    };
-
-    // Reconcile `Booting` -> `Running` directly via loopback ADB when Heimdall is offline.
-    let mut adb_access = heimdall_health.as_ref().and_then(|h| h.adb_access);
-    if !heimdall_connected && record.state == RuntimeState::Booting {
-        if let Some(ref endpoint) = record.adb_endpoint {
-            let adb = AdbClient::new();
-            adb_access = adb.diagnose_endpoint(endpoint).ok();
-            if adb_access == Some(AdbEndpointState::Ready)
-                && adb
-                    .probe_guest_health(endpoint)
-                    .is_ok_and(|g| g.boot_completed)
-            {
-                let runtime_mgr = MidgardRuntime::with_default_backend(config, paths);
-                let _ = runtime_mgr.mark_running();
-                record.state = RuntimeState::Running;
-            }
-        }
-    }
-
-    let runtime_state = heimdall_health
-        .as_ref()
-        .map(|h| h.runtime_state)
-        .unwrap_or(record.state);
+    let session = Session::open(explicit_config.map(PathBuf::as_path)).await?;
+    let heimdall_connected = session.heimdall_connected();
+    let (config_path, config_exists) = (
+        session.loaded().config_path.clone(),
+        session.loaded().config_exists,
+    );
+    let StatusSnapshot {
+        record,
+        runtime_state,
+        heimdall_health,
+        adb_access,
+    } = session.status().await?;
 
     let adb_hint = adb_access.and_then(AdbEndpointState::remediation);
     let note = if let Some(hint) = adb_hint {
@@ -412,61 +352,25 @@ async fn handle_daemon(
 
     match action {
         DaemonAction::Start => {
-            if let Ok(health) = client.health().await {
-                if as_json {
-                    return serde_json::to_string_pretty(&health)
-                        .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
-                }
-                return Ok(format!(
-                    "Heimdall daemon is already running (PID {}, pipe '{}').",
-                    health.daemon_pid, health.pipe_name
-                ));
-            }
-
-            let heimdall_bin = locate_heimdall_binary()?;
-            let mut cmd = std::process::Command::new(&heimdall_bin);
-            cmd.arg("run")
-                .stdin(std::process::Stdio::null())
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null());
-            if let Some(cfg_path) = explicit_config {
-                cmd.arg("--config").arg(cfg_path);
-            }
-            #[cfg(windows)]
-            {
-                use std::os::windows::process::CommandExt;
-                const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
-                const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-                cmd.creation_flags(CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW);
-            }
-            let _child = cmd.spawn().map_err(|source| BifrostError::Io {
-                context: format!("spawning Heimdall daemon '{}'", heimdall_bin.display()),
-                source,
-            })?;
-
-            // Poll until Heimdall's authenticated Named Pipe is online.
-            let mut started_health = None;
-            for _ in 0..20 {
-                tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-                if let Ok(h) = client.health().await {
-                    started_health = Some(h);
-                    break;
-                }
-            }
-            let health = started_health.ok_or_else(|| {
-                BifrostError::Ipc(
-                    "Heimdall daemon was spawned but did not become reachable over IPC within 5s"
-                        .to_string(),
-                )
-            })?;
+            let session = Session::open(explicit_config.map(PathBuf::as_path)).await?;
+            let started = session
+                .start_heimdall(explicit_config.map(PathBuf::as_path))
+                .await?;
+            let health = started.health();
             if as_json {
-                return serde_json::to_string_pretty(&health)
+                return serde_json::to_string_pretty(health)
                     .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
             }
-            Ok(format!(
-                "Started Heimdall daemon in background (PID {}, pipe '{}').",
-                health.daemon_pid, health.pipe_name
-            ))
+            Ok(match started {
+                DaemonStart::AlreadyRunning(_) => format!(
+                    "Heimdall daemon is already running (PID {}, pipe '{}').",
+                    health.daemon_pid, health.pipe_name
+                ),
+                DaemonStart::Started(_) => format!(
+                    "Started Heimdall daemon in background (PID {}, pipe '{}').",
+                    health.daemon_pid, health.pipe_name
+                ),
+            })
         }
         DaemonAction::Status => {
             let health = client.health().await?;
@@ -526,10 +430,7 @@ async fn handle_runtime(
     explicit_config: Option<&PathBuf>,
     as_json: bool,
 ) -> Result<String> {
-    let (_, _, config, paths) = load_effective_config_and_paths(explicit_config)?;
-    let client = heimdall_client_for(&paths);
-    let heimdall_up = client.health().await.is_ok();
-    let runtime = MidgardRuntime::with_default_backend(config, paths);
+    let session = Session::open(explicit_config.map(PathBuf::as_path)).await?;
 
     match action {
         RuntimeAction::Start {
@@ -537,22 +438,9 @@ async fn handle_runtime(
             headless,
             console,
         } => {
-            let record = if heimdall_up && !*console {
-                client
-                    .send::<RuntimeRecord>(IpcRequest::RuntimeStart {
-                        manifest_path: image.clone(),
-                        headless: *headless,
-                    })
-                    .await?
-            } else {
-                runtime.start(
-                    image,
-                    StartOptions {
-                        headless: *headless,
-                        interactive_console: *console,
-                    },
-                )?
-            };
+            let record = session
+                .start_runtime(image.clone(), *headless, *console)
+                .await?;
             if as_json {
                 return serde_json::to_string_pretty(&record)
                     .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
@@ -572,13 +460,7 @@ async fn handle_runtime(
             ))
         }
         RuntimeAction::Stop { force } => {
-            let record = if heimdall_up {
-                client
-                    .send::<RuntimeRecord>(IpcRequest::RuntimeStop { force: *force })
-                    .await?
-            } else {
-                runtime.stop(*force)?
-            };
+            let record = session.stop_runtime(*force).await?;
             if as_json {
                 return serde_json::to_string_pretty(&record)
                     .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
@@ -590,22 +472,7 @@ async fn handle_runtime(
             ))
         }
         RuntimeAction::Restart { image, headless } => {
-            let record = if heimdall_up {
-                client
-                    .send::<RuntimeRecord>(IpcRequest::RuntimeRestart {
-                        manifest_path: image.clone(),
-                        headless: *headless,
-                    })
-                    .await?
-            } else {
-                runtime.restart(
-                    image.as_deref(),
-                    StartOptions {
-                        headless: *headless,
-                        interactive_console: false,
-                    },
-                )?
-            };
+            let record = session.restart_runtime(image.clone(), *headless).await?;
             if as_json {
                 return serde_json::to_string_pretty(&record)
                     .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
@@ -618,6 +485,10 @@ async fn handle_runtime(
             ))
         }
         RuntimeAction::Verify { image } => {
+            let runtime = MidgardRuntime::with_default_backend(
+                session.config().clone(),
+                session.paths().clone(),
+            );
             let bundle = runtime.verify_image(image)?;
             if as_json {
                 return serde_json::to_string_pretty(&bundle)
@@ -636,18 +507,8 @@ async fn handle_logs(
     tail: usize,
     as_json: bool,
 ) -> Result<String> {
-    let (_, _, config, paths) = load_effective_config_and_paths(explicit_config)?;
-    let client = heimdall_client_for(&paths);
-    let logs = match client
-        .send::<RuntimeLogs>(IpcRequest::RuntimeLogs { tail })
-        .await
-    {
-        Ok(l) => l,
-        Err(_) => {
-            let runtime = MidgardRuntime::with_default_backend(config, paths);
-            runtime.read_logs(tail)?
-        }
-    };
+    let session = Session::open(explicit_config.map(PathBuf::as_path)).await?;
+    let logs = session.logs(tail).await?;
 
     if as_json {
         return serde_json::to_string_pretty(&logs)
@@ -772,26 +633,15 @@ async fn handle_apps(
     explicit_config: Option<&PathBuf>,
     as_json: bool,
 ) -> Result<String> {
-    let (_, _, _, paths) = load_effective_config_and_paths(explicit_config)?;
-    let client = heimdall_client_for(&paths);
-    let heimdall_up = client.health().await.is_ok();
-    let valhalla = ValhallaManager::new();
+    let session = Session::open(explicit_config.map(PathBuf::as_path)).await?;
+    let paths = session.paths().clone();
 
     match action {
         AppsAction::List {
             third_party,
             serial,
         } => {
-            let packages = if heimdall_up {
-                client
-                    .send::<Vec<InstalledPackage>>(IpcRequest::AppsList {
-                        serial: serial.clone(),
-                        third_party_only: *third_party,
-                    })
-                    .await?
-            } else {
-                valhalla.list_packages(serial.as_deref(), *third_party)?
-            };
+            let packages = session.list_apps(serial.clone(), *third_party).await?;
 
             if as_json {
                 return serde_json::to_string_pretty(&packages)
@@ -809,16 +659,7 @@ async fn handle_apps(
         }
         AppsAction::Info { package, serial } => {
             valhalla::validate_package_name(package)?;
-            let details = if heimdall_up {
-                client
-                    .send::<PackageDetails>(IpcRequest::AppInfo {
-                        serial: serial.clone(),
-                        package: package.clone(),
-                    })
-                    .await?
-            } else {
-                valhalla.package_info(serial.as_deref(), package)?
-            };
+            let details = session.app_info(serial.clone(), package.clone()).await?;
 
             if as_json {
                 return serde_json::to_string_pretty(&details)
@@ -845,37 +686,10 @@ async fn handle_apps(
         } => {
             valhalla::validate_package_name(package)?;
             if *window {
+                let target = session
+                    .ensure_device_ready(serial.clone(), !*no_autostart, || {})
+                    .await?;
                 let ctrl = DisplayController::new();
-                let target = match valhalla.resolve_target_serial(serial.as_deref()) {
-                    Ok(t) => t,
-                    Err(_) if !*no_autostart && serial.is_none() => {
-                        let (_, _, config, paths) =
-                            load_effective_config_and_paths(explicit_config)?;
-                        let adb_endpoint = format!(
-                            "{}:{}",
-                            config.network.adb_bind_address, config.network.adb_port
-                        );
-                        let rt = MidgardRuntime::with_default_backend(config, paths.clone());
-                        if !rt.status()?.state.is_active() {
-                            let manifest = rt.resolve_default_manifest()?;
-                            if heimdall_up {
-                                let _: RuntimeRecord = client
-                                    .send(IpcRequest::RuntimeStart {
-                                        manifest_path: manifest,
-                                        headless: true,
-                                    })
-                                    .await?;
-                            } else {
-                                let _ = rt.ensure_started_headless()?;
-                            }
-                        }
-                        ctrl.wait_for_device_ready(
-                            &adb_endpoint,
-                            std::time::Duration::from_secs(90),
-                        )?
-                    }
-                    Err(err) => return Err(err),
-                };
                 let handle = ctrl.launch_in_independent_window(
                     &target,
                     package,
@@ -900,16 +714,7 @@ async fn handle_apps(
                 ));
             }
 
-            let outcome = if heimdall_up {
-                client
-                    .send::<LaunchOutcome>(IpcRequest::AppLaunch {
-                        serial: serial.clone(),
-                        package: package.clone(),
-                    })
-                    .await?
-            } else {
-                valhalla.launch_app(serial.as_deref(), package)?
-            };
+            let outcome = session.launch_app(serial.clone(), package.clone()).await?;
 
             if as_json {
                 return serde_json::to_string_pretty(&outcome)
@@ -924,16 +729,7 @@ async fn handle_apps(
         }
         AppsAction::Stop { package, serial } => {
             valhalla::validate_package_name(package)?;
-            if heimdall_up {
-                let _: serde_json::Value = client
-                    .send(IpcRequest::AppStop {
-                        serial: serial.clone(),
-                        package: package.clone(),
-                    })
-                    .await?;
-            } else {
-                valhalla.force_stop(serial.as_deref(), package)?;
-            }
+            session.stop_app(serial.clone(), package.clone()).await?;
 
             if as_json {
                 let payload = serde_json::json!({ "package": package, "stopped": true });
@@ -1029,12 +825,14 @@ async fn handle_install(
         ));
     }
 
-    let (_, _, config, paths) = load_effective_config_and_paths(explicit_config)?;
-    let client = heimdall_client_for(&paths);
-    let heimdall_up = client.health().await.is_ok();
+    let session = Session::open(explicit_config.map(PathBuf::as_path)).await?;
 
     // Ensure Midgard is booted headlessly if installing via double-click while stopped.
-    if serial.is_none() && ValhallaManager::new().resolve_target_serial(None).is_err() {
+    if serial.is_none()
+        && blocking(|| ValhallaManager::new().resolve_target_serial(None))
+            .await
+            .is_err()
+    {
         let inspection = inspect_apk(&safe_apk)?;
         if !inspection.abi_compatibility.is_supported() {
             return Err(BifrostError::UnsupportedAbi {
@@ -1042,39 +840,12 @@ async fn handle_install(
                 detected_abis: inspection.detected_abis.join(", "),
             });
         }
-        let rt = MidgardRuntime::with_default_backend(config.clone(), paths.clone());
-        if let Ok(manifest) = rt.resolve_default_manifest() {
-            if !rt.status()?.state.is_active() {
-                if heimdall_up {
-                    let _: RuntimeRecord = client
-                        .send(IpcRequest::RuntimeStart {
-                            manifest_path: manifest,
-                            headless: true,
-                        })
-                        .await?;
-                } else {
-                    let _ = rt.ensure_started_headless()?;
-                }
-            }
-            let endpoint = format!(
-                "{}:{}",
-                config.network.adb_bind_address, config.network.adb_port
-            );
-            let _ = DisplayController::new()
-                .wait_for_device_ready(&endpoint, std::time::Duration::from_secs(90))?;
-        }
+        session.ensure_device_ready(None, true, || {}).await?;
     }
 
-    let outcome = if heimdall_up {
-        client
-            .send::<InstallOutcome>(IpcRequest::AppInstall {
-                serial: serial.map(ToOwned::to_owned),
-                apk_path: safe_apk.clone(),
-            })
-            .await?
-    } else {
-        ValhallaManager::new().install_apk(serial, &safe_apk)?
-    };
+    let outcome = session
+        .install_apk(serial.map(ToOwned::to_owned), safe_apk.clone())
+        .await?;
 
     if as_json {
         return serde_json::to_string_pretty(&outcome)
@@ -1105,20 +876,14 @@ async fn handle_uninstall(
 ) -> Result<String> {
     // Validate Android package identifier locally before touching IPC or ADB.
     valhalla::validate_package_name(package)?;
-    let (_, _, _, paths) = load_effective_config_and_paths(explicit_config)?;
-    let client = heimdall_client_for(&paths);
-    let output = if client.health().await.is_ok() {
-        let resp: serde_json::Value = client
-            .send(IpcRequest::AppUninstall {
-                serial: serial.map(ToOwned::to_owned),
-                package: package.to_string(),
-                keep_data,
-            })
-            .await?;
-        resp["output"].as_str().unwrap_or("Success").to_string()
-    } else {
-        ValhallaManager::new().uninstall_package(serial, package, keep_data)?
-    };
+    let session = Session::open(explicit_config.map(PathBuf::as_path)).await?;
+    let output = session
+        .uninstall_app(
+            serial.map(ToOwned::to_owned),
+            package.to_string(),
+            keep_data,
+        )
+        .await?;
 
     if as_json {
         let payload = serde_json::json!({
