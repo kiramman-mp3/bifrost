@@ -141,6 +141,26 @@ impl AdbClient {
         self.run_adb(&["connect", endpoint])
     }
 
+    /// Makes sure the ADB server is attached to Midgard's loopback `endpoint`.
+    ///
+    /// The ADB server only auto-discovers emulators on ports 5555–5585, so a VM on any
+    /// other configured `adb_port` is invisible until it is explicitly connected.
+    /// Returns whether the endpoint is online (`device` state) afterwards.
+    pub fn ensure_connected(&self, endpoint: &str) -> Result<bool> {
+        validate_loopback_endpoint(endpoint)?;
+        let online = |devices: &[AdbDevice]| {
+            devices
+                .iter()
+                .any(|d| d.serial == endpoint && d.state == "device")
+        };
+        if online(&self.list_devices()?) {
+            return Ok(true);
+        }
+        // `adb connect` reports refusals on stdout with exit code 0; the re-list decides.
+        let _ = self.connect_loopback(endpoint);
+        Ok(online(&self.list_devices()?))
+    }
+
     /// Disconnects ADB from an endpoint.
     pub fn disconnect(&self, endpoint: &str) -> Result<String> {
         validate_loopback_endpoint(endpoint)?;
