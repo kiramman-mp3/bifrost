@@ -125,7 +125,7 @@ BIFRÖST/
 │       └── manifest.example.json
 ├── apps/
 │   └── bifrost-ui/                                # Windows 11 Fluent Design 2 desktop application (Tauri 2)
-│       ├── ui/                                    # Offline-first HTML/CSS/ES frontend (Dark & Light themes, 6 sections, drag & drop)
+│       ├── ui/                                    # Offline-first HTML/CSS/ES frontend (Dark & Light themes, 7 sections, drag & drop)
 │       │   ├── index.html
 │       │   ├── styles.css
 │       │   └── js/                                # Native ES modules, no bundler (CSP `script-src 'self'`)
@@ -135,6 +135,7 @@ BIFRÖST/
 │       │       ├── data.js                        # refresh* calls to the Rust backend
 │       │       ├── installer.js                   # App Installer dialog
 │       │       ├── shell.js                       # Navigation, theme, drag & drop
+│       │       ├── setup.js                       # First-run setup wizard
 │       │       └── events.js                      # Button & form wiring
 │       └── src-tauri/                             # Pure-Rust backend (`#![forbid(unsafe_code)]`)
 │           ├── Cargo.toml
@@ -144,12 +145,14 @@ BIFRÖST/
 │           ├── icons/                             # App icon assets (icon.png, icon.ico)
 │           └── src/
 │               ├── main.rs                        # Thin `#[tauri::command]` bindings
+│               ├── tray.rs                        # System tray icon, quick actions & close-to-tray
 │               └── service/                       # Testable Rust service on top of bifrost-client
 │                   ├── mod.rs                     # Config loading & session helper
 │                   ├── dashboard.rs               # Dashboard snapshot, Heimdall, doctor, config
 │                   ├── runtime.rs                 # Midgard start/stop/restart & logs
 │                   ├── apps.rs                    # App Installer flow, launch/stop, shortcuts
-│                   ├── images.rs                  # Image registry, userdata backup/restore
+│                   ├── images.rs                  # Image registry, trusted keys, userdata backup/restore
+│                   ├── setup.rs                   # First-run checklist, winget installs, first visible boot
 │                   └── host.rs                    # Shared folder, processes, port forwards, file pickers
 ├── installer/
 │   ├── README.md                                  # Distribution, installation, upgrade & recovery runbook
@@ -168,6 +171,7 @@ BIFRÖST/
 │   │       ├── error.rs                           # Structured BifrostError taxonomy
 │   │       ├── logging.rs                         # Tracing subscriber setup
 │   │       ├── paths.rs                           # Directory traversal guards & per-user path layout
+│   │       ├── search_path.rs                     # Tool lookup on the process and persisted (registry) PATH
 │   │       └── state.rs                           # Deterministic RuntimeStateMachine
 │   ├── bifrost-diagnostics/                       # Native Windows 11 & WHPX compatibility engine (`bifrost doctor`)
 │   │   ├── Cargo.toml
@@ -218,7 +222,9 @@ BIFRÖST/
 │   │       └── client.rs                          # Async Named Pipe HeimdallClient
 │   ├── bifrost-client/                            # Shared Session facade for mimir & bifrost-ui (Heimdall IPC or direct calls)
 │   │   ├── Cargo.toml
-│   │   └── src/lib.rs                             # Config loading, status reconciliation, headless auto-boot, Heimdall start
+│   │   └── src/
+│   │       ├── lib.rs                             # Config loading, status reconciliation, headless auto-boot, Heimdall start
+│   │       └── setup.rs                           # First-run setup plan & allowlisted, visible winget installs
 │   ├── bifrost-display/                           # Per-app Android VirtualDisplay & independent Windows 11 window launcher
 │   │   ├── Cargo.toml
 │   │   └── src/lib.rs                             # #![forbid(unsafe_code)]
@@ -267,6 +273,7 @@ BIFRÖST/
 │               ├── config.rs                      # config init/show/validate/autotune
 │               ├── images.rs                      # Image registry, verification & trust
 │               ├── recovery.rs                    # userdata backup/restore/wipe
+│               ├── setup.rs                       # setup checklist & --install
 │               └── desktop.rs                     # desktop, share, clipboard, notifications, processes, network
 └── docs/
     ├── TECHNICAL_DECISIONS.md                     # Architecture Decision Record (ADR) index
@@ -318,9 +325,10 @@ BIFRÖST/
    # Option B (elevated PowerShell — MSVC toolchain):
    # winget install Microsoft.VisualStudio.2022.BuildTools
    ```
-3. **Install host VM & Bridge tools**:
+3. **Install host VM & Bridge tools** (or let the desktop app's Setup view / `bifrost setup --install <tool>` open these `winget` installs for you, visibly):
    ```powershell
    winget install --id SoftwareFreedomConservancy.QEMU -e --source winget
+   winget install --id Google.PlatformTools -e --source winget
    winget install --id Genymobile.scrcpy -e --source winget
    ```
 4. **Enable Windows Hypervisor Platform (if `bifrost doctor` reports WHPX inactive, elevated PowerShell)**:
@@ -380,6 +388,7 @@ cargo deny check   # requires `cargo install cargo-deny --locked`
 | `bifrost status [--json]` | Display reconciled Midgard runtime state and live Heimdall IPC status | **Implemented** |
 | `bifrost daemon start \| status \| stop \| autostart` | Start detached Heimdall daemon, query health, stop over IPC, or toggle silent HKCU login autostart | **Implemented** |
 | `bifrost config init \| show \| validate \| autotune` | Initialize, inspect, validate, or host-autotune CPU/RAM in `bifrost.toml` | **Implemented** |
+| `bifrost setup [--install qemu\|adb\|scrcpy] [--json]` | First-run checklist (WHPX, tools, image, first Android boot) and the next action; `--install` runs the allowlisted `winget` package in a visible window | **Implemented** |
 | `bifrost doctor [--strict] [--json]` | Inspect Windows 11 edition, CPU, virtualization, WHPX, RAM, storage, GPU, and host runtime tooling | **Implemented** |
 | `bifrost runtime start \| stop \| restart \| verify` | Verify image SHA-256 digests and manage Midgard WHPX VM lifecycle | **Implemented** |
 | `bifrost logs [--tail N]` | Inspect Midgard serial console and VMM stderr logs | **Implemented** |
