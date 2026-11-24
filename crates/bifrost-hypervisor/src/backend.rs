@@ -23,7 +23,8 @@ pub struct VmSpec {
     pub interactive_console: bool,
     pub serial_log_path: PathBuf,
     pub vmm_stderr_path: PathBuf,
-    pub qmp_port: u16,
+    /// Random per-user QMP AF_UNIX socket path (`<dir>\qmp-<hex>.sock`), see [`crate::qmp`].
+    pub qmp_socket_path: PathBuf,
 }
 
 /// Metadata returned after a hypervisor backend successfully spawns a VM process.

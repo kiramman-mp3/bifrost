@@ -7,8 +7,8 @@ use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
 use bifrost_bridge::{
-    default_pipe_name, read_host_clipboard_text, AdbClient, AdbDevice, DaemonHealthReport,
-    HeimdallClient, IpcRequest, SharedDirectoryBridge, SharedFileEntry,
+    default_pipe_name, read_host_clipboard_text, AdbClient, AdbDevice, AdbEndpointState,
+    DaemonHealthReport, HeimdallClient, IpcRequest, SharedDirectoryBridge, SharedFileEntry,
 };
 use bifrost_core::{
     validate_host_file_path, BifrostConfig, BifrostError, BifrostPaths, Result, RuntimeState,
@@ -21,8 +21,8 @@ use bifrost_process::{AndroidProcess, ProcessManager};
 use bifrost_runtime::{MidgardRuntime, RuntimeLogs, RuntimeRecord, StartOptions};
 use bifrost_storage::registry::DEFAULT_USERDATA_COMPAT_VERSION;
 use bifrost_storage::{
-    backup_userdata, restore_userdata, verify_manifest_file, BackupMetadata, ImageRegistry,
-    InstalledImageRecord,
+    backup_userdata, evaluate_manifest_trust, restore_userdata, verify_manifest_file,
+    BackupMetadata, ImageRegistry, InstalledImageRecord,
 };
 use serde::Serialize;
 use valhalla::manager::{InstallOutcome, LaunchOutcome};
@@ -67,6 +67,8 @@ pub struct DashboardSnapshot {
     pub heimdall_health: Option<DaemonHealthReport>,
     pub heimdall_autostart: bool,
     pub runtime: RuntimeRecord,
+    /// Why ADB cannot reach the active guest, as an actionable sentence, if it cannot.
+    pub adb_access_hint: Option<String>,
     pub active_manifest_path: Option<PathBuf>,
     pub config: BifrostConfig,
     pub config_path: PathBuf,
@@ -148,11 +150,15 @@ pub async fn get_dashboard_snapshot() -> Result<DashboardSnapshot> {
         MidgardRuntime::with_default_backend(config.clone(), paths.clone()).status()?
     };
 
+    let mut adb_access = heimdall_health.as_ref().and_then(|h| h.adb_access);
     if !heimdall_connected && runtime.state == RuntimeState::Booting {
         if let Some(ref endpoint) = runtime.adb_endpoint {
-            if AdbClient::new()
-                .probe_guest_health(endpoint)
-                .is_ok_and(|g| g.boot_completed)
+            let adb = AdbClient::new();
+            adb_access = adb.diagnose_endpoint(endpoint).ok();
+            if adb_access == Some(AdbEndpointState::Ready)
+                && adb
+                    .probe_guest_health(endpoint)
+                    .is_ok_and(|g| g.boot_completed)
             {
                 let _ = MidgardRuntime::with_default_backend(config.clone(), paths.clone())
                     .mark_running();
@@ -195,6 +201,9 @@ pub async fn get_dashboard_snapshot() -> Result<DashboardSnapshot> {
         heimdall_connected,
         heimdall_health,
         heimdall_autostart,
+        adb_access_hint: adb_access
+            .and_then(AdbEndpointState::remediation)
+            .map(str::to_string),
         runtime,
         active_manifest_path,
         config,
@@ -745,13 +754,26 @@ pub fn list_images() -> Result<ImageRegistry> {
     ImageRegistry::load(&paths.images_dir)
 }
 
-/// Verifies a Midgard `manifest.json` bundle (SHA-256) and registers it in the local catalog.
-pub fn register_image(manifest_path: PathBuf) -> Result<InstalledImageRecord> {
-    let (_, _, paths) = load_config_and_paths()?;
+/// Verifies a Midgard `manifest.json` bundle (trust policy + SHA-256) and registers it.
+///
+/// A detached `manifest.json.sig` must verify against `[images] trusted_keys`; unsigned
+/// bundles are only accepted when the user explicitly ticks "allow unsigned".
+pub fn register_image(
+    manifest_path: PathBuf,
+    allow_unsigned: bool,
+) -> Result<InstalledImageRecord> {
+    let (_, config, paths) = load_config_and_paths()?;
     let safe_manifest = validate_host_file_path(&manifest_path, Some("json"))?;
+    let trust = evaluate_manifest_trust(
+        &safe_manifest,
+        None,
+        &config.images.trusted_keys,
+        allow_unsigned,
+    )?;
     let bundle = verify_manifest_file(&safe_manifest)?;
     let mut registry = ImageRegistry::load(&paths.images_dir)?;
-    let record = registry.register_bundle(&bundle, false, DEFAULT_USERDATA_COMPAT_VERSION)?;
+    let record =
+        registry.register_bundle(&bundle, trust.is_signed(), DEFAULT_USERDATA_COMPAT_VERSION)?;
     registry.save(&paths.images_dir)?;
     Ok(record)
 }
@@ -809,89 +831,55 @@ pub async fn pick_folder_dialog(title: String) -> Result<Option<PathBuf>> {
         .map_err(|err| BifrostError::Runtime(format!("folder picker task failed: {err}")))?
 }
 
+/// Parses a .NET-style dialog filter (`"Label|*.a;*.b|All files|*.*"`) into
+/// `(label, extensions)` pairs for the native dialog. `*.*` maps to `*`.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn parse_dialog_filter(filter: &str) -> Vec<(String, Vec<String>)> {
+    let parts: Vec<&str> = filter.split('|').collect();
+    parts
+        .chunks(2)
+        .filter_map(|pair| {
+            let [label, patterns] = pair else {
+                return None;
+            };
+            let extensions: Vec<String> = patterns
+                .split(';')
+                .filter_map(|pat| {
+                    let pat = pat.trim();
+                    if pat == "*.*" || pat == "*" {
+                        Some("*".to_string())
+                    } else {
+                        pat.strip_prefix("*.")
+                            .filter(|ext| !ext.is_empty())
+                            .map(str::to_string)
+                    }
+                })
+                .collect();
+            (!label.trim().is_empty() && !extensions.is_empty())
+                .then(|| (label.trim().to_string(), extensions))
+        })
+        .collect()
+}
+
+/// Shows the native Windows `IFileOpenDialog` (through `rfd`, no scripts or child process).
 #[cfg(windows)]
 fn run_native_file_dialog(title: &str, filter: &str) -> Result<Option<PathBuf>> {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    const SCRIPT: &str = r#"
-$OutputEncoding = [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-Add-Type -AssemblyName System.Windows.Forms
-$dlg = New-Object System.Windows.Forms.OpenFileDialog
-$dlg.Title = $env:BIFROST_DLG_TITLE
-$dlg.Filter = $env:BIFROST_DLG_FILTER
-$dlg.Multiselect = $false
-$dlg.RestoreDirectory = $true
-if ($dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-    Write-Output $dlg.FileName
+    let mut dialog = rfd::FileDialog::new().set_title(title);
+    for (label, extensions) in parse_dialog_filter(filter) {
+        dialog = dialog.add_filter(label, &extensions);
+    }
+    Ok(dialog.pick_file())
 }
-exit 0
-"#;
-    let output = std::process::Command::new("powershell.exe")
-        .args(["-NoProfile", "-NonInteractive", "-STA", "-Command", SCRIPT])
-        .env("BIFROST_DLG_TITLE", title)
-        .env("BIFROST_DLG_FILTER", filter)
-        .creation_flags(CREATE_NO_WINDOW)
-        .output()
-        .map_err(|source| BifrostError::Io {
-            context: "opening Windows file picker dialog".to_string(),
-            source,
-        })?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(BifrostError::Runtime(format!(
-            "file picker failed: {stderr}"
-        )));
-    }
-    let selected = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if selected.is_empty() {
-        Ok(None)
-    } else {
-        Ok(Some(PathBuf::from(selected)))
-    }
+
+/// Shows the native Windows folder picker (through `rfd`).
+#[cfg(windows)]
+fn run_native_folder_dialog(title: &str) -> Result<Option<PathBuf>> {
+    Ok(rfd::FileDialog::new().set_title(title).pick_folder())
 }
 
 #[cfg(not(windows))]
 fn run_native_file_dialog(_title: &str, _filter: &str) -> Result<Option<PathBuf>> {
     Ok(None)
-}
-
-#[cfg(windows)]
-fn run_native_folder_dialog(title: &str) -> Result<Option<PathBuf>> {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    const SCRIPT: &str = r#"
-$OutputEncoding = [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-Add-Type -AssemblyName System.Windows.Forms
-$dlg = New-Object System.Windows.Forms.FolderBrowserDialog
-$dlg.Description = $env:BIFROST_DLG_TITLE
-$dlg.UseDescriptionForTitle = $true
-$dlg.ShowNewFolderButton = $true
-if ($dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-    Write-Output $dlg.SelectedPath
-}
-exit 0
-"#;
-    let output = std::process::Command::new("powershell.exe")
-        .args(["-NoProfile", "-NonInteractive", "-STA", "-Command", SCRIPT])
-        .env("BIFROST_DLG_TITLE", title)
-        .creation_flags(CREATE_NO_WINDOW)
-        .output()
-        .map_err(|source| BifrostError::Io {
-            context: "opening Windows folder picker dialog".to_string(),
-            source,
-        })?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(BifrostError::Runtime(format!(
-            "folder picker failed: {stderr}"
-        )));
-    }
-    let selected = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if selected.is_empty() {
-        Ok(None)
-    } else {
-        Ok(Some(PathBuf::from(selected)))
-    }
 }
 
 #[cfg(not(windows))]
@@ -931,5 +919,23 @@ mod tests {
         assert_eq!(encode_base64(b"fo"), "Zm8=");
         assert_eq!(encode_base64(b"foo"), "Zm9v");
         assert_eq!(encode_base64(b"BIFROST"), "QklGUk9TVA==");
+    }
+
+    #[test]
+    fn parses_dotnet_dialog_filters_for_native_picker() {
+        let parsed =
+            parse_dialog_filter("Android Package (*.apk;*.apkm)|*.apk;*.apkm|All files (*.*)|*.*");
+        assert_eq!(
+            parsed,
+            vec![
+                (
+                    "Android Package (*.apk;*.apkm)".to_string(),
+                    vec!["apk".to_string(), "apkm".to_string()]
+                ),
+                ("All files (*.*)".to_string(), vec!["*".to_string()]),
+            ]
+        );
+        assert!(parse_dialog_filter("").is_empty());
+        assert!(parse_dialog_filter("Dangling label").is_empty());
     }
 }

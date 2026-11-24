@@ -8,6 +8,8 @@ This document indexes all Architecture Decision Records (ADRs) for **BIFRÖST**.
 | **ADR-0002** | WHPX-First Virtualization Behind a Rust VMM Abstraction | Accepted | M0 | [ADR-0002-whpx-vmm-abstraction.md](decisions/ADR-0002-whpx-vmm-abstraction.md) |
 | **ADR-0003** | Graphics Acceleration (`virtio-gpu` + `gfxstream`) and Phased Windowing | Accepted | M0 | [ADR-0003-graphics-and-windowing-strategy.md](decisions/ADR-0003-graphics-and-windowing-strategy.md) |
 | **ADR-0004** | Clean-Room x86_64 Policy and Exclusion of Proprietary ARM Translators & GApps | Accepted | M0 | [ADR-0004-arm64-compatibility-policy.md](decisions/ADR-0004-arm64-compatibility-policy.md) |
+| **ADR-0005** | Per-App Windows via `scrcpy` VirtualDisplay Streaming (amends ADR-0003 Stage 2) | Accepted | M6 / v0.2.0 | [ADR-0005-scrcpy-virtualdisplay-windowing.md](decisions/ADR-0005-scrcpy-virtualdisplay-windowing.md) |
+| **ADR-0006** | Local Ed25519 Trust Store for Midgard Runtime Images | Accepted | Post-M8 | [ADR-0006-image-trust-store.md](decisions/ADR-0006-image-trust-store.md) |
 
 ## ADR Status Definitions
 - **Proposed**: Under active technical investigation.

@@ -6,6 +6,42 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-24
+
+### Security
+- **Clipboard shell injection (`bifrost-bridge`)**: Windows clipboard text synced to Android (manually or automatically by Heimdall) was passed unquoted to `adb shell`, so the Android `sh` interpreter executed it. Added `quote_android_shell_arg` (POSIX single-quote escaping) with regression tests, and applied it to clipboard sync and the shared-folder `mkdir`.
+- **Image trust store (`bifrost-core`, `bifrost-storage`, `mimir`, `bifrost-ui`)**: Ed25519 manifest signatures now count only when they verify against `[images] trusted_keys` in `bifrost.toml` (detached `manifest.json.sig` supported). Invalid signatures are always rejected, and unsigned bundles require an explicit `--allow-unsigned` (CLI) or the "Allow unsigned bundle" checkbox (UI). See ADR-0006.
+
+- **QMP off TCP (`bifrost-hypervisor`, `bifrost-runtime`)**: QEMU's unauthenticated QMP monitor listened on `127.0.0.1:<port>`, so any local process or user could power off or control the VM. It now uses `-chardev socket,server=on,wait=off` on an AF_UNIX socket file with a random 128-bit name inside the per-user data directory (`data_dir\run`, falling back to `%TEMP%\bifrost-run`), protected by the file ACL. QMP I/O runs on a worker thread with timeouts. A Windows named pipe was tried first during development, but QEMU's pipe chardev blocked VM start-up until a client connected; the live end-to-end test caught this before release. VMs started by older versions (TCP endpoints) can still be shut down.
+- **Clipboard via stdin (`bifrost-bridge`)**: clipboard text is now streamed through `adb` stdin into a fixed `cmd clipboard set-text "$(cat)"` script (`AdbClient::run_adb_with_stdin`). It never appears on a command line, which also removes the ~32K Windows command-line limit that broke large syncs.
+
+- **Pinned CI actions (`.github/workflows`)**: every third-party action in the CI, fuzz and release workflows is pinned to a full commit SHA (version kept as a comment), so a moved tag cannot change what builds and signs a release.
+
+### Changed
+- **No PowerShell at runtime (`bifrost-bridge`, `valhalla`, `bifrost-ui`)**: replaced every runtime `powershell.exe` invocation with native APIs:
+  - Toasts use WinRT directly under a registered `BIFROST.Bifrost` AppUserModelID (`HKCU\Software\Classes\AppUserModelId`), so they show "BIFRÖST" instead of "Windows PowerShell".
+  - HKCU `.apk`/`.apkm` association and Heimdall login autostart use `winreg`; the cycle is tested against a scratch registry subtree.
+  - Desktop and Start Menu `.lnk` files are written natively with `mslnk`, and the Desktop is resolved through the Known Folder API (OneDrive redirection aware).
+  - The UI's Browse dialogs use the native `IFileOpenDialog` through `rfd`.
+  - `uninstall-bifrost.ps1` also removes the AppUserModelID key.
+- **Breaking**: removed `bifrost images register --pubkey`; trusted keys come only from `bifrost.toml`.
+
+### Added
+- **Release pipeline (`.github/workflows/release.yml`, `build-release-bundle.ps1`)**: `vX.Y.Z` tags trigger an MSVC release build with quality gates, optional Authenticode signing (secrets-driven; signing happens before hashing), a Sigstore build-provenance attestation, and a GitHub Release whose notes come from this changelog. The packager also bundles the installer scripts and `LICENSE`, emits a versioned `.zip` with its `.sha256`, builds with `--locked`, and refuses to wipe an output directory that is not a previous bundle.
+
+### Fixed
+- **Concurrent VM starts (`bifrost-runtime`)**: `start`, `stop`, `restart` and `ensure_started_headless` now hold a cross-process lifecycle lock (`instances\<id>\lifecycle.lock`, opened with share mode 0 and released by the OS when its holder exits). Two simultaneous starts from the CLI, the UI or Heimdall could previously both spawn a VMM on the same `userdata` disk; the second caller now waits and sees the running instance.
+- **Heimdall token clobbering (`heimdall`)**: a second daemon wrote a new auth token before failing on `first_pipe_instance`, locking every client out of the running daemon. The pipe is now claimed before the token is written.
+- **Heimdall responsiveness (`heimdall`)**: runtime start (image hashing), stop, `adb` round-trips and the periodic health probe ran on async workers and could stall the daemon for minutes; they now run on Tokio's blocking pool. Clients that connect without sending a request frame time out after 10 seconds.
+- **`--json` output (`bifrost-core`)**: `tracing` logs were written to stdout, so `bifrost --json runtime start` emitted log lines before its JSON document and no consumer could parse it. Logs now go to stderr. Found by the live-VM end-to-end test.
+- **Custom `adb_port` stuck in `booting` (`bifrost-bridge`, `mimir`, `heimdall`, `bifrost-ui`)**: the ADB server only auto-discovers ports 5555–5585 and nothing ran `adb connect` for Midgard's endpoint, so a VM on any other port never reached `running`. `AdbClient::ensure_connected` now attaches the endpoint while booting. Heimdall answers `DaemonHealth` from the monitor's last probe so a slow `adb connect` cannot time clients out (measured on a real VM: max 35 ms over 117 probes).
+- **Silent "booting" when ADB is blocked (`bifrost-bridge`, `heimdall`, `mimir`, `bifrost-ui`)**: on a live VM, a fresh `userdata` boots Android 16+ into *trade-in mode* (adbd reports `device` but closes every service except `tradeinmode` until the setup wizard is completed), and a provisioned `userdata` rejects an unapproved host key as `unauthorized`. Both left Midgard stuck in `booting` with no explanation. `AdbClient::diagnose_endpoint` now classifies the endpoint, Heimdall reports it as `adb_access` and logs the fix, `bifrost status` shows the remediation as its note (and `adb_access` in `--json`), and the dashboard shows "ADB blocked: …". The live-VM end-to-end test leaves trade-in mode on its disposable disks and now passes against LineageOS 24.
+- **"Multiple Android devices online" (`bifrost-bridge`, `valhalla`, `bifrost-process`, `bifrost-network`)**: the ADB server registers a VM answering on 5555–5585 a second time as `emulator-<N>`, so Midgard on the default port showed up twice and every command without `--serial` failed (app list/install/launch, Desktop shortcuts, processes). `AdbClient::online_devices` now collapses that alias onto the `127.0.0.1` endpoint.
+- Non-Windows stubs in `valhalla` referenced a non-existent `BifrostError::Unsupported` field and would not compile off Windows.
+
+### Documentation
+- Rewrote `ARCHITECTURE.md` to reflect the implemented system, added ADR-0005 (scrcpy per-app windows) and ADR-0006 (image trust store), amended ADR-0001/0003, extended `ROADMAP.md` with v0.1.0–v0.3.3 and next steps, and aligned `SECURITY.md`, `README.md`, `CONTRIBUTING.md` and `CLAUDE.md` with the code (`116` passing workspace tests across 13 crates).
+
 ## [0.3.3] - 2026-11-22
 
 ### Added

@@ -7,7 +7,7 @@ use bifrost_core::{resolve_within_root, BifrostError, Result};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-use crate::adb::AdbClient;
+use crate::adb::{quote_android_shell_arg, AdbClient};
 
 /// Fixed guest directory root for BIFRÖST shared files on Android.
 pub const DEFAULT_GUEST_SHARE_ROOT: &str = "/sdcard/BifrostShare";
@@ -91,9 +91,10 @@ impl SharedDirectoryBridge {
         let clean_guest_rel = validate_guest_relative_path(relative_path)?;
         let guest_dest = format!("{}/{}", self.guest_root, clean_guest_rel);
 
+        let quoted_root = quote_android_shell_arg(&self.guest_root);
         let _ = self
             .adb
-            .run_adb(&["-s", serial, "shell", "mkdir", "-p", &self.guest_root])?;
+            .run_adb(&["-s", serial, "shell", "mkdir", "-p", &quoted_root])?;
 
         let host_str = host_path.to_string_lossy().to_string();
         info!(

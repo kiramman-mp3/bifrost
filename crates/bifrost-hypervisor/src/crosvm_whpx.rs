@@ -179,7 +179,8 @@ impl HypervisorBackend for CrosvmWhpxBackend {
             command_line,
             serial_log_path: spec.serial_log_path.clone(),
             vmm_stderr_path: spec.vmm_stderr_path.clone(),
-            qmp_endpoint: format!("127.0.0.1:{}", spec.qmp_port),
+            // crosvm has no QMP monitor; shutdown always terminates the process.
+            qmp_endpoint: String::new(),
             adb_endpoint: format!("{}:{}", spec.adb_bind_address, spec.adb_port),
         })
     }
@@ -261,7 +262,9 @@ mod tests {
             interactive_console: false,
             serial_log_path: PathBuf::from(r"C:\logs\serial.log"),
             vmm_stderr_path: PathBuf::from(r"C:\logs\stderr.log"),
-            qmp_port: 4444,
+            qmp_socket_path: PathBuf::from(
+                r"C:\data\run\qmp-00112233445566778899aabbccddeeff.sock",
+            ),
         };
 
         let args = CrosvmWhpxBackend::new().build_args(&spec).unwrap();

@@ -1,8 +1,10 @@
 # BIFRÖST System Architecture
 
-> **Status**: Baseline Architecture (Milestone 0)  
-> **Primary Language**: Rust  
+> **Status**: Implemented through `v0.4.0` (Milestones 0–8 + post-M8 desktop integration)
+> **Primary Language**: Rust (13-crate Cargo workspace, `116` unit/IPC/fuzz tests)
 > **Target Platform**: Windows 11 x64 (Home, Pro, Enterprise)
+
+This document describes the architecture **as implemented**. Where the implementation deviates from the original Milestone 0 design, the deviation is called out and recorded in an ADR.
 
 ---
 
@@ -10,46 +12,48 @@
 
 1. **Modular Rust Core**: All runtime orchestration, supervision, configuration, security boundaries, and IPC live in modular Rust crates inside a Cargo workspace.
 2. **Strict Separation of Concerns**:
-   - The desktop UI (`bifrost-ui`) is a thin presentation client over authenticated local IPC — it **never** owns VM lifecycle or privileged runtime logic.
+   - The desktop UI (`bifrost-ui`) is a presentation client; its Rust `service.rs` layer delegates to the same crates the CLI uses and never embeds VM lifecycle logic in the frontend.
    - `heimdall` supervises and coordinates subsystems without becoming a monolith containing business logic.
    - `bifrost-hypervisor` abstracts the VMM backend so Midgard is never permanently locked to a single hypervisor wrapper.
 3. **Windows 11 Home First-Class Support**: Core virtualization relies on the **Windows Hypervisor Platform (WHPX)** rather than Pro-only Hyper-V management APIs.
-4. **Defense in Depth**: Loopback/vsock-only ADB, SID-authenticated Windows Named Pipes for local IPC, strict path canonicalization, cryptographic verification of Midgard runtime images, and minimal `unsafe` Rust.
+4. **Defense in Depth**: Loopback-only ADB, owner-only DACL + session-token Windows Named Pipes, strict path validation, quoted `adb shell` arguments, trust-store-verified Midgard images, and audited minimal `unsafe` Rust.
 5. **Honest Incremental Delivery**: Every vertical slice must compile, pass tests, and report unsupported capabilities explicitly without fake success paths.
 
 ---
 
-## 2. High-Level System Architecture
+## 2. High-Level System Architecture (as implemented)
 
 ```mermaid
 flowchart TD
     subgraph UserSpace["Windows 11 User Layer"]
-        UI["bifrost-ui<br/>(Tauri 2 Fluent Shell)"]
+        UI["bifrost-ui<br/>(Tauri 2 Fluent Shell + App Installer dialog)"]
         CLI["mimir<br/>(bifrost CLI)"]
-        WIN["Per-App Display Hosts<br/>(Win32 + D3D12/Vulkan)<br/>[Planned M6]"]
+        WIN["Per-App Windows<br/>(scrcpy VirtualDisplay, D3D11VA) — ADR-0005"]
+        SHELL["Explorer integration<br/>(HKCU .apk/.apkm handler, .lnk shortcuts, Toasts)"]
     end
 
     subgraph ControlPlane["Heimdall Control Plane (Rust Background Daemon)"]
-        IPC["Authenticated Local IPC<br/>(Windows Named Pipes + User-SID ACL)"]
-        SUP["Heimdall Supervisor<br/>(Lifecycle, Health, Recovery, Resources)"]
-        VAL["Valhalla<br/>(APK & Package Manager)"]
-        BRG["Bridge<br/>(ADB, Files, Clipboard, Notifications, Events)"]
-        CORE["bifrost-core<br/>(Models, State Machine, Config, Errors, Logging)"]
+        IPC["Authenticated Local IPC<br/>(Named Pipe, owner-only DACL + 256-bit token)"]
+        SUP["Heimdall Supervisor<br/>(runtime/ADB health, app_sync, desktop_bridge)"]
+        VAL["Valhalla<br/>(APK/APKM inspection, pm/am, shortcuts)"]
+        BRG["Bridge<br/>(ADB, files, clipboard, notifications)"]
+        DSP["bifrost-display<br/>(freeform + VirtualDisplay launcher)"]
+        CORE["bifrost-core<br/>(models, state machine, config, errors, logging)"]
     end
 
     subgraph VirtLayer["Virtualization & Storage Layer"]
-        HYP["bifrost-hypervisor<br/>(VMM Trait: QEMU-WHPX -> crosvm-WHPX)"]
-        STG["bifrost-storage<br/>(Verified Images, Persistent Userdata Disks)"]
+        HYP["bifrost-hypervisor<br/>(HypervisorBackend: QEMU-WHPX default, crosvm-WHPX wrapper)"]
+        STG["bifrost-storage<br/>(manifests, SHA-256, trust store, registry, userdata, recovery)"]
         WHPX["Windows Hypervisor Platform (WHPX)<br/>WinHvPlatform.dll"]
     end
 
-    subgraph Guest["Midgard (Android x86_64 Guest VM - AOSP)"]
-        KERN["Android GKI Linux Kernel<br/>(VirtIO: blk, net, vsock, gpu, input, snd)"]
-        AOSP["Android Framework<br/>(init, SurfaceFlinger, PackageManager, adbd)"]
-        AGENT["Midgard Guest Agent<br/>(Health, VirtualDisplays, Clipboard, Notifications)<br/>[Planned M4-M6]"]
+    subgraph Guest["Midgard (Android x86_64 Guest VM)"]
+        KERN["Linux kernel<br/>(VirtIO blk, net, gpu, serial, rng)"]
+        AOSP["Android Framework<br/>(LineageOS 24 virtio_x86_64: init, SurfaceFlinger, pm, adbd)"]
     end
 
     UI --> IPC
+    UI -->|"direct service.rs calls when daemon is down"| VAL
     CLI --> IPC
     IPC --> SUP
     SUP --> CORE
@@ -60,63 +64,42 @@ flowchart TD
     HYP --> WHPX
     WHPX --> KERN
     KERN --> AOSP
-    AOSP --> AGENT
-    BRG <-->|"virtio-vsock / Loopback ADB"| AGENT
-    BRG <-->|"Loopback ADB (127.0.0.1)"| AOSP
     VAL --> BRG
-    WIN <-->|"Frame/Input Stream (vsock / Shared Mem)"| AGENT
+    DSP --> BRG
+    DSP --> WIN
+    SUP --> SHELL
+    BRG <-->|"Loopback ADB (127.0.0.1)"| AOSP
+    WIN <-->|"scrcpy over loopback ADB"| AOSP
 ```
+
+There is **no Midgard guest agent** and **no `virtio-vsock` channel** yet: every host ↔ guest interaction goes through loopback ADB (`pm`, `am`, `dumpsys`, `cmd clipboard`, `getprop`), polled by Heimdall.
 
 ---
 
 ## 3. Component Responsibilities
 
-### 3.1 Bifrost Core (`crates/bifrost-core`) — *Planned: Milestone 1*
-Central shared library imported across host binaries:
-- **Runtime State Machine**: Deterministic states (`Stopped`, `Starting`, `Booting`, `Running`, `Degraded`, `Stopping`, `Failed`) with explicit valid transitions.
-- **Configuration System**: Typed TOML configuration with schema versioning, validation (CPU/RAM/storage bounds, DPI/resolution ranges), and safe path resolution.
-- **Domain Models**: Runtime instance descriptors, system compatibility reports, installed package metadata, diagnostic bundles.
-- **Error Taxonomy**: Structured `thiserror` error types with actionable remediation hints.
-- **Observability**: `tracing`-based structured logging (console + rotating file logs).
+| Component | Crate(s) | Status | Responsibility |
+|---|---|---|---|
+| Bifrost Core | `bifrost-core` | Implemented | Runtime state machine (`Stopped`, `Starting`, `Booting`, `Running`, `Degraded`, `Stopping`, `Failed`), versioned TOML config (`[runtime]`, `[display]`, `[desktop]`, `[network]`, `[logging]`, `[images]`), path guards, error taxonomy, `tracing` setup, host auto-tune. |
+| Diagnostics | `bifrost-diagnostics` | Implemented | `bifrost doctor`: Windows edition, CPU virtualization, live `WHvCreatePartition`, RAM, disk, DXGI GPU, host tooling (QEMU, EDK2, `adb`, `scrcpy`, images). |
+| Mimir | `mimir` (`bifrost.exe`) | Implemented | Administrative CLI; routes runtime and app commands through Heimdall IPC when the daemon is running, otherwise runs them locally. |
+| Heimdall | `heimdall` (`heimdall.exe`) | Implemented | Tokio daemon: Named Pipe server (`\\.\pipe\bifrost-heimdall-<user>`), periodic runtime/ADB health, `app_sync` (shortcuts for apps installed inside Android), `desktop_bridge` (native WinRT Toast forwarding, clipboard auto-sync), optional HKCU login autostart. |
+| Midgard | `bifrost-hypervisor`, `bifrost-runtime`, `bifrost-storage`, `android/midgard` | Implemented (QEMU-WHPX); Experimental (crosvm-WHPX) | Verified boot of `direct_kernel`, `bootable_image`, or `uefi_disks` bundles; persistent `userdata.img`; QMP shutdown; serial/VMM logs; DirectSound audio; optional headless `virtio-gpu-gl-pci`. |
+| Bridge | `bifrost-bridge`, `bifrost-process`, `bifrost-network` | Implemented | Loopback ADB wrapper, scoped shared folder (`/sdcard/BifrostShare`), Win32 clipboard, notification parsing + Toasts, guest processes, loopback port forwards, IPC framing and client. |
+| Valhalla | `valhalla` | Implemented | APK/APKM inspection (Zip-Slip, AXML, SHA-256, ADR-0004 ABI), `pm`/`am` install/launch/stop, Desktop & Start Menu `.lnk` + `.ico`, HKCU file association. |
+| Display | `bifrost-display` | Implemented (via `scrcpy`) | Android freeform setup and per-app `VirtualDisplay` windows using `scrcpy >= 3.0 --new-display` (see ADR-0005). |
+| Desktop UI | `apps/bifrost-ui` | Implemented | Tauri 2 Fluent shell (Dashboard, Apps, Runtime Config, Diagnostics, Images & Recovery, Settings) and compact App Installer dialog (`--install-apk`). |
 
-### 3.2 Mimir (`crates/mimir`) — *Planned: Milestone 1–5*
-Administrative CLI binary (`bifrost.exe`):
-- Local-only commands (run without Heimdall): `bifrost doctor`, `bifrost version`, `bifrost config validate`.
-- Daemon-backed commands (via Heimdall IPC): `bifrost status`, `bifrost runtime start|stop|restart`, `bifrost devices`, `bifrost apps list`, `bifrost install <apk>`, `bifrost uninstall <pkg>`, `bifrost logs`.
-- Any unimplemented subcommand exits with an explicit `Unsupported` error code and message.
+### 3.1 External host dependencies
 
-### 3.3 Heimdall (`crates/heimdall`) — *Planned: Milestone 4*
-Background runtime supervisor:
-- Owns runtime lifecycle orchestration (start, graceful ACPI/ADB shutdown, forced kill timeout, crash recovery with backoff).
-- Exposes authenticated local IPC via Windows Named Pipes restricted to the current user SID.
-- Collects health heartbeats from Midgard and exposes runtime telemetry (CPU, RAM, disk, uptime, active apps).
-- Never embeds low-level hypervisor or ADB protocol parsing directly — delegates to `bifrost-hypervisor`, `bifrost-runtime`, `bifrost-bridge`, and `valhalla`.
+BIFRÖST does not bundle a VMM or ADB. It drives the following external processes:
 
-### 3.4 Midgard (`crates/bifrost-runtime`, `crates/bifrost-hypervisor`, `crates/bifrost-storage`, `android/midgard`) — *Planned: Milestone 3*
-Real Android x86_64 execution environment:
-- **Guest OS**: Clean AOSP x86_64 (Android 15/16) with GKI kernel and VirtIO drivers.
-- **Virtualization Abstraction**: `HypervisorBackend` trait supporting:
-  - *Milestone 3*: WHPX-accelerated QEMU backend for rapid, verifiable Android boot.
-  - *Target Evolution*: Rust-native `crosvm` backend over WHPX + `virtio-gpu` (`gfxstream`).
-- **Storage**: Immutable verified system/vendor/boot partitions + persistent read-write `userdata` virtual disk preserved across compatible Midgard upgrades.
-
-### 3.5 Bridge (`crates/bifrost-bridge`) — *Planned: Milestone 4–6*
-Windows ↔ Android communication fabric:
-- **ADB Orchestration**: Local loopback-only ADB transport (`127.0.0.1:<ephemeral-or-configured-port>`), never bound to `0.0.0.0` by default.
-- **Control & Event Channel**: Typed RPC over `virtio-vsock` (or localhost socket fallback during bring-up) carrying health metrics, notifications, clipboard sync, and app lifecycle events.
-- **File Sharing**: Scoped host-to-guest directory sharing (`virtio-fs` or controlled bridge transfer) with strict canonical path checks preventing directory traversal.
-
-### 3.6 Valhalla (`crates/valhalla`) — *Planned: Milestone 5*
-Android application lifecycle manager:
-- Queries actual Android `PackageManager` (`pm`) via Bridge — never fabricates app lists.
-- Validates APK files (path safety, zip/APK manifest sanity, ABI compatibility check warning if `x86_64` native libs are missing) before invoking Android's native installer.
-- Launches and terminates Android activities via `ActivityManager` (`am`).
-
-### 3.7 Desktop Application (`apps/bifrost-ui`) — *Planned: Milestone 7*
-Windows 11 Fluent Design desktop shell:
-- Built with **Tauri 2** (Rust backend + lightweight WebView2 frontend) for Dashboard, Application Manager, Runtime Configuration, Diagnostics, and Settings.
-- Communicates exclusively with `heimdall` over authenticated local IPC.
-- Independent Android app windows (Milestone 6) use a dedicated **lightweight native Win32 + D3D12/Vulkan host window** rather than WebView2 to minimize frame latency and ensure native Windows Snap/DPI/input behavior.
+| Tool | Used by | License note |
+|---|---|---|
+| `qemu-system-x86_64` (+ EDK2 firmware) | `bifrost-hypervisor` (default backend) | GPLv2, run strictly as an external child process |
+| `crosvm` (Windows build) | `bifrost-hypervisor` (optional backend) | BSD-3-Clause; no official Windows binary yet |
+| `adb` (Android platform-tools) | `bifrost-bridge` | Apache-2.0 |
+| `scrcpy >= 3.0` | `bifrost-display` | Apache-2.0 |
 
 ---
 
@@ -127,22 +110,24 @@ sequenceDiagram
     participant User as User (Mimir CLI / UI)
     participant Heimdall as Heimdall Daemon
     participant Storage as bifrost-storage
-    participant Hypervisor as bifrost-hypervisor (WHPX)
-    participant Midgard as Midgard (AOSP VM)
-    participant Bridge as Bridge (ADB / vsock)
+    participant Hypervisor as bifrost-hypervisor (QEMU-WHPX)
+    participant Midgard as Midgard (Android VM)
+    participant Bridge as Bridge (loopback ADB)
 
-    User->>Heimdall: IPC Request: RuntimeStart (Authenticated Named Pipe)
+    User->>Heimdall: RuntimeStart (Named Pipe + session token)
     Heimdall->>Heimdall: Validate state (Stopped -> Starting)
-    Heimdall->>Storage: Verify image manifest & SHA-256 / signature
-    Storage-->>Heimdall: Image verified + userdata disk ready
-    Heimdall->>Hypervisor: Spawn VM (WHPX, VirtIO devices, RAM/CPU limits)
-    Hypervisor->>Midgard: Boot GKI kernel + Android init
-    Heimdall->>Heimdall: Transition state (Starting -> Booting)
-    Midgard-->>Bridge: adbd / Guest Agent ready
-    Bridge-->>Heimdall: sys.boot_completed = 1 + health OK
-    Heimdall->>Heimdall: Transition state (Booting -> Running)
-    Heimdall-->>User: IPC Response: Running (runtime metadata)
+    Heimdall->>Storage: Verify manifest SHA-256 digests (image registered under trust policy)
+    Storage-->>Heimdall: Bundle verified + userdata.img ready
+    Heimdall->>Hypervisor: Spawn QEMU (WHPX, VirtIO devices, CPU/RAM limits, QMP on a per-user AF_UNIX socket)
+    Hypervisor->>Midgard: Boot kernel + Android init
+    Heimdall->>Heimdall: Transition (Starting -> Booting)
+    Midgard-->>Bridge: adbd reachable on 127.0.0.1
+    Bridge-->>Heimdall: getprop sys.boot_completed = 1
+    Heimdall->>Heimdall: Transition (Booting -> Running)
+    Heimdall-->>User: Running (runtime metadata)
 ```
+
+Launching an app or double-clicking an `.apk` while Midgard is stopped triggers the same sequence in invisible `--headless` mode from the active registered image (auto-boot).
 
 ---
 
@@ -150,47 +135,50 @@ sequenceDiagram
 
 | Boundary | Threat Mitigated | Control Mechanism |
 |---|---|---|
-| **Local IPC (`Mimir`/`UI` → `Heimdall`)** | Unauthorized local process hijacking runtime control | Windows Named Pipes (`\\.\pipe\bifrost-heimdall-<sid>`) created with explicit user-only DACL + strict message schema validation |
-| **ADB Transport** | Remote network takeover of Android guest | Bound strictly to `127.0.0.1` by default; explicit opt-in warning if ever exposed |
-| **APK & File Operations** | Path traversal, malicious install scripts, arbitrary file write | Canonical path validation, rejection of `..`/reparse-point escapes, never executing bundled shell/install scripts, delegating installs strictly to Android `pm` |
-| **Runtime Image Updates** | Tampered OS images / supply-chain compromise | Mandatory SHA-256 + Ed25519 signature verification prior to boot; read-only system partitions |
-| **Destructive Operations** | Accidental wipe of Android `userdata` | Explicit interactive/flag confirmation (`--confirm`) and separate persistent `userdata` disk |
-| **Privilege Model** | Unnecessary elevation expanding blast radius | Entire control plane and VM run unprivileged under standard user account; elevation requested only if user explicitly opts to enable Windows `HypervisorPlatform` feature |
+| **Local IPC (`Mimir`/`UI` → `Heimdall`)** | Local process hijacking runtime control | Named Pipe with owner-only SDDL DACL (`D:(A;;GA;;;OW)`), 256-bit session token compared in constant time, 64 KiB bounded JSON frames |
+| **ADB transport** | Remote takeover of the Android guest | Bound to `127.0.0.1` by default; non-loopback requires `allow_non_loopback_adb = true` |
+| **Host → guest shell** | Command injection through `adb shell` (which evaluates arguments with `sh`) | Arbitrary data such as clipboard text is streamed through stdin to a fixed script (`run_adb_with_stdin`); other host-controlled values are quoted with `quote_android_shell_arg` or validated against strict character sets |
+| **APK & file operations** | Path traversal, Zip Slip, malicious install scripts | Path validation, Zip-Slip rejection for outer and inner archives, installs delegated strictly to Android `pm` |
+| **Windows integration** | Script injection via app labels or notification text | No scripts at runtime: Toasts use WinRT under the `BIFROST.Bifrost` AppUserModelID, registry writes use `winreg`, `.lnk` files are written natively (`mslnk`), file pickers use `IFileOpenDialog` (`rfd`); Toast XML is XML-escaped |
+| **VM control (QMP)** | Local processes or other users powering off or controlling the VM | QMP is exposed only on an AF_UNIX socket file with a random 128-bit name (`unix:<data_dir>\run\qmp-<hex>.sock`, `%TEMP%\bifrost-run` fallback), never on TCP; Windows checks the file ACL on `connect` and the directory inherits the per-user `%LOCALAPPDATA%` ACL. `server=on,wait=off` keeps QEMU from blocking boot, and QEMU deletes the socket on exit |
+| **Runtime images** | Tampered or untrusted OS images | SHA-256 digest verification of every artifact before boot; Ed25519 signature must verify against `[images] trusted_keys`; unsigned bundles only with explicit `--allow-unsigned` (ADR-0006) |
+| **Destructive operations** | Accidental wipe of Android `userdata` | Separate persistent `userdata.img`; `--confirm` required for restore/wipe; uninstaller purges only with `-PurgeUserData -ConfirmPurge` |
+| **Privilege model** | Unnecessary elevation | Control plane, VM, installer and file associations run unprivileged (HKCU, `%LOCALAPPDATA%`); elevation only to enable the `HypervisorPlatform` feature |
 
 ---
 
-## 6. Planned Cargo Workspace Layout
-
-Crates are created **only when their milestone begins** (no empty placeholder crates):
+## 6. Cargo Workspace Layout
 
 ```text
 bifrost/
-├── Cargo.toml                  # Workspace manifest (Milestone 1)
+├── Cargo.toml                  # Workspace manifest (13 members, unsafe_code = "deny")
 ├── crates/
-│   ├── bifrost-core/           # Milestone 1: models, config, errors, state, logging
-│   ├── mimir/                  # Milestone 1: CLI binary (`bifrost`)
-│   ├── bifrost-diagnostics/    # Milestone 2: Windows compatibility & WHPX checks (or inside bifrost-core)
-│   ├── bifrost-storage/        # Milestone 3: image verification & virtual disk management
-│   ├── bifrost-hypervisor/     # Milestone 3: WHPX VMM abstraction (QEMU -> crosvm)
-│   ├── bifrost-runtime/        # Milestone 3: Midgard lifecycle & boot orchestration
-│   ├── bifrost-bridge/         # Milestone 4: ADB, vsock IPC, events, files, clipboard
-│   ├── heimdall/               # Milestone 4: background supervisor daemon
-│   └── valhalla/               # Milestone 5: APK & Android package management
-├── apps/
-│   └── bifrost-ui/             # Milestone 7: Windows 11 Fluent desktop app
-├── android/
-│   └── midgard/                # Milestone 3+: AOSP device config, build scripts, guest agent
-└── docs/
-    ├── decisions/              # Architecture Decision Records (ADRs)
-    ├── research/               # Feasibility & technical research reports
-    └── TECHNICAL_DECISIONS.md  # ADR index & summary
+│   ├── bifrost-core/           # Models, config, errors, state machine, paths, logging
+│   ├── bifrost-diagnostics/    # Windows 11 / WHPX / host tooling checks (bifrost doctor)
+│   ├── bifrost-storage/        # Manifests, SHA-256, Ed25519 trust store, registry, userdata, recovery
+│   ├── bifrost-hypervisor/     # HypervisorBackend trait, QEMU-WHPX, crosvm-WHPX, QMP
+│   ├── bifrost-runtime/        # Midgard lifecycle, runtime-state.json, logs
+│   ├── bifrost-bridge/         # ADB, files, clipboard, notifications, IPC framing + client
+│   ├── bifrost-display/        # Freeform + per-app VirtualDisplay windows (scrcpy)
+│   ├── bifrost-process/        # Guest process listing
+│   ├── bifrost-network/        # Loopback-only TCP port forwards
+│   ├── valhalla/               # APK/APKM management, shortcuts, HKCU file association
+│   ├── heimdall/               # Supervisor daemon (heimdall.exe)
+│   └── mimir/                  # CLI (bifrost.exe)
+├── apps/bifrost-ui/            # Tauri 2 desktop app (13th workspace member: src-tauri)
+├── android/midgard/            # Bundle manifest format & template
+├── installer/windows/          # Release packager, unprivileged installer/uninstaller
+└── docs/                       # ADRs and research reports
 ```
 
 ---
 
 ## 7. Known Architectural Limitations (Current Stage)
 
-- **Milestone 0 Only**: No Rust workspace or executable code has been written yet.
-- **ARM64 Translation**: `Unsupported`. Only pure ART (Java/Kotlin) and `x86_64` native APKs are in scope for Milestones 1–7.
-- **Independent App Windows**: `Planned` for Milestone 6; Milestones 3–5 operate in console/single-display mode.
-- **AOSP Image Building**: Requires a Linux x86_64 host (64 GB RAM recommended); Windows hosts consume prebuilt, cryptographically verified Midgard image bundles.
+- **No guest agent / vsock channel**: Health, notifications and clipboard rely on polling loopback ADB (`dumpsys`, `cmd clipboard`). Android → Windows clipboard sync is not implemented; sync is Windows → Android only.
+- **Per-app windows depend on `scrcpy`**: Windows are scrcpy-rendered video streams of Android `VirtualDisplay`s, not the native Win32 + D3D12 host originally planned in ADR-0003 (see ADR-0005).
+- **crosvm-WHPX is a wrapper only**: `CrosvmWhpxBackend` builds the command line but has not been run live; no official Windows `crosvm` + `gfxstream` binary exists yet.
+- **3D acceleration is experimental**: Default graphics are `virtio-gpu-pci` (2D DRM/KMS, software rendering in the guest); `virtio-gpu-gl-pci` + `egl-headless` is opt-in.
+- **No first-party image pipeline**: The verified image is a prebuilt LineageOS 24.0 `virtio_x86_64` bundle; reproducible AOSP builds in Linux CI (ADR-0001) are still planned.
+- **ARM64 translation**: `Unsupported` (ADR-0004).
+- **Test coverage**: Unit and IPC tests only; there are no automated end-to-end tests against a live VM.

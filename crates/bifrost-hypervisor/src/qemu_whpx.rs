@@ -11,7 +11,7 @@ use bifrost_storage::{DiskMedia, VerifiedBootMedia};
 use tracing::{info, warn};
 
 use crate::backend::{HypervisorBackend, VmLaunchInfo, VmSpec};
-use crate::qmp::send_qmp_command;
+use crate::qmp::{socket_endpoint, validate_qmp_socket_path, QmpSession};
 
 /// QEMU-over-WHPX implementation of [`HypervisorBackend`].
 #[derive(Debug, Clone, Default)]
@@ -277,12 +277,17 @@ impl HypervisorBackend for QemuWhpxBackend {
         args.push("-device".to_string());
         args.push("virtio-net-pci,netdev=net0".to_string());
 
-        // Loopback QMP control channel for graceful ACPI shutdown.
-        args.push("-qmp".to_string());
+        // QMP control channel for graceful ACPI shutdown over a per-user AF_UNIX socket
+        // (QMP has no authentication, so it must not listen on a TCP port).
+        // `wait=off` keeps QEMU from blocking start-up until a client connects.
+        validate_qmp_socket_path(&spec.qmp_socket_path)?;
+        args.push("-chardev".to_string());
         args.push(format!(
-            "tcp:127.0.0.1:{},server=on,wait=off",
-            spec.qmp_port
+            "socket,id=qmp0,path={},server=on,wait=off",
+            spec.qmp_socket_path.display()
         ));
+        args.push("-mon".to_string());
+        args.push("chardev=qmp0,mode=control".to_string());
 
         // Display / graphics configuration.
         // Disable legacy Bochs VGA (`-vga none`) and always attach a real DRM/KMS
@@ -414,7 +419,6 @@ impl HypervisorBackend for QemuWhpxBackend {
         info!(
             pid,
             backend = self.name(),
-            qmp_port = spec.qmp_port,
             adb_port = spec.adb_port,
             "spawned Midgard VM process"
         );
@@ -429,7 +433,7 @@ impl HypervisorBackend for QemuWhpxBackend {
             command_line,
             serial_log_path: spec.serial_log_path.clone(),
             vmm_stderr_path: spec.vmm_stderr_path.clone(),
-            qmp_endpoint: format!("127.0.0.1:{}", spec.qmp_port),
+            qmp_endpoint: socket_endpoint(&spec.qmp_socket_path),
             adb_endpoint: format!("{}:{}", spec.adb_bind_address, spec.adb_port),
         })
     }
@@ -439,14 +443,26 @@ impl HypervisorBackend for QemuWhpxBackend {
             return Ok(());
         }
 
-        if let Err(err) = send_qmp_command(qmp_endpoint, "system_powerdown") {
-            warn!(
-                pid,
-                endpoint = qmp_endpoint,
-                error = %err,
-                "ACPI system_powerdown via QMP failed; attempting QMP quit"
-            );
-            let _ = send_qmp_command(qmp_endpoint, "quit");
+        // A named-pipe QMP endpoint accepts a single connection for the VM's lifetime,
+        // so every command below reuses this one session.
+        let session = match QmpSession::connect(qmp_endpoint) {
+            Ok(session) => Some(session),
+            Err(err) => {
+                warn!(pid, endpoint = qmp_endpoint, error = %err, "QMP connection failed");
+                None
+            }
+        };
+
+        if let Some(ref session) = session {
+            if let Err(err) = session.execute("system_powerdown") {
+                warn!(
+                    pid,
+                    endpoint = qmp_endpoint,
+                    error = %err,
+                    "ACPI system_powerdown via QMP failed; attempting QMP quit"
+                );
+                let _ = session.execute("quit");
+            }
         }
 
         let deadline = Instant::now() + Duration::from_secs(timeout_secs);
@@ -458,7 +474,9 @@ impl HypervisorBackend for QemuWhpxBackend {
         }
 
         // Fall back to QMP `quit` before forceful OS termination.
-        let _ = send_qmp_command(qmp_endpoint, "quit");
+        if let Some(ref session) = session {
+            let _ = session.execute("quit");
+        }
         thread::sleep(Duration::from_millis(500));
         if !self.is_running(pid) {
             return Ok(());
@@ -682,7 +700,9 @@ mod tests {
             interactive_console: false,
             serial_log_path: PathBuf::from(r"C:\data\logs\serial.log"),
             vmm_stderr_path: PathBuf::from(r"C:\data\logs\vmm.stderr.log"),
-            qmp_port: 4444,
+            qmp_socket_path: PathBuf::from(
+                r"C:\data\run\qmp-00112233445566778899aabbccddeeff.sock",
+            ),
         }
     }
 
@@ -700,7 +720,11 @@ mod tests {
         assert!(joined.contains("cache=writeback,aio=threads"));
         assert!(joined.contains("virtio-blk-pci,drive=userdata,iothread=io0"));
         assert!(joined.contains("hostfwd=tcp:127.0.0.1:5555-:5555"));
-        assert!(joined.contains("tcp:127.0.0.1:4444,server=on,wait=off"));
+        assert!(joined.contains(
+            r"-chardev socket,id=qmp0,path=C:\data\run\qmp-00112233445566778899aabbccddeeff.sock,server=on,wait=off"
+        ));
+        assert!(joined.contains("-mon chardev=qmp0,mode=control"));
+        assert!(!args.iter().any(|a| a == "-qmp"));
         assert!(joined.contains("-vga none"));
         assert!(joined.contains("-device virtio-gpu-pci,xres=1280,yres=720"));
         assert!(joined.contains("-audiodev dsound,id=snd0"));

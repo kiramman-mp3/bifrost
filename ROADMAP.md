@@ -23,7 +23,7 @@ This roadmap tracks BIFRÖST's incremental delivery from feasibility research to
 ## Milestone 1 — Bifrost Core & Mimir CLI Foundation (`Implemented`)
 
 ### Completed Deliverables
-- [x] Initialized Cargo workspace (`Cargo.toml`, `Cargo.lock`) with `unsafe_code = "forbid"` and two focused crates (no empty placeholders):
+- [x] Initialized Cargo workspace (`Cargo.toml`, `Cargo.lock`) with workspace-wide `unsafe_code = "deny"` (`#![forbid(unsafe_code)]` per crate where no FFI is needed) and two focused crates (no empty placeholders):
   - `crates/bifrost-core`
   - `crates/mimir` (binary name: `bifrost`)
 - [x] Implemented in `bifrost-core`:
@@ -93,6 +93,30 @@ This roadmap tracks BIFRÖST's incremental delivery from feasibility research to
 - [x] Added local Midgard **Image Registry & Upgrade Compatibility** (`bifrost-storage::registry`, `bifrost images list|register|use`) blocking silent Android downgrades and incompatible userdata switches while keeping `userdata.img` persistent across compatible upgrades.
 - [x] Added verified **Backup, Restore, Guarded Wipe & Diagnostic Export** (`bifrost-storage::recovery`, `bifrost recovery backup|restore|wipe-userdata|export-diagnostics`) with mandatory `--confirm` protection for destructive operations and zero leaked auth tokens.
 - [x] Added reproducible Windows 11 release packaging, unprivileged user-space installer/uninstaller scripts (`installer/windows/`), and automated Windows CI workflow (`.github/workflows/ci.yml`).
+
+---
+
+## Post-M8 Releases — WSA-Grade Desktop Integration (`Implemented`)
+Details per release are in [CHANGELOG.md](CHANGELOG.md).
+- [x] **v0.1.0**: Live LineageOS 24.0 `virtio_x86_64` boot on Windows 11 Home WHPX, `uefi_disks` boot mode, `crosvm-whpx` backend wrapper, `bifrost-display`.
+- [x] **v0.2.0**: Dedicated, dynamically resizable per-app windows (`scrcpy --new-display --flex-display`, see [ADR-0005](docs/decisions/ADR-0005-scrcpy-virtualdisplay-windowing.md)), full graphical boot with `virtio-gpu-pci`, Apache-2.0 licensing.
+- [x] **v0.3.0**: Headless auto-boot on app launch/install, Desktop & Start Menu shortcuts (including apps installed inside Android), HKCU `.apk` handler, DirectSound audio, Toast notifications, automatic Windows → Android clipboard sync, GPU 3D evaluation.
+- [x] **v0.3.1**: GUI launchers without console windows, Heimdall login autostart, host tooling checks in `bifrost doctor`, native pickers, drag-and-drop, Images & Recovery view.
+- [x] **v0.3.2**: `.apkm` split bundle support with ABI split filtering.
+- [x] **v0.3.3**: Fluent App Installer dialog, host CPU/RAM auto-tune, single-pass install pipeline, performance tuning.
+- [x] **v0.4.0**: Security & reliability hardening: quoted/stdin `adb shell` input, image trust store (ADR-0006), QMP off TCP, no PowerShell at runtime, cross-process VM lifecycle lock, Heimdall single-instance fix, ADB trade-in/authorization diagnostics, pinned CI actions, signed release pipeline, live-VM end-to-end test.
+
+---
+
+## Next — Hardening & Platform Depth (`Planned`)
+- [x] Quote host-controlled `adb shell` arguments (clipboard injection fix) — *done in v0.4.0*.
+- [x] Local Ed25519 trust store for Midgard images ([ADR-0006](docs/decisions/ADR-0006-image-trust-store.md)) — *done in v0.4.0*.
+- [ ] Publish official signed Midgard bundles from a reproducible Linux CI pipeline (ADR-0001) and ship the release key as a default trusted key.
+- [ ] Midgard guest agent over `virtio-vsock` (events instead of ADB polling, Android → Windows clipboard).
+- [ ] Windows `crosvm` + `gfxstream` build pipeline and live validation of `CrosvmWhpxBackend`.
+- [ ] Native Win32 + D3D12 per-app window host replacing `scrcpy` (ADR-0003 Stage 2 target).
+- [x] End-to-end test against a live Midgard VM (`crates/mimir/tests/e2e_live_vm.rs`, opt-in) — *done in v0.4.0*.
+- [ ] Broader unit coverage for `bifrost-display`, `bifrost-process`, `bifrost-network` and `bifrost-runtime`.
 
 ---
 

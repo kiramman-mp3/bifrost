@@ -24,6 +24,13 @@ if (Test-Path $bifrostExe) {
     try { & $bifrostExe daemon stop 2>$null | Out-Null } catch {}
 }
 
+# Remove the Toast notification identity (AppUserModelID) registered by bifrost-bridge.
+$aumidKey = "HKCU:\Software\Classes\AppUserModelId\BIFROST.Bifrost"
+if (Test-Path $aumidKey) {
+    Remove-Item -Recurse -Force $aumidKey
+    Write-Host "Removed BIFRÖST Toast notification identity."
+}
+
 $shortcutPath = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\BIFRÖST.lnk"
 if (Test-Path $shortcutPath) {
     Remove-Item -Force $shortcutPath

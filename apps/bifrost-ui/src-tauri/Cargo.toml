@@ -29,3 +29,6 @@ tauri = { version = "2", features = [] }
 tokio.workspace = true
 tracing.workspace = true
 valhalla = { path = "../../../crates/valhalla" }
+
+[target.'cfg(windows)'.dependencies]
+rfd = { version = "0.15", default-features = false }

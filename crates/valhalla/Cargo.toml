@@ -14,10 +14,18 @@ workspace = true
 [dependencies]
 bifrost-bridge = { path = "../bifrost-bridge" }
 bifrost-core = { path = "../bifrost-core" }
+directories.workspace = true
 hex.workspace = true
+mslnk.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 tempfile.workspace = true
 tracing.workspace = true
 zip.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+winreg.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true

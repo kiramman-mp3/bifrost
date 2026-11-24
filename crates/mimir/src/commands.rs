@@ -7,8 +7,8 @@ use std::path::PathBuf;
 
 use bifrost_bridge::{
     default_pipe_name, list_active_notifications, read_host_clipboard_text,
-    sync_clipboard_to_android, AdbClient, AdbDevice, DaemonHealthReport, HeimdallClient,
-    IpcRequest, SharedDirectoryBridge,
+    sync_clipboard_to_android, AdbClient, AdbDevice, AdbEndpointState, DaemonHealthReport,
+    HeimdallClient, IpcRequest, SharedDirectoryBridge,
 };
 use bifrost_core::{
     validate_host_file_path, BifrostConfig, BifrostError, BifrostPaths, Result, RuntimeState,
@@ -20,8 +20,8 @@ use bifrost_network::NetworkManager;
 use bifrost_process::ProcessManager;
 use bifrost_runtime::{MidgardRuntime, RuntimeLogs, RuntimeRecord, StartOptions};
 use bifrost_storage::{
-    backup_userdata, restore_userdata, verify_manifest_file, verify_manifest_signature_file,
-    wipe_userdata_disk, ImageRegistry,
+    backup_userdata, evaluate_manifest_trust, restore_userdata, verify_manifest_file,
+    wipe_userdata_disk, ImageRegistry, ImageTrust,
 };
 use serde::Serialize;
 use valhalla::manager::{InstallOutcome, LaunchOutcome};
@@ -42,6 +42,8 @@ pub struct StatusReport {
     pub config_path: PathBuf,
     pub config_exists: bool,
     pub runtime: RuntimeRecord,
+    /// ADB access to the active guest (`ready`, `unauthorized`, `trade_in_mode`, `offline`).
+    pub adb_access: Option<AdbEndpointState>,
     pub note: String,
 }
 
@@ -267,12 +269,15 @@ async fn handle_status(explicit_config: Option<&PathBuf>, as_json: bool) -> Resu
     };
 
     // Reconcile `Booting` -> `Running` directly via loopback ADB when Heimdall is offline.
+    let mut adb_access = heimdall_health.as_ref().and_then(|h| h.adb_access);
     if !heimdall_connected && record.state == RuntimeState::Booting {
         if let Some(ref endpoint) = record.adb_endpoint {
             let adb = AdbClient::new();
-            if adb
-                .probe_guest_health(endpoint)
-                .is_ok_and(|g| g.boot_completed)
+            adb_access = adb.diagnose_endpoint(endpoint).ok();
+            if adb_access == Some(AdbEndpointState::Ready)
+                && adb
+                    .probe_guest_health(endpoint)
+                    .is_ok_and(|g| g.boot_completed)
             {
                 let runtime_mgr = MidgardRuntime::with_default_backend(config, paths);
                 let _ = runtime_mgr.mark_running();
@@ -286,7 +291,10 @@ async fn handle_status(explicit_config: Option<&PathBuf>, as_json: bool) -> Resu
         .map(|h| h.runtime_state)
         .unwrap_or(record.state);
 
-    let note = if heimdall_connected {
+    let adb_hint = adb_access.and_then(AdbEndpointState::remediation);
+    let note = if let Some(hint) = adb_hint {
+        hint
+    } else if heimdall_connected {
         "Connected to Heimdall supervisor over authenticated Windows Named Pipe IPC."
     } else if record.state.is_active() {
         "Midgard VM is active; Heimdall daemon is not running (start with `bifrost daemon start`)."
@@ -301,6 +309,7 @@ async fn handle_status(explicit_config: Option<&PathBuf>, as_json: bool) -> Resu
         config_path,
         config_exists,
         runtime: record,
+        adb_access,
         note: note.to_string(),
     };
 
@@ -1340,7 +1349,7 @@ fn handle_images(
     explicit_config: Option<&PathBuf>,
     as_json: bool,
 ) -> Result<String> {
-    let (_, _, _, paths) = load_effective_config_and_paths(explicit_config)?;
+    let (_, _, config, paths) = load_effective_config_and_paths(explicit_config)?;
     let mut registry = ImageRegistry::load(&paths.images_dir)?;
 
     match action {
@@ -1381,23 +1390,22 @@ fn handle_images(
         ImagesAction::Register {
             manifest,
             signature,
-            pubkey,
+            allow_unsigned,
             userdata_compat,
         } => {
-            let signature_verified = match (signature.as_deref(), pubkey.as_deref()) {
-                (Some(sig), Some(pk)) => {
-                    verify_manifest_signature_file(manifest, sig, pk)?;
-                    true
-                }
-                (Some(_), None) | (None, Some(_)) => {
-                    return Err(BifrostError::ConfigValidation {
-                        field: "signature/pubkey".to_string(),
-                        reason: "both --signature and --pubkey must be provided together"
-                            .to_string(),
-                    });
-                }
-                (None, None) => false,
-            };
+            let trust = evaluate_manifest_trust(
+                manifest,
+                signature.as_deref(),
+                &config.images.trusted_keys,
+                *allow_unsigned,
+            )?;
+            let signature_verified = trust.is_signed();
+            if let ImageTrust::UnsignedAllowed = trust {
+                tracing::warn!(
+                    manifest = %manifest.display(),
+                    "registering UNSIGNED Midgard image (sha256-only) by explicit --allow-unsigned"
+                );
+            }
 
             let bundle = verify_manifest_file(manifest)?;
             let record = registry.register_bundle(&bundle, signature_verified, *userdata_compat)?;

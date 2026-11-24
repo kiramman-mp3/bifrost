@@ -62,23 +62,12 @@ impl ValhallaManager {
         if let Some(serial) = explicit {
             return Ok(serial.to_string());
         }
-        let mut online: Vec<_> = self
-            .adb
-            .list_devices()?
-            .into_iter()
-            .filter(|d| d.state == "device")
-            .collect();
+        let mut online = self.adb.online_devices()?;
 
         // If no device is currently online, opportunistically reconnect to Midgard's
         // loopback ADB endpoint so Desktop/Start Menu app shortcuts work seamlessly.
         if online.is_empty() && self.adb.connect_loopback("127.0.0.1:5555").is_ok() {
-            online = self
-                .adb
-                .list_devices()
-                .unwrap_or_default()
-                .into_iter()
-                .filter(|d| d.state == "device")
-                .collect();
+            online = self.adb.online_devices().unwrap_or_default();
         }
 
         match online.len() {

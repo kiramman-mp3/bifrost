@@ -1,19 +1,24 @@
 //! High-level Midgard Android runtime lifecycle coordinator.
 
 use std::fs;
-use std::net::TcpListener;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use bifrost_core::{BifrostConfig, BifrostError, BifrostPaths, Result, RuntimeState};
+use bifrost_hypervisor::qmp::{allocate_qmp_socket_path, remove_stale_qmp_socket};
 use bifrost_hypervisor::{HypervisorBackend, QemuWhpxBackend, VmSpec};
 use bifrost_storage::{ensure_userdata_disk, verify_manifest_file, ImageRegistry, VerifiedBundle};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
+use crate::lifecycle_lock::LifecycleLock;
 use crate::state_store::{load_record, save_record, RuntimeRecord};
 
 const DEFAULT_INSTANCE_ID: &str = "default";
 const GRACEFUL_SHUTDOWN_TIMEOUT_SECS: u64 = 12;
+/// Upper bound a lifecycle call waits for another process's start/stop to finish.
+/// Generous because `start` hashes multi-GB image artifacts while holding the lock.
+const LIFECYCLE_LOCK_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
 /// Options controlling how a Midgard VM instance is started.
 #[derive(Debug, Clone, Default)]
@@ -65,6 +70,19 @@ impl<B: HypervisorBackend> MidgardRuntime<B> {
             .join("instances")
             .join(&self.instance_id)
             .join("runtime-state.json")
+    }
+
+    fn lifecycle_lock_path(&self) -> PathBuf {
+        self.paths
+            .data_dir
+            .join("instances")
+            .join(&self.instance_id)
+            .join("lifecycle.lock")
+    }
+
+    /// Serializes start/stop/restart across every BIFRÖST process on this host.
+    fn lock_lifecycle(&self) -> Result<LifecycleLock> {
+        LifecycleLock::acquire(&self.lifecycle_lock_path(), LIFECYCLE_LOCK_TIMEOUT)
     }
 
     fn userdata_disk_path(&self) -> PathBuf {
@@ -131,6 +149,11 @@ impl<B: HypervisorBackend> MidgardRuntime<B> {
         manifest_path: impl AsRef<Path>,
         options: StartOptions,
     ) -> Result<RuntimeRecord> {
+        let _lock = self.lock_lifecycle()?;
+        self.start_locked(manifest_path.as_ref(), options)
+    }
+
+    fn start_locked(&self, manifest_path: &Path, options: StartOptions) -> Result<RuntimeRecord> {
         self.config.validate()?;
 
         let current = self.status()?;
@@ -147,13 +170,13 @@ impl<B: HypervisorBackend> MidgardRuntime<B> {
         let _vmm_path = self.backend.locate_vmm()?;
 
         // Cryptographically verify every image artifact referenced by the manifest.
-        let bundle = verify_manifest_file(manifest_path.as_ref())?;
+        let bundle = verify_manifest_file(manifest_path)?;
 
         // Provision or preserve persistent Android userdata virtual disk.
         let userdata =
             ensure_userdata_disk(self.userdata_disk_path(), self.config.runtime.storage_gb)?;
 
-        let qmp_port = allocate_loopback_port()?;
+        let qmp_socket_path = allocate_qmp_socket_path(&self.paths.data_dir.join("run"))?;
         let spec = VmSpec {
             instance_id: self.instance_id.clone(),
             cpu_cores: self.config.runtime.cpu_cores,
@@ -169,7 +192,7 @@ impl<B: HypervisorBackend> MidgardRuntime<B> {
             interactive_console: options.interactive_console,
             serial_log_path: self.serial_log_path(),
             vmm_stderr_path: self.vmm_stderr_path(),
-            qmp_port,
+            qmp_socket_path,
         };
 
         let launch = self.backend.spawn(&spec)?;
@@ -202,6 +225,11 @@ impl<B: HypervisorBackend> MidgardRuntime<B> {
 
     /// Gracefully shuts down (or forcefully terminates) the active Midgard VM.
     pub fn stop(&self, force: bool) -> Result<RuntimeRecord> {
+        let _lock = self.lock_lifecycle()?;
+        self.stop_locked(force)
+    }
+
+    fn stop_locked(&self, force: bool) -> Result<RuntimeRecord> {
         let mut record = self.status()?;
         let Some(pid) = record.pid else {
             return Err(BifrostError::Runtime(format!(
@@ -219,6 +247,9 @@ impl<B: HypervisorBackend> MidgardRuntime<B> {
             self.backend.terminate_force(pid)?;
         }
 
+        if let Some(ref qmp) = record.qmp_endpoint {
+            remove_stale_qmp_socket(qmp);
+        }
         record.state = RuntimeState::Stopped;
         record.pid = None;
         record.note = Some(if force {
@@ -236,6 +267,7 @@ impl<B: HypervisorBackend> MidgardRuntime<B> {
         manifest_path: Option<&Path>,
         options: StartOptions,
     ) -> Result<RuntimeRecord> {
+        let _lock = self.lock_lifecycle()?;
         let previous = self.status()?;
         let resolved_manifest = manifest_path
             .map(Path::to_path_buf)
@@ -247,10 +279,10 @@ impl<B: HypervisorBackend> MidgardRuntime<B> {
             })?;
 
         if previous.state.is_active() {
-            let _ = self.stop(false)?;
+            let _ = self.stop_locked(false)?;
         }
 
-        self.start(resolved_manifest, options)
+        self.start_locked(&resolved_manifest, options)
     }
 
     /// Resolves the active Midgard image manifest from `ImageRegistry` or the previous runtime record.
@@ -279,14 +311,18 @@ impl<B: HypervisorBackend> MidgardRuntime<B> {
 
     /// Ensures Midgard is running, automatically launching the active registered image
     /// in invisible `--headless` mode if currently stopped (WSA-style zero-friction boot).
+    ///
+    /// Concurrent callers (for example two APK double-clicks) are serialized: the second
+    /// one waits for the first boot to be spawned and then returns the active record.
     pub fn ensure_started_headless(&self) -> Result<RuntimeRecord> {
+        let _lock = self.lock_lifecycle()?;
         let current = self.status()?;
         if current.state.is_active() {
             return Ok(current);
         }
         let manifest = self.resolve_default_manifest()?;
-        self.start(
-            manifest,
+        self.start_locked(
+            &manifest,
             StartOptions {
                 headless: true,
                 interactive_console: false,
@@ -311,21 +347,6 @@ impl<B: HypervisorBackend> MidgardRuntime<B> {
             vmm_stderr_path: stderr_path,
         })
     }
-}
-
-fn allocate_loopback_port() -> Result<u16> {
-    let listener = TcpListener::bind("127.0.0.1:0").map_err(|source| BifrostError::Io {
-        context: "allocating ephemeral loopback QMP port".to_string(),
-        source,
-    })?;
-    let port = listener
-        .local_addr()
-        .map_err(|source| BifrostError::Io {
-            context: "querying ephemeral loopback QMP port".to_string(),
-            source,
-        })?
-        .port();
-    Ok(port)
 }
 
 fn read_tail_lines(path: &Path, tail: usize) -> Result<Vec<String>> {
@@ -398,7 +419,7 @@ mod tests {
                 command_line: vec!["mock-qemu.exe".to_string()],
                 serial_log_path: spec.serial_log_path.clone(),
                 vmm_stderr_path: spec.vmm_stderr_path.clone(),
-                qmp_endpoint: format!("127.0.0.1:{}", spec.qmp_port),
+                qmp_endpoint: format!("unix:{}", spec.qmp_socket_path.display()),
                 adb_endpoint: format!("{}:{}", spec.adb_bind_address, spec.adb_port),
             })
         }

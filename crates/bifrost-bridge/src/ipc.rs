@@ -6,7 +6,7 @@ use bifrost_core::{BifrostError, Result, RuntimeState};
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-use crate::adb::GuestHealth;
+use crate::adb::{AdbEndpointState, GuestHealth};
 
 /// Current Heimdall IPC wire protocol version.
 pub const IPC_PROTOCOL_VERSION: u32 = 1;
@@ -122,6 +122,9 @@ pub struct DaemonHealthReport {
     pub guest_health: Option<GuestHealth>,
     pub health_checks_completed: u64,
     pub pipe_name: String,
+    /// ADB access to Midgard while it is active; `None` when stopped or not yet probed.
+    #[serde(default)]
+    pub adb_access: Option<AdbEndpointState>,
 }
 
 /// Returns the default per-user Windows Named Pipe path for Heimdall.

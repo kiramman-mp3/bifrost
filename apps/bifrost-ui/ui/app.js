@@ -124,8 +124,11 @@ function renderDashboard(data) {
   sidebarDot.className = "dot " + (state === "running" ? "ok" : data.heimdall_connected ? "warn" : "");
   document.getElementById("sidebar-runtime-label").textContent = `Midgard: ${state}`;
 
-  document.getElementById("dash-android").textContent =
-    data.runtime.android_version ? `Android ${data.runtime.android_version}` : "Not booted";
+  document.getElementById("dash-android").textContent = data.adb_access_hint
+    ? `ADB blocked: ${data.adb_access_hint}`
+    : data.runtime.android_version
+      ? `Android ${data.runtime.android_version}`
+      : "Not booted";
   document.getElementById("dash-image").textContent =
     data.runtime.image_id ? `Image: ${data.runtime.image_id}` : "Image: none loaded";
 
@@ -728,8 +731,10 @@ function wireEvents() {
       return;
     }
     try {
-      const rec = await invoke("register_image", { manifestPath });
-      showToast(`Registered verified image '${rec.id}' (Android ${rec.android_version}).`);
+      const allowUnsigned = document.getElementById("img-allow-unsigned").checked;
+      const rec = await invoke("register_image", { manifestPath, allowUnsigned });
+      const trust = rec.signature_verified ? "trusted signature" : "UNSIGNED, sha256-only";
+      showToast(`Registered image '${rec.id}' (Android ${rec.android_version}, ${trust}).`);
       await refreshAll();
     } catch (err) {
       showToast(String(err), true);

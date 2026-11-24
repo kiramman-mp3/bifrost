@@ -1,14 +1,14 @@
 //! Heimdall runtime supervision and periodic health monitoring loop.
 
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, RwLock};
 use std::time::{Duration, Instant};
 
-use bifrost_bridge::{AdbClient, DaemonHealthReport};
+use bifrost_bridge::{AdbClient, AdbEndpointState, DaemonHealthReport};
 use bifrost_core::config::DesktopConfig;
 use bifrost_core::RuntimeState;
 use bifrost_runtime::MidgardRuntime;
-use tokio::sync::{watch, Mutex, RwLock};
+use tokio::sync::watch;
 use tracing::{debug, warn};
 
 use crate::app_sync::AppShortcutSyncer;
@@ -70,6 +70,7 @@ impl SupervisorState {
             guest_health: None,
             health_checks_completed: 0,
             pipe_name: pipe_name.clone(),
+            adb_access: None,
         };
 
         Self {
@@ -85,8 +86,22 @@ impl SupervisorState {
         }
     }
 
+    /// Returns the most recent health report with a live uptime, without probing.
+    pub fn health_snapshot(&self) -> DaemonHealthReport {
+        let mut report = self
+            .health
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        report.uptime_secs = self.started_at.elapsed().as_secs();
+        report
+    }
+
     /// Executes a single health probe updating runtime state, PID liveness, and ADB devices.
-    pub async fn refresh_health(&self) -> DaemonHealthReport {
+    ///
+    /// Blocking: it reads runtime state from disk and shells out to `adb.exe`. Async
+    /// callers must run it on Tokio's blocking pool (`spawn_blocking`).
+    pub fn refresh_health(&self) -> DaemonHealthReport {
         let uptime_secs = self.started_at.elapsed().as_secs();
         let (runtime_state, vm_pid, adb_endpoint) = match self.runtime.status() {
             Ok(rec) => (rec.state, rec.pid, rec.adb_endpoint),
@@ -99,14 +114,30 @@ impl SupervisorState {
         // Skip spawning `adb.exe` altogether when Midgard is stopped (near-0% idle CPU).
         let adb_available = self.adb.locate_adb().is_ok();
         let devices = if adb_available && runtime_state.is_active() {
-            self.adb.list_devices().unwrap_or_default()
+            let mut devices = self.adb.list_devices().unwrap_or_default();
+            // Attach ADB to the configured endpoint when it is missing: ports outside the
+            // server's 5555–5585 auto-discovery range are otherwise never seen.
+            if let Some(ref endpoint) = adb_endpoint {
+                let online = devices
+                    .iter()
+                    .any(|d| d.serial == *endpoint && d.state == "device");
+                if !online && self.adb.ensure_connected(endpoint).unwrap_or(false) {
+                    devices = self.adb.list_devices().unwrap_or_default();
+                }
+            }
+            devices
         } else {
             Vec::new()
         };
 
         // Only probe full Android guest properties while booting or until boot_completed is confirmed;
         // once running and online, reuse the cached guest_health to avoid 5 extra `adb getprop` calls per tick.
-        let prev_guest = self.health.read().await.guest_health.clone();
+        let prev_guest = self
+            .health
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .guest_health
+            .clone();
         let guest_health = if runtime_state.is_active() {
             if let Some(ref endpoint) = adb_endpoint {
                 let endpoint_online = devices
@@ -132,6 +163,26 @@ impl SupervisorState {
             None
         };
 
+        // Explain a guest that ADB cannot reach (unauthorized key, trade-in mode) instead
+        // of leaving Midgard silently stuck in `booting`.
+        let adb_access = match (&guest_health, &adb_endpoint) {
+            (Some(_), _) => Some(AdbEndpointState::Ready),
+            (None, Some(endpoint)) if adb_available && runtime_state.is_active() => {
+                self.adb.diagnose_endpoint(endpoint).ok()
+            }
+            _ => None,
+        };
+        let prev_access = self
+            .health
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .adb_access;
+        if adb_access != prev_access {
+            if let Some(hint) = adb_access.and_then(AdbEndpointState::remediation) {
+                warn!(state = ?adb_access, "{hint}");
+            }
+        }
+
         let effective_state = if runtime_state == RuntimeState::Booting
             && guest_health.as_ref().is_some_and(|g| g.boot_completed)
         {
@@ -141,8 +192,9 @@ impl SupervisorState {
             runtime_state
         };
 
-        let mut guard = self.health.write().await;
+        let mut guard = self.health.write().unwrap_or_else(PoisonError::into_inner);
         guard.uptime_secs = uptime_secs;
+        guard.adb_access = adb_access;
         guard.runtime_state = effective_state;
         guard.vm_pid = vm_pid;
         guard.adb_available = adb_available;
@@ -156,11 +208,11 @@ impl SupervisorState {
         if effective_state == RuntimeState::Running {
             if let Some(ref endpoint) = adb_endpoint {
                 if self.desktop.auto_sync_shortcuts {
-                    let mut syncer = self.app_sync.lock().await;
+                    let mut syncer = lock(&self.app_sync);
                     syncer.maybe_sync(&self.adb, endpoint, &self.data_dir);
                 }
                 if self.desktop.forward_notifications || self.desktop.auto_sync_clipboard {
-                    let mut bridge = self.desktop_bridge.lock().await;
+                    let mut bridge = lock(&self.desktop_bridge);
                     if self.desktop.forward_notifications {
                         bridge.sync_notifications(&self.adb, endpoint);
                     }
@@ -191,7 +243,12 @@ pub async fn run_health_monitor(
     loop {
         tokio::select! {
             _ = ticker.tick() => {
-                let _ = state.refresh_health().await;
+                let probe_state = Arc::clone(&state);
+                if let Err(err) =
+                    tokio::task::spawn_blocking(move || probe_state.refresh_health()).await
+                {
+                    warn!(error = %err, "Heimdall health probe task failed");
+                }
             }
             changed = shutdown_rx.changed() => {
                 if changed.is_err() || *shutdown_rx.borrow() {
@@ -200,4 +257,10 @@ pub async fn run_health_monitor(
             }
         }
     }
+}
+
+/// Locks a supervisor mutex, recovering the data if a previous holder panicked: the
+/// guarded workers only cache sync bookkeeping, which stays valid after a panic.
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }

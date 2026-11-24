@@ -4,6 +4,12 @@ use bifrost_core::{BifrostError, Result};
 
 use crate::adb::AdbClient;
 
+/// Fixed guest-side script that reads the clipboard text from stdin.
+///
+/// The text never appears on a command line, so it cannot be interpreted by the Android
+/// shell. `$(cat)` strips trailing newlines, which is acceptable for clipboard text.
+pub const ANDROID_SET_CLIPBOARD_FROM_STDIN: &str = r#"cmd clipboard set-text "$(cat)""#;
+
 /// Maximum text clipboard payload size accepted by Bridge (1 MiB).
 pub const MAX_CLIPBOARD_BYTES: usize = 1024 * 1024;
 
@@ -162,6 +168,11 @@ pub fn write_host_clipboard_text(_text: &str) -> Result<()> {
 }
 
 /// Syncs text from the Windows clipboard into Android via `cmd clipboard set-text`.
+///
+/// The text is streamed through stdin into a fixed script
+/// ([`ANDROID_SET_CLIPBOARD_FROM_STDIN`]) instead of being passed as an argument, because
+/// `adb shell` evaluates its arguments with the Android `sh` interpreter and Windows caps
+/// command lines at about 32K characters.
 pub fn sync_clipboard_to_android(adb: &AdbClient, serial: &str) -> Result<usize> {
     let Some(text) = read_host_clipboard_text()? else {
         return Err(BifrostError::Bridge(
@@ -169,7 +180,10 @@ pub fn sync_clipboard_to_android(adb: &AdbClient, serial: &str) -> Result<usize>
         ));
     };
     validate_clipboard_text(&text)?;
-    let _ = adb.run_adb(&["-s", serial, "shell", "cmd", "clipboard", "set-text", &text])?;
+    let _ = adb.run_adb_with_stdin(
+        &["-s", serial, "shell", ANDROID_SET_CLIPBOARD_FROM_STDIN],
+        text.as_bytes(),
+    )?;
     Ok(text.len())
 }
 
