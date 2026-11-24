@@ -45,7 +45,26 @@ BIFRÖST follows a modular, privilege-separated runtime lifecycle:
 
 ## 📸 Screenshots
 
-The `bifrost-ui` Windows 11 Fluent Design 2 desktop application (`apps/bifrost-ui`) is implemented with Dark/Light themes and 6 views (Dashboard, Application Manager, Runtime Configuration, Diagnostics, Images & Recovery, and Settings), native Windows file/folder pickers, and drag-and-drop `.apk` inspection. Local capture images will be stored under `docs/screenshots/` once curated without host-specific data.
+The `bifrost-ui` desktop app (`apps/bifrost-ui`) has seven views, Dark and Light themes, native file pickers, drag-and-drop `.apk` inspection and a system tray icon. The captures below come from a real Midgard VM (LineageOS 24, Android 17) on Windows 11 Home; the Windows account name is masked and only system and open-source packages are shown.
+
+<table>
+  <tr>
+    <td><img src="docs/capturas/dashboard.png" width="420" alt="Dashboard"><br><sub>Dashboard: Midgard state, host allocation, quick runtime controls and live Android processes.</sub></td>
+    <td><img src="docs/capturas/setup.png" width="420" alt="Setup"><br><sub>Setup: the first-run checklist (WHPX, QEMU, adb, scrcpy, image, first Android boot).</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/capturas/applications.png" width="420" alt="Applications (Valhalla)"><br><sub>Applications (Valhalla): APK/APKM inspection and install, installed apps with window, pin and uninstall actions.</sub></td>
+    <td><img src="docs/capturas/runtime-config.png" width="420" alt="Runtime Config"><br><sub>Runtime Config: CPU, RAM, storage, display and desktop integration settings validated by bifrost-core.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/capturas/diagnostics.png" width="420" alt="Diagnostics"><br><sub>Diagnostics: the eight bifrost doctor checks, including live WHPX partition creation.</sub></td>
+    <td><img src="docs/capturas/images-recovery.png" width="420" alt="Images & Recovery"><br><sub>Images & Recovery: registered Midgard images, verified registration and trusted publisher keys.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/capturas/settings.png" width="420" alt="Settings"><br><sub>Settings: storage paths, Heimdall login autostart, shared folder and component maturity.</sub></td>
+    <td></td>
+  </tr>
+</table>
 
 ---
 
@@ -277,6 +296,7 @@ BIFRÖST/
 │               └── desktop.rs                     # desktop, share, clipboard, notifications, processes, network
 └── docs/
     ├── TECHNICAL_DECISIONS.md                     # Architecture Decision Record (ADR) index
+    ├── capturas/                                  # README screenshots of the desktop app (7 views)
     ├── decisions/
     │   ├── ADR-0001-aosp-x86-64-foundation.md     # AOSP x86_64 VirtIO / Cuttlefish alignment
     │   ├── ADR-0002-whpx-vmm-abstraction.md       # WHPX-first VMM abstraction (QEMU -> crosvm)
