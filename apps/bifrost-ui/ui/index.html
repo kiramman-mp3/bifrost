@@ -384,6 +384,23 @@
           </article>
 
           <article class="card">
+            <h3>Trusted Publishers</h3>
+            <p class="muted small-text">
+              Ed25519 public keys in <code>[images] trusted_keys</code>. A bundle registers as signed only when its
+              <code>manifest.json.sig</code> verifies against one of these keys. Compare the fingerprint with the one the
+              publisher announces before adding a key.
+            </p>
+            <div id="trusted-keys-list" class="list-box muted">Loading trusted publisher keys…</div>
+            <div class="form-row">
+              <label for="trusted-key-input">Publisher public key (64 hex characters)</label>
+              <div class="input-with-btn">
+                <input id="trusted-key-input" type="text" spellcheck="false" autocomplete="off" placeholder="e.g. 3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c" />
+                <button class="btn primary" id="btn-add-trusted-key" type="button">Add Key</button>
+              </div>
+            </div>
+          </article>
+
+          <article class="card">
             <h3>Persistent Userdata Backup &amp; Restore</h3>
             <p class="muted small-text">
               Backups compute and verify a SHA-256 digest of your Android <code>userdata.img</code>. Stop Midgard before restoring.

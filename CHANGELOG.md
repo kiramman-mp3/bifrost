@@ -17,6 +17,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ### Added
 - **`bifrost-client` crate**: a `Session` facade shared by Mimir and the desktop UI. It loads the effective config, probes Heimdall once, and routes status, runtime, logs, app and install operations over IPC when the daemon answers or directly otherwise. It also owns the headless auto-boot before app launch/install and the detached Heimdall start, which were duplicated in both front ends (`mimir` lost ~300 lines, `bifrost-ui`'s `service.rs` ~200).
 
+- **Trusted Publishers card (`bifrost-ui`, `bifrost-storage`, `bifrost-core`)**: Images & Recovery lists `[images] trusted_keys` with SHA-256 fingerprints, adds keys only when they are valid Ed25519 points (the config schema only checks 64 hex characters), and asks for confirmation before removing one, naming the registered images whose `manifest.json.sig` verifies only with that key. `bifrost.toml` is edited with `toml_edit`, so comments and other settings are kept.
+
 ### Fixed
 - **UI froze a Tokio worker while auto-booting (`bifrost-ui`)**: launching an app window with Midgard stopped waited up to 90 s for ADB on an async worker. Direct ADB, runtime and Valhalla calls from the UI now run on the blocking pool.
 - **Install with no active image (`mimir`, `bifrost-ui`)**: installing while no device is online and no image is active now reports why Midgard could not auto-start, instead of failing later with "no device".

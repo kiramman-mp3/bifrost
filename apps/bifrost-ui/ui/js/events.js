@@ -1,7 +1,7 @@
 // Button and form event wiring for all views.
 
 import { formatGib, invoke, showToast, state } from "./core.js";
-import { refreshAll, refreshApps, refreshImages, refreshLogs, refreshProcesses, refreshSharedFiles } from "./data.js";
+import { refreshAll, refreshApps, refreshImages, refreshLogs, refreshProcesses, refreshSharedFiles, refreshTrustedKeys } from "./data.js";
 import { closeInstallDialog, openInstallDialog, runConfirmedInstall } from "./installer.js";
 import { renderDoctor } from "./views.js";
 
@@ -100,6 +100,24 @@ export function wireEvents() {
       const trust = rec.signature_verified ? "trusted signature" : "UNSIGNED, sha256-only";
       showToast(`Registered image '${rec.id}' (Android ${rec.android_version}, ${trust}).`);
       await refreshAll();
+    } catch (err) {
+      showToast(String(err), true);
+    }
+  });
+
+  document.getElementById("btn-add-trusted-key").addEventListener("click", async () => {
+    const input = document.getElementById("trusted-key-input");
+    const publicKey = input.value.trim();
+    if (!publicKey) {
+      showToast("Paste the publisher's Ed25519 public key first.", true);
+      return;
+    }
+    try {
+      const keys = await invoke("add_trusted_key", { publicKey });
+      input.value = "";
+      const added = keys.find((k) => k.public_key === publicKey.toLowerCase());
+      showToast(`Trusted publisher added (fingerprint ${added ? added.fingerprint : "?"}).`);
+      await refreshTrustedKeys(keys);
     } catch (err) {
       showToast(String(err), true);
     }

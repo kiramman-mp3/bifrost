@@ -405,6 +405,7 @@ Distribution tooling lives under [installer/](installer/README.md), [.github/wor
 - `installer/windows/install-bifrost.ps1` verifies every SHA-256 digest before installing unprivileged into `%LOCALAPPDATA%\Programs\BIFRÖST`, updating user `PATH`, and creating a Start Menu shortcut while preserving existing Android `userdata`.
 - `installer/windows/uninstall-bifrost.ps1` removes binaries and shortcuts cleanly while keeping `%LOCALAPPDATA%\bifrost` intact unless `-PurgeUserData -ConfirmPurge` is explicitly specified.
 - Midgard runtime bundles are SHA-256 verified; Ed25519 signatures are accepted only from publisher keys in `bifrost.toml` `[images] trusted_keys`, and unsigned bundles need `--allow-unsigned` (ADR-0006); no proprietary Google Play Services, GApps, `libhoudini`, or `libndk_translation` binaries are ever distributed.
+- Publisher keys are managed from the desktop app (Images & Recovery → Trusted Publishers): each key is checked to be a valid Ed25519 point, shown with a SHA-256 fingerprint to compare against the publisher's announcement, and written into `bifrost.toml` in place (comments are kept).
 
 ---
 

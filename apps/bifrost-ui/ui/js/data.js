@@ -102,6 +102,7 @@ export async function refreshImages() {
   } catch (err) {
     container.textContent = `Failed to load image registry: ${err}`;
   }
+  await refreshTrustedKeys();
 }
 
 export async function refreshProcesses() {
@@ -232,5 +233,54 @@ export async function refreshApps() {
     );
   } catch (err) {
     container.textContent = String(err);
+  }
+}
+
+/** Renders `[images] trusted_keys`; `keys` skips the backend call when already known. */
+export async function refreshTrustedKeys(keys) {
+  const container = document.getElementById("trusted-keys-list");
+  if (!container) return;
+  try {
+    const list = keys ?? (await invoke("list_trusted_keys"));
+    if (!list.length) {
+      container.innerHTML = `<span class="muted">No trusted publishers. Signed bundles cannot be registered as signed until you add the publisher's key.</span>`;
+      return;
+    }
+    container.innerHTML = list
+      .map(
+        (k) => `
+        <div class="item-row">
+          <div>
+            <strong>${escapeHtml(k.fingerprint)}</strong>
+            <div class="muted small-text"><code>${escapeHtml(k.public_key)}</code></div>
+          </div>
+          <div class="actions">
+            <button class="btn small danger" data-remove-key="${escapeHtml(k.public_key)}">Remove</button>
+          </div>
+        </div>`
+      )
+      .join("");
+    container.querySelectorAll("[data-remove-key]").forEach((btn) =>
+      btn.addEventListener("click", () => removeTrustedKey(btn.dataset.removeKey))
+    );
+  } catch (err) {
+    container.textContent = `Failed to load trusted publishers: ${err}`;
+  }
+}
+
+async function removeTrustedKey(publicKey) {
+  try {
+    const affected = await invoke("trusted_key_removal_impact", { publicKey });
+    const impact = affected.length
+      ? `
+
+These registered images verify only with this key and could not be re-registered as signed: ${affected.join(", ")}. Their current registrations are kept.`
+      : "";
+    if (!window.confirm(`Stop trusting publisher key ${publicKey.slice(0, 16)}…?${impact}`)) return;
+    const keys = await invoke("remove_trusted_key", { publicKey });
+    showToast("Publisher key removed from [images] trusted_keys.");
+    await refreshTrustedKeys(keys);
+  } catch (err) {
+    showToast(String(err), true);
   }
 }

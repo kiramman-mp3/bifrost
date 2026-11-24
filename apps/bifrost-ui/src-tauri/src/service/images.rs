@@ -32,6 +32,48 @@ pub fn register_image(
     Ok(record)
 }
 
+/// Lists `[images] trusted_keys` with fingerprints. A key that passes the config schema
+/// but is not a valid Ed25519 point is still listed, flagged instead of hidden.
+pub fn list_trusted_keys() -> Result<Vec<TrustedKeyInfo>> {
+    let (_, config, _) = load_config_and_paths()?;
+    Ok(config
+        .images
+        .trusted_keys
+        .iter()
+        .map(|key| {
+            describe_trusted_key(key).unwrap_or_else(|_| TrustedKeyInfo {
+                public_key: key.trim().to_ascii_lowercase(),
+                fingerprint: "invalid Ed25519 key".to_string(),
+            })
+        })
+        .collect())
+}
+
+/// Adds a publisher key to `[images] trusted_keys` after strict Ed25519 validation.
+pub fn add_trusted_key(public_key: String) -> Result<Vec<TrustedKeyInfo>> {
+    let (config_path, config, _) = load_config_and_paths()?;
+    let keys = with_trusted_key(&config.images.trusted_keys, &public_key)?;
+    BifrostConfig::write_trusted_keys(&config_path, &keys)?;
+    list_trusted_keys()
+}
+
+/// IDs of registered images whose detached signature only verifies with `public_key`.
+pub fn trusted_key_removal_impact(public_key: String) -> Result<Vec<String>> {
+    let (_, config, paths) = load_config_and_paths()?;
+    let current = &config.images.trusted_keys;
+    let remaining = without_trusted_key(current, &public_key)?;
+    let registry = ImageRegistry::load(&paths.images_dir)?;
+    Ok(images_losing_trust(&registry, current, &remaining))
+}
+
+/// Removes a publisher key from `[images] trusted_keys`.
+pub fn remove_trusted_key(public_key: String) -> Result<Vec<TrustedKeyInfo>> {
+    let (config_path, config, _) = load_config_and_paths()?;
+    let keys = without_trusted_key(&config.images.trusted_keys, &public_key)?;
+    BifrostConfig::write_trusted_keys(&config_path, &keys)?;
+    list_trusted_keys()
+}
+
 /// Switches the active Midgard runtime version after verifying upgrade compatibility.
 pub fn activate_image(image_id: String) -> Result<InstalledImageRecord> {
     let (_, _, paths) = load_config_and_paths()?;

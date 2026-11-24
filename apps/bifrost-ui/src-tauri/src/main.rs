@@ -23,7 +23,7 @@ use bifrost_display::AppWindowHandle;
 use bifrost_network::PortForwardRule;
 use bifrost_process::AndroidProcess;
 use bifrost_runtime::{RuntimeLogs, RuntimeRecord};
-use bifrost_storage::{BackupMetadata, ImageRegistry, InstalledImageRecord};
+use bifrost_storage::{BackupMetadata, ImageRegistry, InstalledImageRecord, TrustedKeyInfo};
 use tauri::{Emitter, Manager};
 use valhalla::manager::{InstallOutcome, LaunchOutcome};
 use valhalla::{
@@ -214,6 +214,26 @@ fn register_image(
 }
 
 #[tauri::command]
+fn list_trusted_keys() -> Result<Vec<TrustedKeyInfo>, String> {
+    map_err(service::list_trusted_keys())
+}
+
+#[tauri::command]
+fn add_trusted_key(public_key: String) -> Result<Vec<TrustedKeyInfo>, String> {
+    map_err(service::add_trusted_key(public_key))
+}
+
+#[tauri::command]
+fn trusted_key_removal_impact(public_key: String) -> Result<Vec<String>, String> {
+    map_err(service::trusted_key_removal_impact(public_key))
+}
+
+#[tauri::command]
+fn remove_trusted_key(public_key: String) -> Result<Vec<TrustedKeyInfo>, String> {
+    map_err(service::remove_trusted_key(public_key))
+}
+
+#[tauri::command]
 fn activate_image(image_id: String) -> Result<InstalledImageRecord, String> {
     map_err(service::activate_image(image_id))
 }
@@ -333,6 +353,10 @@ fn main() {
             list_images,
             register_image,
             activate_image,
+            list_trusted_keys,
+            add_trusted_key,
+            trusted_key_removal_impact,
+            remove_trusted_key,
             backup_userdata,
             restore_userdata,
             pick_file_dialog,
