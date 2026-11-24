@@ -3,6 +3,7 @@
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
 use bifrost_bridge::{
     constant_time_eq, generate_auth_token, read_frame, token_file_path, write_frame, IpcRequest,
@@ -15,6 +16,10 @@ use tokio::sync::watch;
 use tracing::{info, warn};
 
 use crate::supervisor::SupervisorState;
+
+/// How long a connected client may take to send its request frame. Clients write the
+/// whole frame right after connecting, so a silent client is stuck or hostile.
+const REQUEST_FRAME_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Runs the authenticated Heimdall IPC server until shutdown is requested.
 #[cfg(windows)]
@@ -124,6 +129,21 @@ pub async fn serve_named_pipe(
     })
 }
 
+/// Reads one request frame, giving up after `timeout` so idle clients cannot pin tasks.
+async fn read_request_frame<S>(stream: &mut S, timeout: Duration) -> Result<IpcRequestEnvelope>
+where
+    S: AsyncRead + Unpin,
+{
+    tokio::time::timeout(timeout, read_frame(stream))
+        .await
+        .map_err(|_| {
+            BifrostError::Ipc(format!(
+                "timed out after {}s waiting for IPC request frame",
+                timeout.as_secs_f32()
+            ))
+        })?
+}
+
 async fn handle_connection<S>(
     mut stream: S,
     state: Arc<SupervisorState>,
@@ -132,7 +152,7 @@ async fn handle_connection<S>(
 ) where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    let envelope: IpcRequestEnvelope = match read_frame(&mut stream).await {
+    let envelope = match read_request_frame(&mut stream, REQUEST_FRAME_TIMEOUT).await {
         Ok(env) => env,
         Err(err) => {
             warn!(error = %err, "rejected invalid IPC request frame");
@@ -388,5 +408,21 @@ mod tests {
             !tok_file.exists(),
             "Heimdall should remove auth token on exit"
         );
+    }
+}
+
+#[cfg(test)]
+mod frame_timeout_tests {
+    use std::time::Duration;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn silent_client_times_out_instead_of_hanging() {
+        let (_client, mut server) = tokio::io::duplex(64);
+        let err = read_request_frame(&mut server, Duration::from_millis(50))
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("timed out"));
     }
 }
