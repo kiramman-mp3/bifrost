@@ -308,6 +308,7 @@ BIFRÖST/
     │   └── ADR-0006-image-trust-store.md          # Local Ed25519 trust store for Midgard images
     └── research/
         ├── feasibility-report.md                  # Technical feasibility & host baseline report
+        ├── hardware-matrix.md                     # Verified vs. untested host configurations (CPU, GPU, RAM)
         ├── self-hosted-e2e-runner.md              # Registering a WHPX runner for the live VM e2e workflow
         └── gpu-3d-windows-evaluation.md           # Empirical Windows 11 GPU 3D evaluation (ANGLE/virgl & crosvm-whpx)
 ```
