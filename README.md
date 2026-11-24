@@ -245,7 +245,15 @@ BIFRÖST/
 │       └── src/
 │           ├── main.rs                            # #![forbid(unsafe_code)], Tokio entrypoint & exit codes
 │           ├── cli.rs                             # Clap CLI command and flag definitions
-│           └── commands.rs                        # Full administrative CLI command handlers
+│           └── commands/                          # CLI command handlers on top of bifrost-client
+│               ├── mod.rs                         # Dispatch, shared config helpers, version
+│               ├── runtime.rs                     # status, devices, runtime, logs, doctor
+│               ├── apps.rs                        # apps, install, uninstall
+│               ├── daemon.rs                      # Heimdall start/status/stop/autostart
+│               ├── config.rs                      # config init/show/validate/autotune
+│               ├── images.rs                      # Image registry, verification & trust
+│               ├── recovery.rs                    # userdata backup/restore/wipe
+│               └── desktop.rs                     # desktop, share, clipboard, notifications, processes, network
 └── docs/
     ├── TECHNICAL_DECISIONS.md                     # Architecture Decision Record (ADR) index
     ├── decisions/
