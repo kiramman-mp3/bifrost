@@ -160,6 +160,8 @@ pub struct DesktopConfig {
     pub forward_notifications: bool,
     /// Automatically sync Windows <-> Android clipboard text changes via Heimdall.
     pub auto_sync_clipboard: bool,
+    /// Closing the desktop app window hides it to the system tray instead of exiting.
+    pub close_to_tray: bool,
 }
 
 impl Default for DesktopConfig {
@@ -168,6 +170,7 @@ impl Default for DesktopConfig {
             auto_sync_shortcuts: true,
             forward_notifications: true,
             auto_sync_clipboard: true,
+            close_to_tray: true,
         }
     }
 }
@@ -448,6 +451,19 @@ cpu_cores = 3 # keep me
             .unwrap()
             .contains("# my notes"));
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn desktop_close_to_tray_defaults_on_for_existing_files() {
+        let cfg = BifrostConfig::from_toml_str(
+            "schema_version = 1
+[desktop]
+auto_sync_clipboard = false
+",
+        )
+        .unwrap();
+        assert!(cfg.desktop.close_to_tray);
+        assert!(!cfg.desktop.auto_sync_clipboard);
     }
 
     #[test]

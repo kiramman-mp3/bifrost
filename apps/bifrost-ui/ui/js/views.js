@@ -86,6 +86,7 @@ export function populateConfigForm(cfg, configPath) {
     cfg.desktop?.forward_notifications ?? true;
   document.getElementById("cfg-auto-sync-clipboard").checked =
     cfg.desktop?.auto_sync_clipboard ?? true;
+  document.getElementById("cfg-close-to-tray").checked = cfg.desktop?.close_to_tray ?? true;
   document.getElementById("cfg-path-label").textContent = `Target: ${configPath}`;
 }
 

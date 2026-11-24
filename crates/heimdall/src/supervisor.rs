@@ -41,6 +41,7 @@ impl SupervisorState {
                 auto_sync_shortcuts: false,
                 forward_notifications: false,
                 auto_sync_clipboard: false,
+                ..DesktopConfig::default()
             },
         )
     }

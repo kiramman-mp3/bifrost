@@ -27,7 +27,8 @@ bifrost-runtime = { path = "../../../crates/bifrost-runtime" }
 bifrost-storage = { path = "../../../crates/bifrost-storage" }
 serde.workspace = true
 serde_json.workspace = true
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-single-instance = "2.4"
 tokio.workspace = true
 tracing.workspace = true
 valhalla = { path = "../../../crates/valhalla" }

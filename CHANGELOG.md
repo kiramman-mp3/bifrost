@@ -19,7 +19,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - **Trusted Publishers card (`bifrost-ui`, `bifrost-storage`, `bifrost-core`)**: Images & Recovery lists `[images] trusted_keys` with SHA-256 fingerprints, adds keys only when they are valid Ed25519 points (the config schema only checks 64 hex characters), and asks for confirmation before removing one, naming the registered images whose `manifest.json.sig` verifies only with that key. `bifrost.toml` is edited with `toml_edit`, so comments and other settings are kept.
 
+- **System tray icon (`bifrost-ui`)**: the notification-area menu shows the Midgard state and offers Open, Start/Stop Midgard, pinned apps (those with BIFRÖST shortcuts) and Quit, rebuilt whenever the pointer enters the icon. Closing the window hides it to the tray (`[desktop] close_to_tray`, on by default, Settings checkbox), and launching the dashboard again focuses the existing window (`tauri-plugin-single-instance`). The App Installer and `--launch-app` modes keep their own windows.
+
 ### Fixed
+- **Blocking desktop commands ran on the window thread (`bifrost-ui`)**: synchronous Tauri commands execute on the main thread, so ADB calls (processes, port forwards), image SHA-256 hashing, `userdata.img` backup/restore and the doctor report froze the window while running. All 20 I/O commands now run on the blocking pool.
 - **UI froze a Tokio worker while auto-booting (`bifrost-ui`)**: launching an app window with Midgard stopped waited up to 90 s for ADB on an async worker. Direct ADB, runtime and Valhalla calls from the UI now run on the blocking pool.
 - **Install with no active image (`mimir`, `bifrost-ui`)**: installing while no device is online and no image is active now reports why Midgard could not auto-start, instead of failing later with "no device".
 
