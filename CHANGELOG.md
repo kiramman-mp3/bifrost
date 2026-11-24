@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-24
+
 ### Security
 - **Clipboard shell injection (`bifrost-bridge`)**: Windows clipboard text synced to Android (manually or automatically by Heimdall) was passed unquoted to `adb shell`, so the Android `sh` interpreter executed it. Added `quote_android_shell_arg` (POSIX single-quote escaping) with regression tests, and applied it to clipboard sync and the shared-folder `mkdir`.
 - **Image trust store (`bifrost-core`, `bifrost-storage`, `mimir`, `bifrost-ui`)**: Ed25519 manifest signatures now count only when they verify against `[images] trusted_keys` in `bifrost.toml` (detached `manifest.json.sig` supported). Invalid signatures are always rejected, and unsigned bundles require an explicit `--allow-unsigned` (CLI) or the "Allow unsigned bundle" checkbox (UI). See ADR-0006.
@@ -38,7 +40,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Non-Windows stubs in `valhalla` referenced a non-existent `BifrostError::Unsupported` field and would not compile off Windows.
 
 ### Documentation
-- Rewrote `ARCHITECTURE.md` to reflect the implemented system, added ADR-0005 (scrcpy per-app windows) and ADR-0006 (image trust store), amended ADR-0001/0003, extended `ROADMAP.md` with v0.1.0–v0.3.3 and next steps, and aligned `SECURITY.md`, `README.md`, `CONTRIBUTING.md` and `CLAUDE.md` with the code (`76` passing workspace tests across 13 crates).
+- Rewrote `ARCHITECTURE.md` to reflect the implemented system, added ADR-0005 (scrcpy per-app windows) and ADR-0006 (image trust store), amended ADR-0001/0003, extended `ROADMAP.md` with v0.1.0–v0.3.3 and next steps, and aligned `SECURITY.md`, `README.md`, `CONTRIBUTING.md` and `CLAUDE.md` with the code (`116` passing workspace tests across 13 crates).
 
 ## [0.3.3] - 2026-11-22
 

@@ -104,17 +104,19 @@ Details per release are in [CHANGELOG.md](CHANGELOG.md).
 - [x] **v0.3.1**: GUI launchers without console windows, Heimdall login autostart, host tooling checks in `bifrost doctor`, native pickers, drag-and-drop, Images & Recovery view.
 - [x] **v0.3.2**: `.apkm` split bundle support with ABI split filtering.
 - [x] **v0.3.3**: Fluent App Installer dialog, host CPU/RAM auto-tune, single-pass install pipeline, performance tuning.
+- [x] **v0.4.0**: Security & reliability hardening: quoted/stdin `adb shell` input, image trust store (ADR-0006), QMP off TCP, no PowerShell at runtime, cross-process VM lifecycle lock, Heimdall single-instance fix, ADB trade-in/authorization diagnostics, pinned CI actions, signed release pipeline, live-VM end-to-end test.
 
 ---
 
 ## Next — Hardening & Platform Depth (`Planned`)
-- [x] Quote host-controlled `adb shell` arguments (clipboard injection fix) — *done, unreleased*.
-- [x] Local Ed25519 trust store for Midgard images ([ADR-0006](docs/decisions/ADR-0006-image-trust-store.md)) — *done, unreleased*.
+- [x] Quote host-controlled `adb shell` arguments (clipboard injection fix) — *done in v0.4.0*.
+- [x] Local Ed25519 trust store for Midgard images ([ADR-0006](docs/decisions/ADR-0006-image-trust-store.md)) — *done in v0.4.0*.
 - [ ] Publish official signed Midgard bundles from a reproducible Linux CI pipeline (ADR-0001) and ship the release key as a default trusted key.
 - [ ] Midgard guest agent over `virtio-vsock` (events instead of ADB polling, Android → Windows clipboard).
 - [ ] Windows `crosvm` + `gfxstream` build pipeline and live validation of `CrosvmWhpxBackend`.
 - [ ] Native Win32 + D3D12 per-app window host replacing `scrcpy` (ADR-0003 Stage 2 target).
-- [ ] End-to-end tests against a live Midgard VM and broader unit coverage for `bifrost-display`, `bifrost-process`, `bifrost-network`, and `bifrost-runtime` (1 test each today).
+- [x] End-to-end test against a live Midgard VM (`crates/mimir/tests/e2e_live_vm.rs`, opt-in) — *done in v0.4.0*.
+- [ ] Broader unit coverage for `bifrost-display`, `bifrost-process`, `bifrost-network` and `bifrost-runtime`.
 
 ---
 
