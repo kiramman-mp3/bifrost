@@ -19,6 +19,7 @@ bifrost-display = { path = "../bifrost-display" }
 bifrost-runtime = { path = "../bifrost-runtime" }
 serde.workspace = true
 serde_json.workspace = true
+bifrost-diagnostics = { path = "../bifrost-diagnostics" }
 tokio.workspace = true
 valhalla = { path = "../valhalla" }
 

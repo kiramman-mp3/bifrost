@@ -304,6 +304,7 @@ version = "0.4.0"
 dependencies = [
  "bifrost-bridge",
  "bifrost-core",
+ "bifrost-diagnostics",
  "bifrost-display",
  "bifrost-runtime",
  "serde",
