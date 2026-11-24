@@ -1,0 +1,35 @@
+name: BIFRÖST Deep Fuzz
+
+# Runs the property-based fuzz suites (tests/fuzz_untrusted_inputs.rs in each crate)
+# with many more cases than the per-commit CI. New failures are shrunk by proptest and
+# printed as a minimal input; commit the generated .proptest-regressions file with the fix.
+
+on:
+  schedule:
+    - cron: "17 3 * * 1"   # Mondays 03:17 UTC
+  workflow_dispatch:
+    inputs:
+      cases:
+        description: "Cases per property"
+        required: false
+        default: "20000"
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    name: Deep property fuzzing
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      PROPTEST_CASES: ${{ github.event.inputs.cases || '20000' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Run fuzz suites
+        shell: pwsh
+        run: |
+          cargo test --workspace --locked --release --test fuzz_untrusted_inputs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -48,5 +48,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"]
 windows = "0.58"
 winreg = "0.56"
 mslnk = "0.1.8"
+proptest = { version = "1.5", default-features = false, features = ["std"] }
 uds_windows = "1.2"
 zip = { version = "2.2", default-features = false, features = ["deflate"] }
