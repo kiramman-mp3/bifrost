@@ -15,10 +15,11 @@ pub const CURRENT_SCHEMA_VERSION: u32 = 1;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum GraphicsMode {
-    /// Prefer hardware-accelerated `virtio-gpu` + `gfxstream`, falling back to SwiftShader if unavailable.
+    /// 2D `virtio-gpu-pci`; Android renders with ANGLE on SwiftShader (CPU). See ADR-0007.
     #[default]
     Auto,
-    /// Require hardware-accelerated `virtio-gpu` + `gfxstream`.
+    /// Experimental 3D device (`virtio-gpu-gl-pci` on QEMU, `gfxstream` on crosvm). On QEMU for
+    /// Windows the guest still renders in software (`llvmpipe`); see ADR-0007.
     Gfxstream,
     /// Force CPU software rendering (SwiftShader) for diagnostics or headless bring-up.
     SwiftShader,

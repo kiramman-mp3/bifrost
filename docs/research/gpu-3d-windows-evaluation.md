@@ -42,5 +42,15 @@ Inspection of `C:\Program Files\qemu\` confirms official QEMU 11.1.0 for Windows
 | Mode | Status | Recommended Use |
 |---|---|---|
 | `qemu-whpx` + `virtio-gpu-pci` + `gtk` / `none` | **Implemented & Verified** | Default for all Windows 11 Home/Pro hosts (full Android 17 boot + WSA-style `D3D11VA` per-app windows) |
-| `qemu-whpx` + `virtio-gpu-gl-pci` + `egl-headless` | **Experimental** | Opt-in via `graphics_mode = "gfxstream"` in headless mode for ANGLE/virgl testing |
+| `qemu-whpx` + `virtio-gpu-gl-pci` + `egl-headless` | **Experimental — no hardware acceleration** | Measured 2026-11-24: guest Mesa falls back to `llvmpipe`, host logs virgl `SET_SCANOUT` errors and boot is much slower (ADR-0007). Research only. |
 | `crosvm-whpx` + `gfxstream` | **Implemented (host wrapper); Experimental (VMM binary)** | Future zero-copy 3D Vulkan/GLES backend once Windows `crosvm` CI artifacts are built |
+
+## 4. Guest renderer measurement (2026-11-24)
+
+The probes above only showed that QEMU starts. Asking Android which renderer SurfaceFlinger uses (`adb shell dumpsys SurfaceFlinger | grep GLES`) shows that neither QEMU mode reaches the host GPU:
+
+- `auto` (2D `virtio-gpu-pci`): `ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 16.0.0)))`, software.
+- `gfxstream` + `egl-headless` (`virtio-gpu-gl-pci`): `Mesa, llvmpipe (LLVM 16.0.0, 128 bits), OpenGL ES 3.2`, software, with repeated host `virtio_gpu_virgl_process_cmd: ctrl 0x103, error 0x1203` and a boot over 6.5 minutes instead of about 2.5.
+
+The decision that follows is recorded in [ADR-0007](../decisions/ADR-0007-guest-gpu-rendering-on-windows.md).
+
