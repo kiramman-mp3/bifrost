@@ -127,7 +127,14 @@ BIFRÖST/
 │       ├── ui/                                    # Offline-first HTML/CSS/ES frontend (Dark & Light themes, 6 sections, drag & drop)
 │       │   ├── index.html
 │       │   ├── styles.css
-│       │   └── app.js
+│       │   └── js/                                # Native ES modules, no bundler (CSP `script-src 'self'`)
+│       │       ├── main.js                        # Entry: installer mode (--install-apk) or dashboard
+│       │       ├── core.js                        # invoke, shared state, formatting helpers
+│       │       ├── views.js                       # Dashboard, config, diagnostics & settings rendering
+│       │       ├── data.js                        # refresh* calls to the Rust backend
+│       │       ├── installer.js                   # App Installer dialog
+│       │       ├── shell.js                       # Navigation, theme, drag & drop
+│       │       └── events.js                      # Button & form wiring
 │       └── src-tauri/                             # Pure-Rust backend (`#![forbid(unsafe_code)]`)
 │           ├── Cargo.toml
 │           ├── tauri.conf.json
@@ -136,7 +143,13 @@ BIFRÖST/
 │           ├── icons/                             # App icon assets (icon.png, icon.ico)
 │           └── src/
 │               ├── main.rs                        # Thin `#[tauri::command]` bindings
-│               └── service.rs                     # Testable Rust service integrating all crates
+│               └── service/                       # Testable Rust service on top of bifrost-client
+│                   ├── mod.rs                     # Config loading & session helper
+│                   ├── dashboard.rs               # Dashboard snapshot, Heimdall, doctor, config
+│                   ├── runtime.rs                 # Midgard start/stop/restart & logs
+│                   ├── apps.rs                    # App Installer flow, launch/stop, shortcuts
+│                   ├── images.rs                  # Image registry, userdata backup/restore
+│                   └── host.rs                    # Shared folder, processes, port forwards, file pickers
 ├── installer/
 │   ├── README.md                                  # Distribution, installation, upgrade & recovery runbook
 │   └── windows/
