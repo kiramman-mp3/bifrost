@@ -26,6 +26,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - **Release pipeline (`.github/workflows/release.yml`, `build-release-bundle.ps1`)**: `vX.Y.Z` tags trigger an MSVC release build with quality gates, optional Authenticode signing (secrets-driven; signing happens before hashing), a Sigstore build-provenance attestation, and a GitHub Release whose notes come from this changelog. The packager also bundles the installer scripts and `LICENSE`, emits a versioned `.zip` with its `.sha256`, builds with `--locked`, and refuses to wipe an output directory that is not a previous bundle.
 
 ### Fixed
+- **Concurrent VM starts (`bifrost-runtime`)**: `start`, `stop`, `restart` and `ensure_started_headless` now hold a cross-process lifecycle lock (`instances\<id>\lifecycle.lock`, opened with share mode 0 and released by the OS when its holder exits). Two simultaneous starts from the CLI, the UI or Heimdall could previously both spawn a VMM on the same `userdata` disk; the second caller now waits and sees the running instance.
+- **Heimdall token clobbering (`heimdall`)**: a second daemon wrote a new auth token before failing on `first_pipe_instance`, locking every client out of the running daemon. The pipe is now claimed before the token is written.
+- **Heimdall responsiveness (`heimdall`)**: runtime start (image hashing), stop, `adb` round-trips and the periodic health probe ran on async workers and could stall the daemon for minutes; they now run on Tokio's blocking pool. Clients that connect without sending a request frame time out after 10 seconds.
 - Non-Windows stubs in `valhalla` referenced a non-existent `BifrostError::Unsupported` field and would not compile off Windows.
 
 ### Documentation
