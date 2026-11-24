@@ -19,8 +19,9 @@ pub const BIFROST_AUMID: &str = "BIFROST.Bifrost";
 /// Display name shown by Windows as the toast source.
 pub const BIFROST_TOAST_DISPLAY_NAME: &str = "BIFRÖST";
 
+/// Toast icon owned by this crate, so it builds without the desktop app's directory.
 #[cfg(windows)]
-const TOAST_ICON_PNG: &[u8] = include_bytes!("../../../apps/bifrost-ui/src-tauri/icons/icon.png");
+const TOAST_ICON_PNG: &[u8] = include_bytes!("../assets/bifrost-toast.png");
 
 /// Registry key (relative to `HKCU`) that declares the BIFRÖST AUMID.
 #[must_use]
@@ -141,6 +142,11 @@ mod tests {
         RegKey::predef(HKEY_CURRENT_USER)
             .delete_subkey_all(&key_path)
             .unwrap();
+    }
+
+    #[test]
+    fn embedded_toast_icon_is_a_png() {
+        assert!(TOAST_ICON_PNG.starts_with(&[0x89, b'P', b'N', b'G']));
     }
 
     /// Shows a real toast on the desktop. Run manually:
