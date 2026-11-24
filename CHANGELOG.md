@@ -6,6 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Security
+- **Dependency audit (`deny.toml`, CI)**: `cargo deny check` runs on every push and pull request (RustSec advisories, licenses compatible with Apache-2.0, crates.io as the only source). Its first run found RUSTSEC-2026-0367/0368/0369/0429/0545/0548 in `zip` 2.6.1 and RUSTSEC-2026-0594 in `cookie` 0.18.2. Valhalla never called the affected `extract`/`ZipStreamReader`/AES paths, but it parses untrusted APKs with `zip`, so it moved to `zip` 9.8 (pure-Rust deflate only) and `cookie` 0.18.3. APK entries whose names cannot be decoded now reject the archive.
+
+### Changed
+- **MSRV raised to Rust 1.89**, required by `zip` 9.
+- **CI builds with `--locked`** (clippy, tests and release build), so a stale `Cargo.lock` fails CI as it already failed the release workflow.
+- **Workspace crates are marked `publish = false`**; none is published to crates.io.
+
+### Performance
+- **Toast identity registered once per process (`bifrost-bridge`)**: every notification used to rewrite the icon file and the HKCU AUMID values. Registration now runs until it succeeds once; failures are retried on the next toast. The toast icon is embedded from `crates/bifrost-bridge/assets` instead of reaching into the desktop app's directory.
+
 ## [0.4.0] - 2026-11-24
 
 ### Security

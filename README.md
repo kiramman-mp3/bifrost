@@ -1,6 +1,6 @@
 # 🌈 BIFRÖST
 
-[![Rust](https://img.shields.io/badge/Rust-1.80%2B-000000?style=flat-square&logo=rust)](https://www.rust-lang.org/)
+[![Rust](https://img.shields.io/badge/Rust-1.89%2B-000000?style=flat-square&logo=rust)](https://www.rust-lang.org/)
 [![Tauri 2](https://img.shields.io/badge/Desktop%20UI-Tauri%202-24C8DB?style=flat-square&logo=tauri)](https://v2.tauri.app/)
 [![Windows 11](https://img.shields.io/badge/Windows%2011-x64%20(Home%20%7C%20Pro)-0078D4?style=flat-square&logo=windows11)](https://learn.microsoft.com/en-us/virtualization/api/)
 [![AOSP](https://img.shields.io/badge/Android-AOSP%20x86__64-3DDC84?style=flat-square&logo=android)](https://source.android.com/)
@@ -64,9 +64,9 @@ The `bifrost-ui` Windows 11 Fluent Design 2 desktop application (`apps/bifrost-u
 ## 🛠️ Technologies Used
 
 - **Frontend / Desktop UI**: Tauri 2 (`apps/bifrost-ui`), WebView2, offline-first HTML/CSS/ES with Windows 11 Fluent Design 2 styling (Dark & Light themes).
-- **Backend & Control Plane**: Rust (`edition = "2021"`, `rust-version = "1.80"`), Cargo workspace (`13` crates), `tokio`, `serde`, `serde_json`, `toml`, `tracing`, `thiserror`, `clap`, `sha2`, `ed25519-dalek`, `zip`, `windows` crate.
+- **Backend & Control Plane**: Rust (`edition = "2021"`, `rust-version = "1.89"`), Cargo workspace (`13` crates), `tokio`, `serde`, `serde_json`, `toml`, `tracing`, `thiserror`, `clap`, `sha2`, `ed25519-dalek`, `zip`, `windows` crate.
 - **Virtualization & Android Guest**: Windows Hypervisor Platform (`WHPX`), QEMU `11.1.0` (`q35,accel=whpx`, EDK2 UEFI `pflash`, VirtIO storage/net/serial/RNG, QMP) and `crosvm` (`whpx` + `gfxstream`), Android `x86_64` VirtIO / AOSP / LineageOS, `adb`, `scrcpy >= 3.0`.
-- **Testing & Quality Gates**: `cargo test --workspace` (`116` passing tests: `94` unit/IPC + `22` property-based fuzz; `4` opt-in tests ignored by default), `cargo clippy --workspace --all-targets -- -D warnings`, `cargo fmt --all -- --check`.
+- **Testing & Quality Gates**: `cargo test --workspace` (`116` passing tests: `94` unit/IPC + `22` property-based fuzz; `4` opt-in tests ignored by default), `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo fmt --all -- --check`, `cargo deny check` (`deny.toml`).
 - **Distribution & CI**: PowerShell release packager (`build-release-bundle.ps1`), unprivileged SHA-256-verified Windows user-space installer/uninstaller (`install-bifrost.ps1`, `uninstall-bifrost.ps1`), and GitHub Actions Windows CI (`.github/workflows/ci.yml`).
 
 ---
@@ -264,7 +264,7 @@ BIFRÖST/
 - **Runtime Dependencies**: `qemu-system-x86_64` (`winget install SoftwareFreedomConservancy.QEMU`), Android `adb` platform-tools, and `scrcpy >= 3.0` (optional, for `--window` per-app VirtualDisplay windows).
 
 ### Development Host
-- `git` and `rustup` with Rust `1.80+` (`rustfmt`, `clippy`).
+- `git` and `rustup` with Rust `1.89+` (`rustfmt`, `clippy`).
 - Linker toolchain: **WinLibs MinGW-w64 UCRT** (`stable-x86_64-pc-windows-gnu`, portable user-space install) or **Visual Studio 2022 C++ Build Tools** (`stable-x86_64-pc-windows-msvc`).
 - *(Optional — building custom AOSP images)* Dedicated Linux `x86_64` build host with 64 GB RAM and 300–400 GB free NVMe SSD.
 
@@ -328,9 +328,10 @@ When building with MinGW (`stable-x86_64-pc-windows-gnu`) inside a folder contai
 ```powershell
 $env:CARGO_TARGET_DIR = "$env:TEMP\bifrost-target"
 cargo fmt --all -- --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-cargo build --workspace
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --locked
+cargo build --workspace --locked
+cargo deny check   # requires `cargo install cargo-deny --locked`
 ```
 
 ### CLI & Verification Commands
@@ -338,7 +339,8 @@ cargo build --workspace
 | Command | Description | Status |
 |---|---|---|
 | `cargo fmt --all -- --check` | Verify Rust code formatting across workspace | **Implemented** |
-| `cargo clippy --workspace --all-targets -- -D warnings` | Run strict Clippy static analysis | **Implemented** |
+| `cargo clippy --workspace --all-targets --locked -- -D warnings` | Run strict Clippy static analysis against the committed `Cargo.lock` | **Implemented** |
+| `cargo deny check` | Audit dependencies: RustSec advisories, Apache-2.0-compatible licenses and registry sources (`deny.toml`) | **Implemented** |
 | `cargo test --workspace` | Execute unit, IPC & property-based fuzz tests (`116` tests across 13 workspace crates) | **Implemented** |
 | `cargo run -p bifrost-ui` | Launch BIFRÖST Windows 11 Fluent Design desktop application | **Implemented** |
 | `heimdall run` | Start background Heimdall supervisor on owner-DACL Windows Named Pipe | **Implemented** |
