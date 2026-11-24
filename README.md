@@ -243,7 +243,8 @@ BIFRÖST/
 │   │   ├── Cargo.toml
 │   │   └── src/
 │   │       ├── lib.rs                             # Config loading, status reconciliation, headless auto-boot, Heimdall start
-│   │       └── setup.rs                           # First-run setup plan & allowlisted, visible winget installs
+│   │       ├── setup.rs                           # First-run setup plan & allowlisted, visible winget installs
+│   │       └── update.rs                          # Latest-release check via Windows curl.exe (notice only)
 │   ├── bifrost-display/                           # Per-app Android VirtualDisplay & independent Windows 11 window launcher
 │   │   ├── Cargo.toml
 │   │   └── src/lib.rs                             # #![forbid(unsafe_code)]
@@ -292,7 +293,7 @@ BIFRÖST/
 │               ├── config.rs                      # config init/show/validate/autotune
 │               ├── images.rs                      # Image registry, verification & trust
 │               ├── recovery.rs                    # userdata backup/restore/wipe
-│               ├── setup.rs                       # setup checklist & --install
+│               ├── setup.rs                       # setup checklist & --install, update check
 │               └── desktop.rs                     # desktop, share, clipboard, notifications, processes, network
 └── docs/
     ├── TECHNICAL_DECISIONS.md                     # Architecture Decision Record (ADR) index
@@ -408,6 +409,7 @@ cargo deny check   # requires `cargo install cargo-deny --locked`
 | `bifrost status [--json]` | Display reconciled Midgard runtime state and live Heimdall IPC status | **Implemented** |
 | `bifrost daemon start \| status \| stop \| autostart` | Start detached Heimdall daemon, query health, stop over IPC, or toggle silent HKCU login autostart | **Implemented** |
 | `bifrost config init \| show \| validate \| autotune` | Initialize, inspect, validate, or host-autotune CPU/RAM in `bifrost.toml` | **Implemented** |
+| `bifrost update [--json]` | Compare this build with the latest GitHub release and print how to upgrade with the verified release bundle (downloads and installs nothing) | **Implemented** |
 | `bifrost setup [--install qemu\|adb\|scrcpy] [--json]` | First-run checklist (WHPX, tools, image, first Android boot) and the next action; `--install` runs the allowlisted `winget` package in a visible window | **Implemented** |
 | `bifrost doctor [--strict] [--json]` | Inspect Windows 11 edition, CPU, virtualization, WHPX, RAM, storage, GPU, and host runtime tooling | **Implemented** |
 | `bifrost runtime start \| stop \| restart \| verify` | Verify image SHA-256 digests and manage Midgard WHPX VM lifecycle | **Implemented** |
