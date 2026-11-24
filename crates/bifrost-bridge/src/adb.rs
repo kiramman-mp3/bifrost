@@ -40,6 +40,37 @@ pub struct AdbDevice {
     pub transport_id: Option<String>,
 }
 
+/// Online (`device`) entries with emulator aliases of loopback endpoints removed.
+///
+/// The ADB server auto-registers anything answering on 5555–5585 as `emulator-<N>`
+/// (console port `N`, ADB port `N + 1`). Midgard on the default port 5555 therefore
+/// shows up twice, as `127.0.0.1:5555` and `emulator-5554`, which made every command
+/// without `--serial` fail with "multiple Android devices online". The explicit
+/// loopback entry is kept because it is the endpoint BIFRÖST manages.
+#[must_use]
+pub fn online_devices_deduplicated(devices: Vec<AdbDevice>) -> Vec<AdbDevice> {
+    let online: Vec<AdbDevice> = devices
+        .into_iter()
+        .filter(|d| d.state == "device")
+        .collect();
+    let loopback_ports: Vec<u32> = online
+        .iter()
+        .filter_map(|d| d.serial.strip_prefix("127.0.0.1:"))
+        .filter_map(|port| port.parse().ok())
+        .collect();
+    online
+        .into_iter()
+        .filter(|d| {
+            let alias_of_loopback = d
+                .serial
+                .strip_prefix("emulator-")
+                .and_then(|console| console.parse::<u32>().ok())
+                .is_some_and(|console| loopback_ports.contains(&(console + 1)));
+            !alias_of_loopback
+        })
+        .collect()
+}
+
 /// Runtime health metadata probed from a booted Android guest over ADB.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GuestHealth {
@@ -237,6 +268,12 @@ impl AdbClient {
             shell_ok,
             tradeinmode_ok,
         ))
+    }
+
+    /// Lists online devices, collapsing emulator aliases of loopback endpoints
+    /// (see [`online_devices_deduplicated`]).
+    pub fn online_devices(&self) -> Result<Vec<AdbDevice>> {
+        Ok(online_devices_deduplicated(self.list_devices()?))
     }
 
     /// Disconnects ADB from an endpoint.
@@ -471,6 +508,35 @@ fn find_on_path(binary_name: &str) -> Option<PathBuf> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod dedupe_tests {
+    use super::{online_devices_deduplicated, parse_adb_devices_output};
+
+    #[test]
+    fn collapses_emulator_alias_of_midgard_loopback_endpoint() {
+        // `adb devices -l` captured from a live Midgard VM on the default port 5555.
+        let raw = "List of devices attached
+127.0.0.1:5555         device product:lineage_virtio_x86_64 model:Standard_PC__Q35___ICH9__2009_ device:virtio_x86_64 transport_id:2
+emulator-5554          device product:lineage_virtio_x86_64 model:Standard_PC__Q35___ICH9__2009_ device:virtio_x86_64 transport_id:107
+";
+        let online = online_devices_deduplicated(parse_adb_devices_output(raw));
+        let serials: Vec<_> = online.iter().map(|d| d.serial.as_str()).collect();
+        assert_eq!(serials, ["127.0.0.1:5555"]);
+    }
+
+    #[test]
+    fn keeps_real_emulators_and_drops_offline_entries() {
+        let raw = "List of devices attached
+127.0.0.1:5597         device transport_id:3
+emulator-5554          device transport_id:1
+127.0.0.1:5641         offline transport_id:4
+";
+        let online = online_devices_deduplicated(parse_adb_devices_output(raw));
+        let serials: Vec<_> = online.iter().map(|d| d.serial.as_str()).collect();
+        assert_eq!(serials, ["127.0.0.1:5597", "emulator-5554"]);
+    }
 }
 
 #[cfg(test)]

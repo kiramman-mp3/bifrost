@@ -81,12 +81,7 @@ impl NetworkManager {
         if let Some(s) = explicit {
             return Ok(s.to_string());
         }
-        let online: Vec<_> = self
-            .adb
-            .list_devices()?
-            .into_iter()
-            .filter(|d| d.state == "device")
-            .collect();
+        let online = self.adb.online_devices()?;
         match online.len() {
             0 => Err(BifrostError::Bridge(
                 "no online Android device found for networking command".to_string(),

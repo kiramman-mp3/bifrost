@@ -9,7 +9,10 @@ pub mod ipc;
 pub mod notifications;
 pub mod toast;
 
-pub use adb::{quote_android_shell_arg, AdbClient, AdbDevice, AdbEndpointState, GuestHealth};
+pub use adb::{
+    online_devices_deduplicated, quote_android_shell_arg, AdbClient, AdbDevice, AdbEndpointState,
+    GuestHealth,
+};
 pub use client::HeimdallClient;
 pub use clipboard::{
     read_host_clipboard_text, sync_clipboard_to_android, validate_clipboard_text,
