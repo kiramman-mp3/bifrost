@@ -16,6 +16,7 @@ use std::sync::Mutex;
 use bifrost_bridge::{
     dispatch_windows_toast, AndroidNotification, DaemonHealthReport, SharedFileEntry,
 };
+use bifrost_client::setup::SetupPlan;
 use bifrost_core::config::LoggingConfig;
 use bifrost_core::logging::init_logging;
 use bifrost_core::BifrostConfig;
@@ -99,6 +100,21 @@ async fn restart_runtime(
     headless: bool,
 ) -> Result<RuntimeRecord, String> {
     map_err(service::restart_runtime(manifest_path, headless).await)
+}
+
+#[tauri::command]
+async fn get_setup_plan() -> Result<SetupPlan, String> {
+    map_err(service::get_setup_plan().await)
+}
+
+#[tauri::command]
+async fn install_setup_tool(step_id: String) -> Result<SetupPlan, String> {
+    map_err(service::install_setup_tool(step_id).await)
+}
+
+#[tauri::command]
+async fn start_first_boot() -> Result<RuntimeRecord, String> {
+    map_err(service::start_first_boot().await)
 }
 
 #[tauri::command]
@@ -368,6 +384,9 @@ fn main() {
             stop_runtime,
             restart_runtime,
             get_logs,
+            get_setup_plan,
+            install_setup_tool,
+            start_first_boot,
             list_apps,
             get_app_info,
             inspect_apk_file,

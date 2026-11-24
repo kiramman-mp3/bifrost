@@ -21,6 +21,9 @@
           <button class="nav-item active" role="tab" aria-selected="true" data-section="dashboard">
             Dashboard
           </button>
+          <button class="nav-item" id="nav-setup" role="tab" aria-selected="false" data-section="setup">
+            Setup
+          </button>
           <button class="nav-item" role="tab" aria-selected="false" data-section="apps">
             Applications
           </button>
@@ -92,6 +95,25 @@
           </div>
         </div>
         <div id="toast-banner" class="toast hidden" role="status" aria-live="polite"></div>
+
+        <!-- FIRST-RUN SETUP -->
+        <section id="section-setup" class="panel" role="tabpanel">
+          <header class="panel-header">
+            <div>
+              <h2>Setup</h2>
+              <p class="muted" id="setup-summary">Checking what this PC still needs…</p>
+            </div>
+            <div class="actions">
+              <button class="btn" id="btn-setup-refresh" type="button">Check again</button>
+              <button class="btn subtle" id="btn-setup-hide" type="button">Hide for now</button>
+            </div>
+          </header>
+
+          <article class="card">
+            <h3>First-run checklist</h3>
+            <div id="setup-steps" class="checks-list"></div>
+          </article>
+        </section>
 
         <!-- 1. DASHBOARD -->
         <section id="section-dashboard" class="panel active" role="tabpanel">
