@@ -154,7 +154,9 @@ impl SetupPlan {
             (true, Some(state)) => state
                 .remediation()
                 .map_or_else(|| "Android is booting…".to_string(), ToString::to_string),
-            (true, None) => "Android is booting…".to_string(),
+            (true, None) => {
+                "Midgard is running but ADB access could not be checked yet.".to_string()
+            }
             (false, _) => "Boot Midgard with a visible window once, finish Android's welcome \
                            screens and allow USB debugging for this PC when Android asks."
                 .to_string(),

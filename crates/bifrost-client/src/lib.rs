@@ -183,10 +183,18 @@ impl Session {
         doctor: &bifrost_diagnostics::DoctorReport,
     ) -> Result<setup::SetupPlan> {
         let status = self.status().await?;
+        let active = status.runtime_state.is_active();
+        let mut adb_access = status.adb_access;
+        // Older Heimdall builds and a direct `Running` record carry no ADB diagnosis.
+        if active && adb_access.is_none() {
+            if let Some(endpoint) = status.record.adb_endpoint.clone() {
+                adb_access =
+                    blocking(move || Ok(AdbClient::new().diagnose_endpoint(&endpoint).ok()))
+                        .await?;
+            }
+        }
         Ok(setup::SetupPlan::evaluate(setup::SetupInputs::from_doctor(
-            doctor,
-            status.runtime_state.is_active(),
-            status.adb_access,
+            doctor, active, adb_access,
         )))
     }
 
