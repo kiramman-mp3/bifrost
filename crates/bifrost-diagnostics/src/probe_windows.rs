@@ -592,8 +592,10 @@ fn read_reg_string(root: HKEY, subkey: PCWSTR, value_name: PCWSTR) -> Option<Str
         };
         if data_res.is_ok() {
             let u16s: Vec<u16> = buf
-                .chunks_exact(2)
-                .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|&pair| u16::from_le_bytes(pair))
                 .collect();
             let nul_pos = u16s.iter().position(|&c| c == 0).unwrap_or(u16s.len());
             Some(String::from_utf16_lossy(&u16s[..nul_pos]))

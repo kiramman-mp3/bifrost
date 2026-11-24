@@ -22,7 +22,7 @@ impl AppShortcutSyncer {
     /// Periodically synchronizes third-party Android packages with Windows shortcuts.
     pub fn maybe_sync(&mut self, adb: &AdbClient, serial: &str, data_dir: &Path) {
         self.ticks = self.ticks.saturating_add(1);
-        if self.ticks > 1 && self.ticks % SYNC_EVERY_N_TICKS != 0 {
+        if self.ticks > 1 && !self.ticks.is_multiple_of(SYNC_EVERY_N_TICKS) {
             return;
         }
 
