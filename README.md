@@ -221,7 +221,11 @@ BIFRÖST/
 │   │   ├── tests/fuzz_untrusted_inputs.rs         # proptest fuzzing of untrusted inputs (weekly deep run in CI)
 │   │   └── src/
 │   │       ├── lib.rs                             # #![forbid(unsafe_code)]
-│   │       ├── apk.rs                             # Pure-Rust APK ZIP, AXML package, PNG->ICO icon, SHA-256 & ADR-0004 ABI inspection
+│   │       ├── apk/                               # Pure-Rust package inspection (never runs installers)
+│   │       │   ├── mod.rs                         # APK ZIP checks, Zip-Slip rejection, SHA-256, ADR-0004 ABI, staging
+│   │       │   ├── apkm.rs                        # .apkm split bundles: ABI-filtered split extraction
+│   │       │   ├── axml.rs                        # Binary AndroidManifest.xml (AXML) package & version parser
+│   │       │   └── icon.rs                        # Launcher icon discovery & PNG->ICO wrapping
 │   │       ├── file_assoc.rs                      # Unprivileged HKCU `.apk` Explorer context menu & default double-click registration
 │   │       ├── package.rs                         # Strict package ID validation & pm/dumpsys parsers
 │   │       ├── shortcuts.rs                       # Automatic Windows Desktop & Start Menu `.lnk` + `.ico` shortcut manager
