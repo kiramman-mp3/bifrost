@@ -8,6 +8,7 @@
 #![forbid(unsafe_code)]
 
 mod service;
+mod tray;
 
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -308,9 +309,31 @@ fn main() {
     };
     let is_installer_mode = pending_install.is_some();
 
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+    if !is_installer_mode {
+        // A second dashboard launch focuses the existing (possibly tray-hidden) window.
+        // The App Installer (`--install-apk`) and `--launch-app` stay independent.
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            tray::show_main_window(app);
+        }));
+    }
+    builder
         .manage(PendingInstallState(Mutex::new(pending_install)))
+        .on_window_event(move |window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if !is_installer_mode
+                    && window.label() == "main"
+                    && service::close_to_tray_enabled()
+                {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .setup(move |app| {
+            if !is_installer_mode {
+                tray::install(app.handle())?;
+            }
             if is_installer_mode {
                 if let Some(win) = app.get_webview_window("main") {
                     let _ = win.set_title("BIFRÖST — App Installer");

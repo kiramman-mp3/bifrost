@@ -273,6 +273,7 @@ export function wireEvents() {
         auto_sync_shortcuts: document.getElementById("cfg-auto-sync-shortcuts").checked,
         forward_notifications: document.getElementById("cfg-forward-notifications").checked,
         auto_sync_clipboard: document.getElementById("cfg-auto-sync-clipboard").checked,
+        close_to_tray: document.getElementById("cfg-close-to-tray").checked,
       },
       network: {
         adb_bind_address: document.getElementById("cfg-adb-host").value.trim(),
