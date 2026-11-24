@@ -22,8 +22,9 @@ use bifrost_process::{AndroidProcess, ProcessManager};
 use bifrost_runtime::{MidgardRuntime, RuntimeLogs, RuntimeRecord};
 use bifrost_storage::registry::DEFAULT_USERDATA_COMPAT_VERSION;
 use bifrost_storage::{
-    backup_userdata, evaluate_manifest_trust, restore_userdata, verify_manifest_file,
-    BackupMetadata, ImageRegistry, InstalledImageRecord,
+    backup_userdata, describe_trusted_key, evaluate_manifest_trust, images_losing_trust,
+    restore_userdata, verify_manifest_file, with_trusted_key, without_trusted_key, BackupMetadata,
+    ImageRegistry, InstalledImageRecord, TrustedKeyInfo,
 };
 use serde::Serialize;
 use valhalla::manager::{InstallOutcome, LaunchOutcome};
