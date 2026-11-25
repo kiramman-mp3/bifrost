@@ -306,7 +306,7 @@ BIFRÖST/
     │   ├── ADR-0004-arm64-compatibility-policy.md # Clean-room x86_64 policy & proprietary exclusions
     │   ├── ADR-0005-scrcpy-virtualdisplay-windowing.md # Interim per-app windows via scrcpy VirtualDisplay
     │   ├── ADR-0006-image-trust-store.md          # Local Ed25519 trust store for Midgard images
-    │   └── ADR-0007-guest-gpu-rendering-on-windows.md # Measured: guest renders in software in both QEMU modes
+    │   └── ADR-0007-guest-gpu-rendering-on-windows.md # Opt-in host GPU rendering via virgl (GPU at PCI slot 0x1e)
     └── research/
         ├── feasibility-report.md                  # Technical feasibility & host baseline report
         ├── hardware-matrix.md                     # Verified vs. untested host configurations (CPU, GPU, RAM)
@@ -324,7 +324,7 @@ BIFRÖST/
 - **Windows Feature**: **Virtual Machine Platform** (`VirtualMachinePlatform`) and/or **Windows Hypervisor Platform** (`HypervisorPlatform`) enabled so `WHvCreatePartition` succeeds.
 - **RAM**: 16 GB minimum recommended (4–8 GB allocated to Midgard).
 - **Storage**: 32+ GB free disk space for Android image bundles and persistent `userdata`.
-- **GPU**: Any; Android currently renders on the CPU (ANGLE on SwiftShader) in every mode, so the host GPU is not used yet (ADR-0007). Hardware 3D is research on `crosvm` + `gfxstream`.
+- **GPU**: Any for the default mode, which renders on the CPU (ANGLE on SwiftShader, OpenGL ES 3.1). The opt-in GPU acceleration mode (`graphics_mode = "gfxstream"`, headless) renders through virgl on a Direct3D 11 GPU via ANGLE, limited to OpenGL ES 2.0 and verified on Intel Arc only (ADR-0007).
 - **Runtime Dependencies**: `qemu-system-x86_64` (`winget install SoftwareFreedomConservancy.QEMU`), Android `adb` platform-tools, and `scrcpy >= 3.0` (optional, for `--window` per-app VirtualDisplay windows).
 
 ### Development Host
@@ -457,7 +457,7 @@ Distribution tooling lives under [installer/](installer/README.md), [.github/wor
 | [ADR-0004](docs/decisions/ADR-0004-arm64-compatibility-policy.md) | Maintain clean-room `x86_64` baseline; prohibit proprietary ARM translators and GApps | Accepted |
 | [ADR-0005](docs/decisions/ADR-0005-scrcpy-virtualdisplay-windowing.md) | Interim per-app windows via `scrcpy` `VirtualDisplay` streaming (amends ADR-0003 Stage 2) | Accepted |
 | [ADR-0006](docs/decisions/ADR-0006-image-trust-store.md) | Local Ed25519 trust store for Midgard images; explicit unsigned opt-in | Accepted |
-| [ADR-0007](docs/decisions/ADR-0007-guest-gpu-rendering-on-windows.md) | Guest rendering stays in software (SwiftShader) until a host 3D path is measured; QEMU virgl falls back to llvmpipe | Accepted |
+| [ADR-0007](docs/decisions/ADR-0007-guest-gpu-rendering-on-windows.md) | Opt-in host GPU rendering through virgl (GPU at PCI slot `0x1e`, OpenGL ES 2.0); default stays 2D + SwiftShader for ES 3.1 compatibility | Accepted |
 
 ### Capability Matrix
 

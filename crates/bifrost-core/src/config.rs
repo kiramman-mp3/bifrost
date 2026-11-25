@@ -18,8 +18,9 @@ pub enum GraphicsMode {
     /// 2D `virtio-gpu-pci`; Android renders with ANGLE on SwiftShader (CPU). See ADR-0007.
     #[default]
     Auto,
-    /// Experimental 3D device (`virtio-gpu-gl-pci` on QEMU, `gfxstream` on crosvm). On QEMU for
-    /// Windows the guest still renders in software (`llvmpipe`); see ADR-0007.
+    /// Experimental GPU acceleration. On QEMU (headless): `virtio-gpu-gl-pci` at PCI slot 0x1e,
+    /// rendered by virgl on the host GPU through ANGLE, OpenGL ES 2.0 only. On crosvm:
+    /// `gfxstream`. See ADR-0007.
     Gfxstream,
     /// Force CPU software rendering (SwiftShader) for diagnostics or headless bring-up.
     SwiftShader,

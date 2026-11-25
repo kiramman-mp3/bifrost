@@ -28,9 +28,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - **Live VM e2e workflow (Experimental)**: `.github/workflows/e2e-live-vm.yml` runs the `e2e_live_vm` test on a self-hosted Windows 11 runner labelled `whpx`, only on manual dispatch (never for pull requests), and fails instead of passing vacuously when no image manifest is configured. No runner is registered yet; see `docs/research/self-hosted-e2e-runner.md`.
 
+- **GPU acceleration actually reaches the host GPU (`bifrost-hypervisor`, Experimental)**: with `graphics_mode = "gfxstream"` (headless), Android fell back to Mesa `llvmpipe` because the guest SELinux policy labels the GPU's sysfs node only at PCI slots 01/02/03/1e and QEMU placed it at 07. The GL device now sits at `addr=0x1e`, and SurfaceFlinger renders through virgl on the host GPU (ANGLE Direct3D 11). On the reference Intel Arc 140T, median UI frame time drops from about 81 ms to 44 ms and janky frames from about 80 % to 27 %. The mode is limited to OpenGL ES 2.0 with no Vulkan, so the 2D default (OpenGL ES 3.1 in software) stays the default.
+
 ### Documentation
 - **Hardware compatibility matrix** (`docs/research/hardware-matrix.md`): the verified reference host and the untested configurations, with how to verify each.
-- **ADR-0007, guest GPU rendering**: measured on the reference host, Android renders in software in both QEMU modes (ANGLE/SwiftShader by default; Mesa `llvmpipe` with the experimental `virtio-gpu-gl-pci` path, which also boots much slower). BIFRÖST makes no GPU acceleration claim until a hardware renderer is measured; the README GPU requirement is corrected.
+- **ADR-0007, guest GPU rendering**: documents the measured renderers, the root cause of the virgl software fallback and the benchmark behind the opt-in GPU mode.
 
 ### Fixed
 - **Status badges overflowed (`bifrost-ui`)**: long labels such as `IMPLEMENTED` spilled out of the fixed 74 px badge column in Settings; check lists now share one column sized to the longest badge.

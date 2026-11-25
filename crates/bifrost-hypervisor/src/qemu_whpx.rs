@@ -294,10 +294,13 @@ impl HypervisorBackend for QemuWhpxBackend {
         // VirtIO GPU so Android's `virtgpu_detect`, `drm_hwcomposer`, and
         // `surfaceflinger` initialize cleanly in both graphical and headless modes.
         // When `GraphicsMode::Gfxstream` is explicitly requested in headless mode,
-        // use QEMU's `virtio-gpu-gl-pci` + `egl-headless` (ANGLE/virgl on Windows).
+        // use QEMU's `virtio-gpu-gl-pci` + `egl-headless` (ANGLE/virgl on Windows). It sits at
+        // PCI slot 0x1e: the Cuttlefish-derived guest SELinux policy labels only the GPU
+        // slots 01/02/03/1e as `sysfs_gpu`; elsewhere Mesa cannot enumerate the device and
+        // falls back to llvmpipe (see ADR-0007).
         let use_headless_gl = spec.headless && spec.graphics_mode == GraphicsMode::Gfxstream;
         let gpu_device = if use_headless_gl {
-            "virtio-gpu-gl-pci,xres=1280,yres=720,blob=on,hostmem=256M"
+            "virtio-gpu-gl-pci,addr=0x1e,xres=1280,yres=720,blob=on,hostmem=256M"
         } else {
             "virtio-gpu-pci,xres=1280,yres=720"
         };
@@ -736,9 +739,9 @@ mod tests {
         gl_spec.graphics_mode = GraphicsMode::Gfxstream;
         gl_spec.headless = true;
         let gl_joined = backend.build_args(&gl_spec).unwrap().join(" ");
-        assert!(
-            gl_joined.contains("-device virtio-gpu-gl-pci,xres=1280,yres=720,blob=on,hostmem=256M")
-        );
+        assert!(gl_joined.contains(
+            "-device virtio-gpu-gl-pci,addr=0x1e,xres=1280,yres=720,blob=on,hostmem=256M"
+        ));
         assert!(gl_joined.contains("-display egl-headless"));
     }
 
