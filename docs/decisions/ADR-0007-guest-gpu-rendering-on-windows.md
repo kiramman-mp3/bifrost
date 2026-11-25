@@ -1,49 +1,69 @@
-# ADR-0007: Guest GPU Rendering on Windows Stays in Software Until a Host 3D Path Is Proven
+# ADR-0007: Opt-in Host GPU Rendering Through virgl on QEMU-WHPX
 
-- **Status**: Accepted
+- **Status**: Accepted (revised 2026-11-24 after root-causing the software fallback)
 - **Date**: 2026-11-24
 - **Milestone**: v0.5.0 development
 
 ## Context
 
-ADR-0003 chose `virtio-gpu` with host-side 3D (`gfxstream`, or virgl as an interim) so Android apps could render on the host GPU. Two paths exist in the code today:
+ADR-0003 chose `virtio-gpu` with host-side 3D so Android apps could render on the host GPU. QEMU-WHPX offers two graphics paths:
 
-- `graphics_mode = "auto"` (default): QEMU `virtio-gpu-pci`, a 2D device. The host GPU is not used.
-- `graphics_mode = "gfxstream"` with `--headless`: QEMU `virtio-gpu-gl-pci,blob=on,hostmem=256M` with `-display egl-headless`, backed by the `libvirglrenderer-1.dll` that ships with QEMU 11.1.0 for Windows (ANGLE on the host).
+- `graphics_mode = "auto"` (default): `virtio-gpu-pci`, a 2D device. Android renders with ANGLE on SwiftShader Vulkan, on the CPU.
+- `graphics_mode = "gfxstream"` with `--headless`: `virtio-gpu-gl-pci,blob=on,hostmem=256M` with `-display egl-headless`, backed by the `libvirglrenderer-1.dll` that ships with QEMU 11.1.0 for Windows. The host side runs on ANGLE (Direct3D 11).
 
-The earlier evaluation (`docs/research/gpu-3d-windows-evaluation.md`) only showed that the GL device starts without errors. It did not check what renderer Android actually used.
+The first version of this ADR measured the GL path and found that Android still rendered with Mesa `llvmpipe`. That finding was correct, but the cause was ours, not a limit of the platform.
+
+## Root cause of the software fallback
+
+- The guest kernel saw a working 3D device: `[drm] features: +virgl +edid +resource_blob +host_visible`, with the virgl and virgl2 capsets.
+- The image's Mesa includes the `virgl` Gallium driver, and gralloc (minigbm) opened it (`Loaded driver virtgpu_virgl on node /dev/dri/renderD128`).
+- Mesa's EGL then logged `Failed to open any DRM device` and fell back to `llvmpipe`. To enumerate GPUs it reads the PCI device's `uevent` in sysfs, and SELinux denied that read.
+- The image's SELinux policy (derived from Cuttlefish) labels the GPU's sysfs node `sysfs_gpu` only at PCI slots `00:01.0`, `00:02.0`, `00:03.0` and `00:1e.0`. QEMU had placed the GPU at `00:07.0`.
+
+**Fix:** BIFRÖST now places the GL device at `addr=0x1e`. Mesa then selects virgl:
+
+```
+GLES: Mesa, virgl (ANGLE (Intel, Intel(R) Arc(TM) 140T GPU (16GB) ...)), OpenGL ES 2.0 Mesa 26.2.3
+```
 
 ## Measurements (2026-11-24)
 
-Reference host from the hardware matrix (Intel Core Ultra 9 285H, Intel Arc 140T, Windows 11 Home 25H2, QEMU 11.1.0, LineageOS 24.0 `virtio_x86_64`). The GL run used a throwaway instance (own config, data directory and loopback ADB port 5598, 4 vCPUs, 4096 MB), next to the user's 2D VM.
+Reference host from the hardware matrix (Intel Core Ultra 9 285H, Intel Arc 140T, Windows 11 Home 25H2, QEMU 11.1.0, LineageOS 24.0 `virtio_x86_64`). Throwaway instances with 4 vCPUs and 4096 MB on their own loopback port, next to the user's VM. The benchmark fling-scrolls the Settings list 30 times and reads `dumpsys gfxinfo`; each mode was run twice.
 
-| | `auto` (2D) | `gfxstream` + `egl-headless` |
+| | `auto` (2D, SwiftShader) | `gfxstream` (virgl on host GPU) |
 |---|---|---|
-| QEMU GPU device | `virtio-gpu-pci` | `virtio-gpu-gl-pci,blob=on,hostmem=256M` |
-| Guest `/dev/dri` | `card0`, `renderD128` | `card0`, `renderD128` |
-| `ro.hardware.egl` | `angle` | `mesa` |
-| SurfaceFlinger `GLES` | ANGLE on Vulkan **SwiftShader** (LLVM 16) | Mesa **llvmpipe** (LLVM 16), OpenGL ES 3.2 |
-| Host stderr | — | repeated `virtio_gpu_virgl_process_cmd: ctrl 0x103, error 0x1203` (`SET_SCANOUT` → invalid resource id) |
-| Guest kernel log | — | SELinux denials for `udmabuf` from `RenderThread` |
-| Boot (fresh `userdata`) | about 2.5 minutes (e2e test) | over 6.5 minutes; `llvmpipe` threads busy in `surfaceflinger` and the setup wizard |
+| SurfaceFlinger renderer | ANGLE / SwiftShader Vulkan (CPU) | Mesa virgl → ANGLE D3D11 → Intel Arc |
+| OpenGL ES exposed to apps | **3.1** | **2.0** |
+| Vulkan in the guest | SwiftShader (CPU) | none |
+| Median frame time | 81 ms / 81 ms | 42 ms / 46 ms |
+| 90th percentile | 113 ms / 117 ms | 65 ms / 73 ms |
+| Janky frames | 79 % / 85 % | 24 % / 30 % |
+| Wall time of the 30 swipes | 12.9 s / 12.6 s | 6.6 s / 6.6 s |
+| Per-app windows (scrcpy `--new-display`) | work | work (D3D11VA decode, verified with Settings) |
+| Host stderr | clean | ~2,000 `virtio_gpu_virgl_process_cmd: ctrl 0x103, error 0x1203` (`SET_SCANOUT` on the unused `egl-headless` scanout), no visible effect |
+| Boot from a fresh `userdata` | 1–5 min on both, dominated by first-boot work and trade-in mode | same |
 
-So with the GL device, Mesa in the guest does not use its virgl driver. It falls back to `llvmpipe`, rendering on the CPU like the default path does, while the virgl device adds host errors and makes boot much slower. **Neither mode renders on the host GPU today.**
+One virgl run had a single GPU frame outlier of about 5 s (90th GPU percentile 4950 ms) that the other run did not show; it is not yet explained.
+
+Variants that do not work with the stock QEMU 11.1.0 Windows build:
+
+- **Vulkan (Venus)**: `venus=on` fails with `Render server support was not enabled in virglrenderer`.
+- **ANGLE Vulkan backend** (`ANGLE_DEFAULT_PLATFORM=vulkan`): QEMU crashes (0xC0000005) at start-up.
+- **ANGLE on the native OpenGL driver** (`ANGLE_DEFAULT_PLATFORM=gl`): `Intel OpenGL ES drivers are not supported`.
+- **SDL display with GL** (`sdl,gl=core` or `gl=es`, with and without blob): QEMU crashes (0xC0000005).
+
+So with this QEMU build the ceiling is **OpenGL ES 2.0 on the host GPU**. ES 3.x and Vulkan need a different host stack (see Decision 4).
 
 ## Decision
 
-1. `auto` (2D `virtio-gpu-pci` + guest ANGLE/SwiftShader) stays the default and the only recommended mode.
-2. `graphics_mode = "gfxstream"` on QEMU stays **Experimental** and is documented as giving **no hardware acceleration** on Windows. It is kept only for further research.
-3. BIFRÖST does not claim GPU acceleration anywhere (README, UI, docs) until a measurement like the one above shows a hardware renderer string in SurfaceFlinger (for example a virgl, gfxstream or ANGLE-on-D3D11 renderer, not SwiftShader or llvmpipe).
-4. The hardware 3D work continues on ADR-0003's target, `crosvm` + `gfxstream` on WHPX. It is gated on a reproducible Windows build of `crosvm` with `rutabaga_gfx`/`gfxstream`, and on the same SurfaceFlinger check passing on at least one Intel and one other GPU vendor (see `docs/research/hardware-matrix.md`).
-
-## Alternatives Considered
-
-- **Make the QEMU virgl path the default**: rejected. It is slower than the default and still renders in software.
-- **Debug the virgl capset / scanout errors in QEMU's Windows `virglrenderer`**: not pursued now. It depends on how the QEMU Windows build is compiled (ANGLE, EGL surfaceless), which BIFRÖST does not control or redistribute. Contributions with measurements are welcome.
-- **Ship our own QEMU build with a patched `virglrenderer`**: rejected for now. It would make BIFRÖST responsible for maintaining and signing a VMM build before there is evidence it reaches the GPU.
+1. `auto` stays the default. It is slower but exposes OpenGL ES 3.1, so apps that require ES 3.0 (many games and some engines) keep working.
+2. `graphics_mode = "gfxstream"` becomes the opt-in **GPU acceleration (Experimental)** mode: virgl on the host GPU, GPU at PCI slot `0x1e`, headless only. It roughly halves frame times for ordinary apps but limits apps to OpenGL ES 2.0 and offers no Vulkan. The Settings label says so.
+3. A graphics claim is only made after reading the renderer string from `dumpsys SurfaceFlinger | grep GLES`: a hardware renderer (virgl, gfxstream, ANGLE on D3D) rather than SwiftShader or llvmpipe.
+4. OpenGL ES 3.x and Vulkan continue on ADR-0003's target, `crosvm` + `gfxstream` on WHPX (or the Android Emulator's QEMU, used as an external tool like scrcpy), which needs a guest image with gfxstream drivers. A QEMU build with a Venus-enabled virglrenderer is not an option on Windows: Venus depends on virglrenderer's render server.
 
 ## Consequences
 
-- App windows remain usable for typical apps, but 3D-heavy apps and games run on the CPU.
-- The README GPU requirement no longer suggests the host GPU is used.
-- Measuring the renderer (`dumpsys SurfaceFlinger | grep GLES`) becomes part of verifying any future graphics change.
+- Users can trade ES 3.x compatibility for much smoother rendering, per machine.
+- The `gfxstream` config value now names the virgl path on QEMU. It keeps its name for compatibility with existing `bifrost.toml` files; on the `crosvm-whpx` backend it selects real gfxstream.
+- NVIDIA and AMD GPUs are untested (see `docs/research/hardware-matrix.md`). ANGLE's D3D11 backend is vendor-neutral, but driver quirks are possible.
+- The `SET_SCANOUT` errors and the single 5 s GPU stall need investigation before this mode could become a default.

@@ -21,7 +21,7 @@ Open an issue with the outputs to add or update a row.
 
 | Host | CPU / virtualization | GPU | RAM | OS | Result |
 |---|---|---|---|---|---|
-| Reference laptop | Intel Core Ultra 9 285H, 16 logical cores, VT-x under Windows Hypervisor (WHPX `WHvCreatePartition` ok) | Intel Arc 140T (driver `32.0.101.8860`) | 31.37 GB | Windows 11 Home 25H2 (26200) | Steps 1–3 pass with QEMU 11.1.0 + LineageOS 24.0 `virtio_x86_64` (e2e boot to `sys.boot_completed` in about 2.5 minutes from a fresh `userdata`). Step 4 is exercised in daily use (F-Droid installed, opened in scrcpy windows, kept across VM restarts). Display: `virtio-gpu` 2D (`graphics_mode = "auto"`). |
+| Reference laptop | Intel Core Ultra 9 285H, 16 logical cores, VT-x under Windows Hypervisor (WHPX `WHvCreatePartition` ok) | Intel Arc 140T (driver `32.0.101.8860`) | 31.37 GB | Windows 11 Home 25H2 (26200) | Steps 1–3 pass with QEMU 11.1.0 + LineageOS 24.0 `virtio_x86_64`. Step 4 is exercised in daily use (F-Droid installed, opened in scrcpy windows, kept across VM restarts). Default display: `virtio-gpu` 2D with SwiftShader. Opt-in GPU mode (`graphics_mode = "gfxstream"`): virgl on the Arc, OpenGL ES 2.0, scrcpy windows verified (ADR-0007). |
 
 ## Untested
 
