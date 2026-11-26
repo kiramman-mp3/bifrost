@@ -106,6 +106,7 @@ Details per release are in [CHANGELOG.md](CHANGELOG.md).
 - [x] **v0.3.3**: Fluent App Installer dialog, host CPU/RAM auto-tune, single-pass install pipeline, performance tuning.
 - [x] **v0.4.0**: Security & reliability hardening: quoted/stdin `adb shell` input, image trust store (ADR-0006), QMP off TCP, no PowerShell at runtime, cross-process VM lifecycle lock, Heimdall single-instance fix, ADB trade-in/authorization diagnostics, pinned CI actions, signed release pipeline, live-VM end-to-end test.
 - [x] **v0.5.0**: First-run setup (`bifrost setup` and Setup view), system tray, update notice (`bifrost update`), shared `bifrost-client` session, trusted publishers card, dependency audit in CI, hardware matrix, and opt-in GPU acceleration through virgl on the host GPU (OpenGL ES 2.0, ADR-0007).
+- [x] **v0.5.1**: First published 0.5 build. Fixes shortcut names that could end in a dot (found by the release property test, which stopped v0.5.0) and the rejected live-VM e2e workflow.
 
 ---
 

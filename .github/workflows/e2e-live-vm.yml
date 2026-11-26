@@ -28,9 +28,13 @@ jobs:
     timeout-minutes: 45
     env:
       BIFROST_E2E_MANIFEST: ${{ inputs.manifest != '' && inputs.manifest || vars.BIFROST_E2E_MANIFEST }}
-      # ASCII target dir: GNU ld cannot resolve object paths under non-ASCII folders.
-      CARGO_TARGET_DIR: ${{ runner.temp }}\bifrost-e2e-target
     steps:
+      - name: Use an ASCII Cargo target directory
+        # GNU ld cannot resolve object paths under non-ASCII folders. The `runner`
+        # context is not available in job-level `env`, so it is set from a step.
+        shell: pwsh
+        run: '"CARGO_TARGET_DIR=$env:RUNNER_TEMP\bifrost-e2e-target" >> $env:GITHUB_ENV'
+
       - name: Checkout repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
