@@ -1,15 +1,22 @@
-// Entry point: wires the shell, then opens the installer (--install-apk) or the dashboard.
+// Entry point: initializes Windows 11 Mica/accent shell, then opens the App Installer (--install-apk) or Home.
 
 import { invoke, state } from "./core.js";
-import { refreshAll } from "./data.js";
+import { refreshAll, refreshApps } from "./data.js";
 import { wireEvents } from "./events.js";
+import { t } from "./i18n.js";
 import { openInstallDialog, setupInstallProgressListener } from "./installer.js";
 import { maybeOpenSetup, wireSetup } from "./setup.js";
-import { setupDragDrop, setupNavigation, setupTheme } from "./shell.js";
+import {
+  initShellAppearance,
+  setupDragDrop,
+  setupNavigation,
+  setupWindowControls,
+} from "./shell.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
+  setupWindowControls();
   setupNavigation();
-  setupTheme();
+  await initShellAppearance();
   setupDragDrop();
   setupInstallProgressListener();
   wireEvents();
@@ -21,13 +28,16 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (pendingPath) {
         state.standaloneInstallerMode = true;
         document.body.classList.add("installer-mode");
+        document.getElementById("titlebar-title").textContent = t("installer.titleWindow");
         await openInstallDialog(pendingPath);
         return;
       }
     } catch {
-      // Fall through to full dashboard mode if not invoked via --install-apk.
+      // Fall through to full app mode.
     }
   }
+
   refreshAll();
+  refreshApps();
   maybeOpenSetup();
 });

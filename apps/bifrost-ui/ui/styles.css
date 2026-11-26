@@ -1,40 +1,72 @@
+/* BIFRÖST — Native Windows 11 WinUI 3 / Fluent 2 Stylesheet (Mica + Dynamic System Accent) */
+
+:root {
+  /* Dynamic Windows 11 system accent defaults (overridden live by get_windows_appearance) */
+  --win-accent-base: #0078d4;
+  --win-accent-light: #60cdff;
+  --win-accent-light-hover: #7ce8ff;
+  --win-accent-dark: #005fb8;
+  --win-accent-dark-hover: #004c94;
+  --win-text-on-accent-light: #000000;
+  --win-text-on-accent-dark: #ffffff;
+
+  --titlebar-height: 38px;
+  --radius-card: 6px;
+  --radius-control: 4px;
+  --radius-frame: 8px;
+}
+
 :root,
 [data-theme="dark"] {
-  --bg-canvas: #1c1e22;
-  --bg-sidebar: #16181c;
-  --bg-card: #24272d;
-  --bg-input: #1b1d22;
-  --bg-hover: #2d3139;
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.16);
-  --text-primary: #f3f5f8;
-  --text-secondary: #a6b0bf;
-  --accent: #60cdff;
-  --accent-hover: #7ad6ff;
-  --accent-text: #0b1620;
+  --fallback-mica: #202020;
+  --bg-layer: rgba(255, 255, 255, 0.035);
+  --bg-card: rgba(255, 255, 255, 0.052);
+  --bg-card-hover: rgba(255, 255, 255, 0.082);
+  --bg-control: rgba(255, 255, 255, 0.06);
+  --bg-control-hover: rgba(255, 255, 255, 0.095);
+  --bg-subtle-hover: rgba(255, 255, 255, 0.062);
+  --bg-dialog: rgba(38, 38, 42, 0.94);
+  --stroke-divider: rgba(255, 255, 255, 0.075);
+  --stroke-card: rgba(255, 255, 255, 0.072);
+  --stroke-control: rgba(255, 255, 255, 0.14);
+  --stroke-control-bottom: rgba(255, 255, 255, 0.34);
+  --text-primary: #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.72);
+  --text-tertiary: rgba(255, 255, 255, 0.48);
+  --accent: var(--win-accent-light);
+  --accent-hover: var(--win-accent-light-hover);
+  --accent-text: var(--win-text-on-accent-light);
+  --accent-Tint: color-mix(in srgb, var(--accent) 16%, transparent);
   --pass: #6ccb5f;
   --warn: #fce100;
   --fail: #ff99a4;
-  --shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+  --shadow-flyout: 0 12px 32px rgba(0, 0, 0, 0.45);
 }
 
 [data-theme="light"] {
-  --bg-canvas: #f3f5f9;
-  --bg-sidebar: #eaeef5;
-  --bg-card: #ffffff;
-  --bg-input: #f9fafc;
-  --bg-hover: #e5eaf2;
-  --border-subtle: rgba(0, 0, 0, 0.08);
-  --border-strong: rgba(0, 0, 0, 0.16);
-  --text-primary: #1a1d24;
-  --text-secondary: #586274;
-  --accent: #0067c0;
-  --accent-hover: #0058a6;
-  --accent-text: #ffffff;
+  --fallback-mica: #f3f3f3;
+  --bg-layer: rgba(255, 255, 255, 0.52);
+  --bg-card: rgba(255, 255, 255, 0.72);
+  --bg-card-hover: rgba(255, 255, 255, 0.9);
+  --bg-control: rgba(255, 255, 255, 0.78);
+  --bg-control-hover: rgba(249, 249, 249, 0.95);
+  --bg-subtle-hover: rgba(0, 0, 0, 0.045);
+  --bg-dialog: rgba(249, 249, 251, 0.96);
+  --stroke-divider: rgba(0, 0, 0, 0.065);
+  --stroke-card: rgba(0, 0, 0, 0.058);
+  --stroke-control: rgba(0, 0, 0, 0.12);
+  --stroke-control-bottom: rgba(0, 0, 0, 0.38);
+  --text-primary: #1a1a1a;
+  --text-secondary: rgba(0, 0, 0, 0.62);
+  --text-tertiary: rgba(0, 0, 0, 0.42);
+  --accent: var(--win-accent-dark);
+  --accent-hover: var(--win-accent-dark-hover);
+  --accent-text: var(--win-text-on-accent-dark);
+  --accent-Tint: color-mix(in srgb, var(--accent) 12%, transparent);
   --pass: #0f7b0f;
   --warn: #9d5d00;
   --fail: #c42b1c;
-  --shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+  --shadow-flyout: 0 12px 32px rgba(0, 0, 0, 0.14);
 }
 
 * {
@@ -46,91 +78,204 @@ body {
   margin: 0;
   padding: 0;
   height: 100%;
-  font-family: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
+  overflow: hidden;
+  font-family: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
   font-size: 14px;
-  line-height: 1.5;
-  background: var(--bg-canvas);
+  line-height: 1.45;
   color: var(--text-primary);
+  background: var(--fallback-mica);
   -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+/* Inside Tauri, let Windows 11 DWM Mica shine directly through the root canvas */
+html.tauri-mica,
+html.tauri-mica body {
+  background: transparent;
 }
 
 code,
-pre {
+pre,
+.kv-list dd {
   font-family: "Cascadia Code", "Consolas", monospace;
+  user-select: text;
 }
 
+/* Custom Scrollbars matching WinUI 3 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--stroke-control);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+/* 1. Integrated WinUI 3 Titlebar */
+.titlebar {
+  height: var(--titlebar-height);
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  background: transparent;
+  position: relative;
+  z-index: 1100;
+}
+
+.titlebar-drag {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 16px;
+  min-width: 0;
+}
+
+.titlebar-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+.titlebar-title {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 120ms ease;
+}
+
+body.window-unfocused .titlebar-title {
+  color: var(--text-tertiary);
+}
+
+.titlebar-controls {
+  display: flex;
+  align-items: stretch;
+}
+
+.caption-btn {
+  width: 46px;
+  height: var(--titlebar-height);
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+  transition: background 90ms ease, color 90ms ease;
+}
+
+body.window-unfocused .caption-btn {
+  color: var(--text-tertiary);
+}
+
+.caption-btn:hover {
+  background: var(--bg-subtle-hover);
+  color: var(--text-primary);
+}
+
+.caption-btn.close:hover {
+  background: #c42b1c;
+  color: #ffffff;
+}
+
+.caption-btn.close:active {
+  background: #b12618;
+  color: #ffffff;
+}
+
+/* 2. WinUI 3 NavigationView Shell */
 .app-shell {
   display: grid;
-  grid-template-columns: 244px 1fr;
-  height: 100vh;
+  grid-template-columns: 256px 1fr;
+  height: calc(100vh - var(--titlebar-height));
 }
 
-.sidebar {
-  background: var(--bg-sidebar);
-  border-right: 1px solid var(--border-subtle);
-  padding: 20px 14px;
+.nav-pane {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  padding: 6px 10px 12px 10px;
+  gap: 6px;
+  background: transparent;
 }
 
-.brand {
+.nav-profile {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 4px 8px;
+  padding: 8px 12px 12px 12px;
 }
 
-.brand-mark {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #38bdf8, #818cf8, #f472b6);
+.nav-profile-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
   flex-shrink: 0;
 }
 
-.brand-title {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 650;
-  letter-spacing: 0.04em;
+.nav-profile-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
-.brand-subtitle {
-  margin: 0;
-  font-size: 11px;
-  color: var(--text-secondary);
+.nav-profile-text strong {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .nav-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
   flex: 1;
 }
 
 .nav-item {
   position: relative;
-  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
   border: none;
+  border-radius: var(--radius-control);
   background: transparent;
-  color: var(--text-secondary);
-  padding: 10px 14px;
-  border-radius: 6px;
+  color: var(--text-primary);
   font: inherit;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
+  font-size: 13.5px;
+  font-weight: 400;
+  text-align: left;
+  cursor: default;
+  transition: background 100ms ease;
 }
 
 .nav-item:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
+  background: var(--bg-subtle-hover);
 }
 
 .nav-item.active {
-  background: var(--bg-hover);
-  color: var(--text-primary);
+  background: var(--bg-subtle-hover);
   font-weight: 600;
 }
 
@@ -138,75 +283,124 @@ pre {
   content: "";
   position: absolute;
   left: 0;
-  top: 8px;
-  bottom: 8px;
+  top: 11px;
+  height: 16px;
   width: 3px;
-  border-radius: 2px;
+  border-radius: 99px;
   background: var(--accent);
 }
 
-.sidebar-footer {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border-subtle);
+.nav-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  opacity: 0.9;
 }
 
-.status-pill {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-}
-
-.dot {
-  width: 8px;
-  height: 8px;
+.nav-item.needs-attention::after {
+  content: "";
+  margin-left: auto;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: var(--text-secondary);
-}
-
-.dot.ok {
-  background: var(--pass);
-}
-
-.dot.warn {
   background: var(--warn);
 }
 
-.content {
-  overflow-y: auto;
-  padding: 28px 34px;
+.nav-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--stroke-divider);
 }
 
-.panel {
+.runtime-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.status-dot.ok {
+  background: var(--pass);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--pass) 55%, transparent);
+}
+
+.status-dot.warn {
+  background: var(--warn);
+}
+
+/* 3. Rounded Top-Left WinUI 3 Layer Frame */
+.content-frame {
+  background: var(--bg-layer);
+  border-top: 1px solid var(--stroke-divider);
+  border-left: 1px solid var(--stroke-divider);
+  border-top-left-radius: var(--radius-frame);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.content-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 28px 36px 40px 36px;
+}
+
+.page {
   display: none;
   flex-direction: column;
-  gap: 18px;
-  max-width: 1040px;
+  gap: 16px;
+  max-width: 920px;
+  animation: win-page-in 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.panel.active {
+.page.active {
   display: flex;
 }
 
-.panel-header {
+@keyframes win-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   gap: 16px;
+  margin-bottom: 4px;
 }
 
-.panel-header h2 {
-  margin: 0 0 4px 0;
-  font-size: 24px;
+.page-header h1 {
+  margin: 0 0 3px 0;
+  font-family: "Segoe UI Variable Display", "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  font-size: 28px;
   font-weight: 600;
+  line-height: 1.2;
+}
+
+.section-heading {
+  margin: 10px 0 -4px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .muted {
@@ -216,29 +410,245 @@ pre {
 
 .small-text {
   font-size: 12px;
+  line-height: 1.4;
 }
 
-.grid.stats-grid {
+/* 4. Hero Subsystem Card & Action Tiles (Home) */
+.hero-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 22px 24px;
+  border-radius: var(--radius-frame);
+  background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--accent) 13%, transparent),
+      transparent 65%
+    ),
+    var(--bg-card);
+  border: 1px solid var(--stroke-card);
+}
+
+.hero-status-left {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+}
+
+.hero-orb {
+  width: 54px;
+  height: 54px;
+  border-radius: 14px;
+  background: var(--bg-control);
+  border: 1px solid var(--stroke-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: box-shadow 220ms ease, border-color 220ms ease;
+}
+
+.hero-orb.running {
+  border-color: var(--pass);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--pass) 16%, transparent);
+}
+
+.hero-orb.booting {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.hero-orb-img {
+  width: 34px;
+  height: 34px;
+}
+
+.hero-copy h2 {
+  margin: 2px 0 3px 0;
+  font-size: 19px;
+  font-weight: 600;
+}
+
+.hero-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.status-pill-inline {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  background: var(--bg-control);
+  border: 1px solid var(--stroke-control);
+}
+
+.status-pill-inline.running {
+  color: var(--pass);
+  border-color: color-mix(in srgb, var(--pass) 45%, transparent);
+  background: color-mix(in srgb, var(--pass) 12%, transparent);
+}
+
+.status-pill-inline.booting {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.tiles-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
 }
 
-.card {
+.action-tile {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border-radius: var(--radius-card);
   background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--stroke-card);
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 110ms ease, border-color 110ms ease;
+}
+
+.action-tile:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--stroke-control);
+}
+
+.tile-icon {
+  width: 38px;
+  height: 38px;
   border-radius: 8px;
-  padding: 18px 20px;
-  box-shadow: var(--shadow);
+  background: var(--bg-control);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.tile-icon.accent-surface {
+  background: var(--accent-Tint);
+}
+
+.tile-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tile-body strong {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+/* 5. WinUI 3 SettingsCard & Stacked Group Geometry */
+.settings-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 66px;
+  padding: 14px 18px;
+  background: var(--bg-card);
+  border: 1px solid var(--stroke-card);
+  border-radius: 3px;
+  transition: background 100ms ease;
+}
+
+.settings-stack > .setting-row:first-child {
+  border-top-left-radius: var(--radius-card);
+  border-top-right-radius: var(--radius-card);
+}
+
+.settings-stack > .setting-row:last-child {
+  border-bottom-left-radius: var(--radius-card);
+  border-bottom-right-radius: var(--radius-card);
+}
+
+.setting-row.clickable {
+  cursor: pointer;
+}
+
+.setting-row.clickable:hover {
+  background: var(--bg-card-hover);
+}
+
+.setting-row.wrap-row {
+  flex-wrap: wrap;
+}
+
+.setting-left {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  flex: 1;
+  min-width: 220px;
+}
+
+.setting-icon {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+  opacity: 0.88;
+  flex-shrink: 0;
+}
+
+.setting-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.setting-text strong {
+  font-size: 14px;
+  font-weight: 450;
+}
+
+.win-card {
+  background: var(--bg-card);
+  border: 1px solid var(--stroke-card);
+  border-radius: var(--radius-card);
+  padding: 16px 18px;
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.card h3 {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 600;
+.card-divider {
+  border: none;
+  border-top: 1px solid var(--stroke-divider);
+  margin: 2px 0;
 }
 
 .card-header-inline {
@@ -248,95 +658,90 @@ pre {
   gap: 12px;
 }
 
-.stat-card {
-  gap: 4px;
+/* 6. Authentic WinUI 3 Controls (ToggleSwitch, Buttons, Inputs, Selects) */
+.win-switch {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  width: 40px;
+  height: 20px;
+  margin: 0;
+  border-radius: 999px;
+  border: 1px solid var(--text-secondary);
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 140ms ease, border-color 140ms ease;
 }
 
-.stat-label {
-  font-size: 12px;
-  color: var(--text-secondary);
+.win-switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  transition: transform 150ms cubic-bezier(0.16, 1, 0.3, 1), width 120ms ease, background 120ms ease;
 }
 
-.stat-value {
-  font-size: 19px;
-  font-weight: 650;
+.win-switch:hover::after {
+  width: 14px;
 }
 
-.stat-meta {
-  font-size: 12px;
-  color: var(--text-secondary);
+.win-switch:checked {
+  background: var(--accent);
+  border-color: var(--accent);
 }
 
-.form-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 14px 18px;
+.win-switch:checked:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
-.full-span {
-  grid-column: 1 / -1;
+.win-switch:checked::after {
+  background: var(--accent-text);
+  transform: translateX(20px);
 }
 
-.form-row {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+.win-switch:checked:hover::after {
+  transform: translateX(18px);
 }
 
-.form-row label {
-  font-size: 12px;
-  color: var(--text-secondary);
-  font-weight: 500;
-}
-
-input[type="text"],
-input[type="number"],
-select {
-  background: var(--bg-input);
-  color: var(--text-primary);
-  border: 1px solid var(--border-strong);
-  border-radius: 5px;
-  padding: 8px 10px;
-  font: inherit;
-}
-
-input:focus,
-select:focus,
-button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.checkbox-label {
+.inline-switch-label {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--text-secondary);
+  gap: 10px;
+  cursor: pointer;
 }
 
 .btn {
-  border: 1px solid var(--border-strong);
-  background: var(--bg-hover);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 13px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--stroke-control);
+  border-bottom-color: var(--stroke-control-bottom);
+  background: var(--bg-control);
   color: var(--text-primary);
-  padding: 7px 14px;
-  border-radius: 5px;
   font: inherit;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 450;
+  white-space: nowrap;
   cursor: pointer;
-  transition: opacity 120ms ease, background 120ms ease;
+  transition: background 100ms ease, opacity 100ms ease;
 }
 
-.btn:hover {
-  opacity: 0.92;
+.btn:hover:not(:disabled) {
+  background: var(--bg-control-hover);
+}
+
+.btn:active:not(:disabled) {
+  opacity: 0.82;
 }
 
 .btn.primary {
@@ -346,77 +751,204 @@ button:focus-visible {
   font-weight: 600;
 }
 
-.btn.danger {
-  border-color: var(--fail);
-  color: var(--fail);
-  background: transparent;
+.btn.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.btn.large {
+  height: 36px;
+  padding: 0 20px;
+  font-size: 13.5px;
+}
+
+.btn.small {
+  height: 28px;
+  padding: 0 11px;
+  font-size: 12.5px;
 }
 
 .btn.subtle {
   background: transparent;
-  border-color: var(--border-subtle);
+  border-color: transparent;
 }
 
-.btn.small {
-  padding: 4px 10px;
+.btn.subtle:hover:not(:disabled) {
+  background: var(--bg-subtle-hover);
+}
+
+.btn.danger {
+  color: var(--fail);
+  border-color: color-mix(in srgb, var(--fail) 42%, transparent);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.win-input,
+.win-select {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--stroke-control);
+  border-bottom: 1.5px solid var(--stroke-control-bottom);
+  background: var(--bg-control);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+}
+
+.win-select option {
+  background: #252529;
+  color: #ffffff;
+}
+
+[data-theme="light"] .win-select option {
+  background: #ffffff;
+  color: #1a1a1a;
+}
+
+.win-input.compact {
+  width: 92px;
+}
+
+.win-input:focus,
+.win-select:focus,
+.search-box input:focus {
+  outline: none;
+  border-bottom: 2px solid var(--accent);
+}
+
+button:focus-visible,
+.win-switch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.accent-dot-preview {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 1px solid var(--stroke-control);
+  flex-shrink: 0;
+}
+
+.save-indicator {
   font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  color: var(--pass);
+  background: color-mix(in srgb, var(--pass) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--pass) 35%, transparent);
 }
 
-.checks-list {
-  display: grid;
-  grid-template-columns: minmax(74px, max-content) 1fr;
+/* 7. Search & App Rows */
+.apps-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.search-box {
+  position: relative;
+  flex: 1;
+  min-width: 240px;
+  max-width: 380px;
+}
+
+.search-icon {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.search-box input {
+  width: 100%;
+  height: 34px;
+  padding: 0 12px 0 34px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--stroke-control);
+  border-bottom: 1.5px solid var(--stroke-control-bottom);
+  background: var(--bg-control);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+}
+
+.app-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--accent-Tint);
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* 8. Forms, Lists, Badges & InfoBars */
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
-.check-row {
-  display: grid;
-  grid-column: 1 / -1;
-  /* Share the list's columns so every badge column is as wide as the longest label. */
-  grid-template-columns: subgrid;
-  column-gap: 12px;
-  padding: 10px 12px;
-  border-radius: 6px;
-  background: var(--bg-input);
-  border: 1px solid var(--border-subtle);
+.inline-fields {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
-.badge {
-  display: inline-flex;
+.mini-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mini-field.grow {
+  flex: 1;
+  min-width: 160px;
+}
+
+.mini-field span,
+.form-row label {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+.form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.input-with-btn {
+  display: flex;
+  gap: 8px;
   align-items: center;
-  justify-content: center;
-  height: 24px;
-  padding: 0 8px;
-  white-space: nowrap;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
 }
 
-.badge.pass,
-.badge.implemented {
-  color: var(--pass);
-  border: 1px solid var(--pass);
-}
-
-.badge.warn,
-.badge.partially_implemented,
-.badge.experimental {
-  color: var(--warn);
-  border: 1px solid var(--warn);
-}
-
-.badge.fail,
-.badge.unsupported,
-.badge.planned {
-  color: var(--fail);
-  border: 1px solid var(--fail);
+.input-with-btn input {
+  flex: 1;
+  min-width: 0;
 }
 
 .list-box {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .item-row {
@@ -425,28 +957,71 @@ button:focus-visible {
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
-  border-radius: 6px;
-  background: var(--bg-input);
-  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--bg-control);
+  border: 1px solid var(--stroke-divider);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+
+.badge.pass,
+.badge.implemented,
+.badge.setup-done {
+  color: var(--pass);
+  background: color-mix(in srgb, var(--pass) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--pass) 38%, transparent);
+}
+
+.badge.warn,
+.badge.partially_implemented,
+.badge.experimental,
+.badge.setup-pending {
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn) 38%, transparent);
+}
+
+.badge.fail,
+.badge.unsupported,
+.badge.planned,
+.badge.setup-blocked {
+  color: var(--fail);
+  background: color-mix(in srgb, var(--fail) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--fail) 38%, transparent);
 }
 
 .code-box {
   margin: 0;
   padding: 12px;
-  border-radius: 6px;
-  background: var(--bg-input);
-  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid var(--stroke-divider);
   overflow-x: auto;
-  max-height: 320px;
+  max-height: 280px;
   font-size: 12px;
   white-space: pre-wrap;
+}
+
+[data-theme="light"] .code-box {
+  background: rgba(0, 0, 0, 0.04);
 }
 
 .kv-list {
   margin: 0;
   display: grid;
-  grid-template-columns: 180px 1fr;
-  gap: 8px 14px;
+  grid-template-columns: 160px 1fr;
+  gap: 6px 14px;
 }
 
 .kv-list dt {
@@ -456,46 +1031,58 @@ button:focus-visible {
 
 .kv-list dd {
   margin: 0;
-  font-family: "Cascadia Code", "Consolas", monospace;
   font-size: 12px;
   word-break: break-all;
 }
 
-.toast {
-  padding: 10px 14px;
-  border-radius: 6px;
-  border: 1px solid var(--accent);
+.info-bar {
+  padding: 11px 14px;
+  border-radius: var(--radius-card);
+  font-size: 12.5px;
+  border: 1px solid var(--stroke-card);
   background: var(--bg-card);
-  margin-bottom: 16px;
-  font-size: 13px;
+  word-break: break-word;
 }
 
-.toast.error {
-  border-color: var(--fail);
+.info-bar.warn {
+  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+  background: color-mix(in srgb, var(--warn) 10%, var(--bg-card));
+}
+
+.info-bar.error {
+  border-color: color-mix(in srgb, var(--fail) 45%, transparent);
+  background: color-mix(in srgb, var(--fail) 10%, var(--bg-card));
   color: var(--fail);
 }
 
-.hidden {
-  display: none !important;
+/* 9. Floating Toast, Drag Overlay & App Installer Dialog */
+.floating-toast {
+  position: fixed;
+  right: 22px;
+  bottom: 20px;
+  z-index: 1050;
+  max-width: 420px;
+  padding: 11px 16px;
+  border-radius: var(--radius-card);
+  background: var(--bg-dialog);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--stroke-control);
+  border-left: 3px solid var(--accent);
+  box-shadow: var(--shadow-flyout);
+  font-size: 13px;
 }
 
-.input-with-btn {
-  display: flex;
-  gap: 8px;
-  align-items: stretch;
-}
-
-.input-with-btn input {
-  flex: 1;
-  min-width: 0;
+.floating-toast.error {
+  border-left-color: var(--fail);
+  color: var(--fail);
 }
 
 .drop-overlay {
   position: fixed;
-  inset: 0;
-  z-index: 999;
-  background: rgba(15, 23, 42, 0.72);
-  backdrop-filter: blur(4px);
+  inset: var(--titlebar-height) 0 0 0;
+  z-index: 1020;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -507,34 +1094,21 @@ button:focus-visible {
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  padding: 28px 36px;
-  border-radius: 12px;
-  background: var(--bg-card);
-  border: 2px dashed var(--accent);
-  box-shadow: var(--shadow);
+  padding: 28px 38px;
+  border-radius: 10px;
+  background: var(--bg-dialog);
+  border: 1.5px dashed var(--accent);
+  box-shadow: var(--shadow-flyout);
   text-align: center;
-  font-size: 16px;
-}
-
-body.installer-mode .sidebar,
-body.installer-mode .panel {
-  display: none !important;
-}
-
-body.installer-mode .app-shell {
-  grid-template-columns: 1fr;
-}
-
-body.installer-mode .installer-backdrop {
-  background: var(--bg-canvas);
+  color: var(--text-primary);
 }
 
 .installer-backdrop {
   position: fixed;
-  inset: 0;
-  z-index: 1000;
-  background: rgba(15, 23, 42, 0.72);
-  backdrop-filter: blur(6px);
+  inset: var(--titlebar-height) 0 0 0;
+  z-index: 1040;
+  background: rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -543,15 +1117,35 @@ body.installer-mode .installer-backdrop {
 
 .installer-dialog {
   width: 100%;
-  max-width: 500px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-strong);
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+  max-width: 480px;
+  background: var(--bg-dialog);
+  border: 1px solid var(--stroke-control);
+  border-radius: 8px;
+  padding: 22px 24px;
+  box-shadow: var(--shadow-flyout);
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
+}
+
+/* Standalone `--install-apk` mode: pure Mica window, no modal dim box */
+body.installer-mode .app-shell,
+body.installer-mode #win-maximize {
+  display: none !important;
+}
+
+body.installer-mode .installer-backdrop {
+  background: transparent;
+  backdrop-filter: none;
+  padding: 12px 22px 20px 22px;
+  align-items: stretch;
+}
+
+body.installer-mode .installer-dialog {
+  max-width: none;
+  background: var(--bg-layer);
+  box-shadow: none;
+  justify-content: space-between;
 }
 
 .installer-header {
@@ -561,13 +1155,13 @@ body.installer-mode .installer-backdrop {
 }
 
 .installer-icon-wrap {
-  width: 64px;
-  height: 64px;
-  border-radius: 14px;
+  width: 60px;
+  height: 60px;
+  border-radius: 12px;
   overflow: hidden;
   flex-shrink: 0;
-  background: var(--bg-input);
-  border: 1px solid var(--border-subtle);
+  background: var(--bg-control);
+  border: 1px solid var(--stroke-card);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -580,8 +1174,8 @@ body.installer-mode .installer-backdrop {
 }
 
 .installer-icon-fallback {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
 }
 
 .installer-title-block {
@@ -593,8 +1187,8 @@ body.installer-mode .installer-backdrop {
 
 .installer-title-block h2 {
   margin: 0;
-  font-size: 20px;
-  font-weight: 650;
+  font-size: 19px;
+  font-weight: 600;
   line-height: 1.25;
   word-break: break-word;
 }
@@ -602,32 +1196,37 @@ body.installer-mode .installer-backdrop {
 .installer-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 
 .meta-chip {
-  font-size: 12px;
-  padding: 4px 9px;
+  font-size: 11.5px;
+  padding: 3px 9px;
   border-radius: 999px;
-  background: var(--bg-input);
-  border: 1px solid var(--border-subtle);
+  background: var(--bg-control);
+  border: 1px solid var(--stroke-control);
   color: var(--text-secondary);
 }
 
 .meta-chip.ok {
-  border-color: var(--pass);
   color: var(--pass);
+  border-color: color-mix(in srgb, var(--pass) 45%, transparent);
+}
+
+.meta-chip.warn {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
 }
 
 .meta-chip.err {
-  border-color: var(--fail);
   color: var(--fail);
+  border-color: color-mix(in srgb, var(--fail) 45%, transparent);
 }
 
 .installer-progress-wrap {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 7px;
 }
 
 .installer-progress-head {
@@ -639,10 +1238,9 @@ body.installer-mode .installer-backdrop {
 
 .progress-track {
   position: relative;
-  height: 8px;
+  height: 4px;
   border-radius: 999px;
-  background: var(--bg-input);
-  border: 1px solid var(--border-subtle);
+  background: var(--stroke-control);
   overflow: hidden;
 }
 
@@ -650,13 +1248,12 @@ body.installer-mode .installer-backdrop {
   height: 100%;
   border-radius: 999px;
   background: var(--accent);
-  transition: width 260ms ease;
+  transition: width 240ms ease;
 }
 
 .progress-fill.indeterminate {
-  position: relative;
-  width: 42% !important;
-  animation: bifrost-progress-sweep 1.25s infinite ease-in-out;
+  width: 40% !important;
+  animation: bifrost-progress-sweep 1.2s infinite ease-in-out;
 }
 
 @keyframes bifrost-progress-sweep {
@@ -668,80 +1265,36 @@ body.installer-mode .installer-backdrop {
   }
 }
 
-.installer-error {
-  padding: 10px 12px;
-  border-radius: 6px;
-  border: 1px solid var(--fail);
-  color: var(--fail);
-  background: rgba(255, 153, 164, 0.08);
-  font-size: 12px;
-  word-break: break-word;
-}
-
-.installer-warning {
-  padding: 10px 12px;
-  border-radius: 6px;
-  border: 1px solid var(--warn);
-  color: var(--warn);
-  font-size: 12px;
-  word-break: break-word;
-}
-
-.meta-chip.warn {
-  border-color: var(--warn);
-  color: var(--warn);
-}
-
-.graphics-advice-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-}
-
 .installer-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 8px;
 }
 
-.btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
+.hidden {
+  display: none !important;
 }
 
-/* First-run setup wizard */
-.badge.setup-done {
-  color: var(--pass);
-  border: 1px solid var(--pass);
-}
-
-.badge.setup-pending {
-  color: var(--warn);
-  border: 1px solid var(--warn);
-}
-
-.badge.setup-blocked {
-  opacity: 0.6;
-  border: 1px solid currentColor;
-}
-
-.setup-step.blocked strong {
-  opacity: 0.7;
-}
-
-.setup-step-action:not(:empty) {
-  margin-top: 8px;
-}
-
-.nav-item.needs-attention::after {
-  content: "";
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  margin-left: 8px;
-  border-radius: 50%;
-  background: var(--warn);
-  vertical-align: middle;
+@media (max-width: 860px) {
+  .app-shell {
+    grid-template-columns: 62px 1fr;
+  }
+  .nav-profile-text,
+  .nav-item span,
+  #sidebar-runtime-label {
+    display: none;
+  }
+  .nav-profile,
+  .nav-item,
+  .runtime-chip {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .tiles-grid {
+    grid-template-columns: 1fr;
+  }
+  .content-scroll {
+    padding: 22px 20px 32px 20px;
+  }
 }
