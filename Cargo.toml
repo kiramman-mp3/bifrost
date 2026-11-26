@@ -8,6 +8,7 @@ members = [
     "crates/bifrost-runtime",
     "crates/bifrost-bridge",
     "crates/bifrost-display",
+    "crates/bifrost-client",
     "crates/bifrost-process",
     "crates/bifrost-network",
     "crates/valhalla",
@@ -17,12 +18,14 @@ members = [
 ]
 
 [workspace.package]
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
-rust-version = "1.80"
+rust-version = "1.89"
 authors = ["Johan Rodríguez"]
 license = "Apache-2.0"
 repository = "https://github.com/kiramman-mp3/bifrost"
+# Internal workspace crates; nothing is published to crates.io.
+publish = false
 
 [workspace.lints.rust]
 unsafe_code = "deny"
@@ -43,6 +46,7 @@ tempfile = "3.13"
 thiserror = "2.0"
 tokio = { version = "1.43", features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 toml = "0.8"
+toml_edit = "0.22"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
 windows = "0.58"
@@ -50,4 +54,4 @@ winreg = "0.56"
 mslnk = "0.1.8"
 proptest = { version = "1.5", default-features = false, features = ["std"] }
 uds_windows = "1.2"
-zip = { version = "2.2", default-features = false, features = ["deflate"] }
+zip = { version = "9.8", default-features = false, features = ["deflate-flate2-zlib-rs"] }

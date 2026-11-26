@@ -21,6 +21,9 @@
           <button class="nav-item active" role="tab" aria-selected="true" data-section="dashboard">
             Dashboard
           </button>
+          <button class="nav-item" id="nav-setup" role="tab" aria-selected="false" data-section="setup">
+            Setup
+          </button>
           <button class="nav-item" role="tab" aria-selected="false" data-section="apps">
             Applications
           </button>
@@ -92,6 +95,25 @@
           </div>
         </div>
         <div id="toast-banner" class="toast hidden" role="status" aria-live="polite"></div>
+
+        <!-- FIRST-RUN SETUP -->
+        <section id="section-setup" class="panel" role="tabpanel">
+          <header class="panel-header">
+            <div>
+              <h2>Setup</h2>
+              <p class="muted" id="setup-summary">Checking what this PC still needs…</p>
+            </div>
+            <div class="actions">
+              <button class="btn" id="btn-setup-refresh" type="button">Check again</button>
+              <button class="btn subtle" id="btn-setup-hide" type="button">Hide for now</button>
+            </div>
+          </header>
+
+          <article class="card">
+            <h3>First-run checklist</h3>
+            <div id="setup-steps" class="checks-list"></div>
+          </article>
+        </section>
 
         <!-- 1. DASHBOARD -->
         <section id="section-dashboard" class="panel active" role="tabpanel">
@@ -250,8 +272,8 @@
             <div class="form-row">
               <label for="cfg-graphics">Graphics Mode</label>
               <select id="cfg-graphics">
-                <option value="auto">Auto (virtio-gpu-pci 2D — Recommended Default)</option>
-                <option value="gfxstream">Hardware 3D Headless (virtio-gpu-gl + ANGLE/virgl, Experimental)</option>
+                <option value="auto">Auto — CPU rendering, OpenGL ES 3.1 (Recommended Default)</option>
+                <option value="gfxstream">GPU acceleration — host GPU via virgl (Experimental: OpenGL ES 2.0 only, no Vulkan, headless)</option>
                 <option value="swift_shader">SwiftShader (CPU Diagnostics)</option>
               </select>
             </div>
@@ -303,6 +325,10 @@
                 <label class="checkbox-label">
                   <input id="cfg-auto-sync-clipboard" type="checkbox" checked />
                   Auto-sync Windows &rarr; Android clipboard
+                </label>
+                <label class="checkbox-label">
+                  <input id="cfg-close-to-tray" type="checkbox" checked />
+                  Keep BIFRÖST in the system tray when the window is closed
                 </label>
               </div>
             </div>
@@ -384,6 +410,23 @@
           </article>
 
           <article class="card">
+            <h3>Trusted Publishers</h3>
+            <p class="muted small-text">
+              Ed25519 public keys in <code>[images] trusted_keys</code>. A bundle registers as signed only when its
+              <code>manifest.json.sig</code> verifies against one of these keys. Compare the fingerprint with the one the
+              publisher announces before adding a key.
+            </p>
+            <div id="trusted-keys-list" class="list-box muted">Loading trusted publisher keys…</div>
+            <div class="form-row">
+              <label for="trusted-key-input">Publisher public key (64 hex characters)</label>
+              <div class="input-with-btn">
+                <input id="trusted-key-input" type="text" spellcheck="false" autocomplete="off" placeholder="e.g. 3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c" />
+                <button class="btn primary" id="btn-add-trusted-key" type="button">Add Key</button>
+              </div>
+            </div>
+          </article>
+
+          <article class="card">
             <h3>Persistent Userdata Backup &amp; Restore</h3>
             <p class="muted small-text">
               Backups compute and verify a SHA-256 digest of your Android <code>userdata.img</code>. Stop Midgard before restoring.
@@ -416,6 +459,14 @@
           </header>
 
           <article class="card">
+            <div class="card-header-inline">
+              <h3>Updates</h3>
+              <button class="btn subtle small" id="btn-check-updates" type="button">Check for updates</button>
+            </div>
+            <p class="muted" id="update-status">BIFRÖST checks GitHub only when you ask. It never downloads or installs anything by itself.</p>
+          </article>
+
+          <article class="card">
             <h3>Storage &amp; Integration Paths</h3>
             <dl class="kv-list" id="settings-paths"></dl>
           </article>
@@ -446,6 +497,6 @@
       </main>
     </div>
 
-    <script src="app.js"></script>
+    <script type="module" src="js/main.js"></script>
   </body>
 </html>

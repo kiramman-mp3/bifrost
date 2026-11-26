@@ -1,13 +1,14 @@
 //! BIFRÖST Desktop Application (`bifrost-ui`) — Tauri 2 Rust backend entry point.
 //!
 //! All business logic, configuration validation, diagnostics, and IPC live in
-//! `service.rs` and workspace crates; this file exposes thin `#[tauri::command]`
+//! the `service` module and workspace crates; this file exposes thin `#[tauri::command]`
 //! bindings to the Windows 11 Fluent Design WebView frontend.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 #![forbid(unsafe_code)]
 
 mod service;
+mod tray;
 
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -15,6 +16,7 @@ use std::sync::Mutex;
 use bifrost_bridge::{
     dispatch_windows_toast, AndroidNotification, DaemonHealthReport, SharedFileEntry,
 };
+use bifrost_client::setup::SetupPlan;
 use bifrost_core::config::LoggingConfig;
 use bifrost_core::logging::init_logging;
 use bifrost_core::BifrostConfig;
@@ -23,7 +25,7 @@ use bifrost_display::AppWindowHandle;
 use bifrost_network::PortForwardRule;
 use bifrost_process::AndroidProcess;
 use bifrost_runtime::{RuntimeLogs, RuntimeRecord};
-use bifrost_storage::{BackupMetadata, ImageRegistry, InstalledImageRecord};
+use bifrost_storage::{BackupMetadata, ImageRegistry, InstalledImageRecord, TrustedKeyInfo};
 use tauri::{Emitter, Manager};
 use valhalla::manager::{InstallOutcome, LaunchOutcome};
 use valhalla::{
@@ -36,6 +38,15 @@ struct PendingInstallState(Mutex<Option<PathBuf>>);
 
 fn map_err<T>(res: bifrost_core::Result<T>) -> Result<T, String> {
     res.map_err(|err| err.to_string())
+}
+
+/// Runs a blocking service call on Tokio's blocking pool. Synchronous Tauri commands
+/// execute on the window's main thread, so ADB calls, image hashing or userdata copies
+/// there would freeze the UI (and delay events such as hiding to the tray).
+async fn off_main_thread<T: Send + 'static>(
+    op: impl FnOnce() -> bifrost_core::Result<T> + Send + 'static,
+) -> Result<T, String> {
+    map_err(bifrost_client::blocking(op).await)
 }
 
 #[tauri::command]
@@ -54,23 +65,23 @@ async fn stop_heimdall() -> Result<(), String> {
 }
 
 #[tauri::command]
-fn set_heimdall_autostart(enabled: bool) -> Result<HeimdallAutostartStatus, String> {
-    map_err(service::set_heimdall_autostart(enabled))
+async fn set_heimdall_autostart(enabled: bool) -> Result<HeimdallAutostartStatus, String> {
+    off_main_thread(move || service::set_heimdall_autostart(enabled)).await
 }
 
 #[tauri::command]
-fn get_doctor_report() -> Result<DoctorReport, String> {
-    map_err(service::get_doctor_report())
+async fn get_doctor_report() -> Result<DoctorReport, String> {
+    off_main_thread(service::get_doctor_report).await
 }
 
 #[tauri::command]
-fn save_config(config: BifrostConfig) -> Result<PathBuf, String> {
-    map_err(service::save_config(config))
+async fn save_config(config: BifrostConfig) -> Result<PathBuf, String> {
+    off_main_thread(move || service::save_config(config)).await
 }
 
 #[tauri::command]
-fn auto_tune_config() -> Result<BifrostConfig, String> {
-    map_err(service::auto_tune_config())
+async fn auto_tune_config() -> Result<BifrostConfig, String> {
+    off_main_thread(service::auto_tune_config).await
 }
 
 #[tauri::command]
@@ -89,6 +100,26 @@ async fn restart_runtime(
     headless: bool,
 ) -> Result<RuntimeRecord, String> {
     map_err(service::restart_runtime(manifest_path, headless).await)
+}
+
+#[tauri::command]
+async fn get_setup_plan() -> Result<SetupPlan, String> {
+    map_err(service::get_setup_plan().await)
+}
+
+#[tauri::command]
+async fn install_setup_tool(step_id: String) -> Result<SetupPlan, String> {
+    map_err(service::install_setup_tool(step_id).await)
+}
+
+#[tauri::command]
+async fn check_for_updates() -> Result<bifrost_client::update::UpdateInfo, String> {
+    map_err(service::check_for_updates().await)
+}
+
+#[tauri::command]
+async fn start_first_boot() -> Result<RuntimeRecord, String> {
+    map_err(service::start_first_boot().await)
 }
 
 #[tauri::command]
@@ -124,8 +155,8 @@ async fn preview_package_install(apk_path: PathBuf) -> Result<PackageInstallPrev
 }
 
 #[tauri::command]
-fn inspect_apk_file(apk_path: PathBuf) -> Result<ApkInspection, String> {
-    map_err(service::inspect_apk_file(apk_path))
+async fn inspect_apk_file(apk_path: PathBuf) -> Result<ApkInspection, String> {
+    off_main_thread(move || service::inspect_apk_file(apk_path)).await
 }
 
 #[tauri::command]
@@ -162,22 +193,22 @@ async fn launch_app_window(
 }
 
 #[tauri::command]
-fn list_app_shortcuts() -> Result<Vec<ShortcutRecord>, String> {
-    map_err(service::list_app_shortcuts())
+async fn list_app_shortcuts() -> Result<Vec<ShortcutRecord>, String> {
+    off_main_thread(service::list_app_shortcuts).await
 }
 
 #[tauri::command]
-fn create_app_shortcut(
+async fn create_app_shortcut(
     package: String,
     name: Option<String>,
     apk_path: Option<PathBuf>,
 ) -> Result<ShortcutRecord, String> {
-    map_err(service::create_app_shortcut(package, name, apk_path))
+    off_main_thread(move || service::create_app_shortcut(package, name, apk_path)).await
 }
 
 #[tauri::command]
-fn remove_app_shortcut(package: String) -> Result<bool, String> {
-    map_err(service::remove_app_shortcut(package))
+async fn remove_app_shortcut(package: String) -> Result<bool, String> {
+    off_main_thread(move || service::remove_app_shortcut(package)).await
 }
 
 #[tauri::command]
@@ -186,46 +217,66 @@ async fn stop_app(package: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn list_shared_files() -> Result<Vec<SharedFileEntry>, String> {
-    map_err(service::list_shared_files())
+async fn list_shared_files() -> Result<Vec<SharedFileEntry>, String> {
+    off_main_thread(service::list_shared_files).await
 }
 
 #[tauri::command]
-fn list_processes(filter: Option<String>) -> Result<Vec<AndroidProcess>, String> {
-    map_err(service::list_processes(filter))
+async fn list_processes(filter: Option<String>) -> Result<Vec<AndroidProcess>, String> {
+    off_main_thread(move || service::list_processes(filter)).await
 }
 
 #[tauri::command]
-fn list_network_forwards() -> Result<Vec<PortForwardRule>, String> {
-    map_err(service::list_network_forwards())
+async fn list_network_forwards() -> Result<Vec<PortForwardRule>, String> {
+    off_main_thread(service::list_network_forwards).await
 }
 
 #[tauri::command]
-fn list_images() -> Result<ImageRegistry, String> {
-    map_err(service::list_images())
+async fn list_images() -> Result<ImageRegistry, String> {
+    off_main_thread(service::list_images).await
 }
 
 #[tauri::command]
-fn register_image(
+async fn register_image(
     manifest_path: PathBuf,
     allow_unsigned: bool,
 ) -> Result<InstalledImageRecord, String> {
-    map_err(service::register_image(manifest_path, allow_unsigned))
+    off_main_thread(move || service::register_image(manifest_path, allow_unsigned)).await
 }
 
 #[tauri::command]
-fn activate_image(image_id: String) -> Result<InstalledImageRecord, String> {
-    map_err(service::activate_image(image_id))
+async fn list_trusted_keys() -> Result<Vec<TrustedKeyInfo>, String> {
+    off_main_thread(service::list_trusted_keys).await
 }
 
 #[tauri::command]
-fn backup_userdata(output_dir: PathBuf) -> Result<BackupMetadata, String> {
-    map_err(service::backup_userdata_to(output_dir))
+async fn add_trusted_key(public_key: String) -> Result<Vec<TrustedKeyInfo>, String> {
+    off_main_thread(move || service::add_trusted_key(public_key)).await
 }
 
 #[tauri::command]
-fn restore_userdata(from_dir: PathBuf) -> Result<BackupMetadata, String> {
-    map_err(service::restore_userdata_from(from_dir))
+async fn trusted_key_removal_impact(public_key: String) -> Result<Vec<String>, String> {
+    off_main_thread(move || service::trusted_key_removal_impact(public_key)).await
+}
+
+#[tauri::command]
+async fn remove_trusted_key(public_key: String) -> Result<Vec<TrustedKeyInfo>, String> {
+    off_main_thread(move || service::remove_trusted_key(public_key)).await
+}
+
+#[tauri::command]
+async fn activate_image(image_id: String) -> Result<InstalledImageRecord, String> {
+    off_main_thread(move || service::activate_image(image_id)).await
+}
+
+#[tauri::command]
+async fn backup_userdata(output_dir: PathBuf) -> Result<BackupMetadata, String> {
+    off_main_thread(move || service::backup_userdata_to(output_dir)).await
+}
+
+#[tauri::command]
+async fn restore_userdata(from_dir: PathBuf) -> Result<BackupMetadata, String> {
+    off_main_thread(move || service::restore_userdata_from(from_dir)).await
 }
 
 #[tauri::command]
@@ -288,9 +339,31 @@ fn main() {
     };
     let is_installer_mode = pending_install.is_some();
 
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+    if !is_installer_mode {
+        // A second dashboard launch focuses the existing (possibly tray-hidden) window.
+        // The App Installer (`--install-apk`) and `--launch-app` stay independent.
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            tray::show_main_window(app);
+        }));
+    }
+    builder
         .manage(PendingInstallState(Mutex::new(pending_install)))
+        .on_window_event(move |window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if !is_installer_mode
+                    && window.label() == "main"
+                    && service::close_to_tray_enabled()
+                {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .setup(move |app| {
+            if !is_installer_mode {
+                tray::install(app.handle())?;
+            }
             if is_installer_mode {
                 if let Some(win) = app.get_webview_window("main") {
                     let _ = win.set_title("BIFRÖST — App Installer");
@@ -316,6 +389,10 @@ fn main() {
             stop_runtime,
             restart_runtime,
             get_logs,
+            get_setup_plan,
+            install_setup_tool,
+            start_first_boot,
+            check_for_updates,
             list_apps,
             get_app_info,
             inspect_apk_file,
@@ -333,6 +410,10 @@ fn main() {
             list_images,
             register_image,
             activate_image,
+            list_trusted_keys,
+            add_trusted_key,
+            trusted_key_removal_impact,
+            remove_trusted_key,
             backup_userdata,
             restore_userdata,
             pick_file_dialog,

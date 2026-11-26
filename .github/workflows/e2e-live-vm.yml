@@ -1,0 +1,55 @@
+name: BIFRÖST live VM e2e
+
+# Boots a real Midgard VM (QEMU-WHPX + LineageOS x86_64) through the `bifrost` CLI.
+# GitHub-hosted runners cannot create WHPX partitions, so this runs only on a
+# self-hosted Windows 11 runner labelled `whpx`, and only when started by hand:
+# never on pull requests, so code from forks never reaches that machine.
+# Setup: docs/research/self-hosted-e2e-runner.md
+
+on:
+  workflow_dispatch:
+    inputs:
+      manifest:
+        description: "Path to a staged, SHA-256-verified Midgard manifest.json on the runner (empty: repository variable BIFROST_E2E_MANIFEST)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-vm-e2e
+  cancel-in-progress: false
+
+jobs:
+  live-vm:
+    name: Boot Midgard and drive it with bifrost (self-hosted WHPX)
+    runs-on: [self-hosted, Windows, X64, whpx]
+    timeout-minutes: 45
+    env:
+      BIFROST_E2E_MANIFEST: ${{ inputs.manifest != '' && inputs.manifest || vars.BIFROST_E2E_MANIFEST }}
+      # ASCII target dir: GNU ld cannot resolve object paths under non-ASCII folders.
+      CARGO_TARGET_DIR: ${{ runner.temp }}\bifrost-e2e-target
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Require a staged image manifest
+        # The test skips (and passes) without a manifest; fail instead of reporting a
+        # green run that booted nothing.
+        shell: pwsh
+        run: |
+          if (-not $env:BIFROST_E2E_MANIFEST -or -not (Test-Path -LiteralPath $env:BIFROST_E2E_MANIFEST -PathType Leaf)) {
+            Write-Error "BIFROST_E2E_MANIFEST ('$env:BIFROST_E2E_MANIFEST') does not point to a manifest.json on this runner."
+            exit 1
+          }
+
+      - name: Show host readiness (bifrost doctor)
+        shell: pwsh
+        run: cargo run --locked -p mimir -- doctor --strict
+
+      - name: Run the live VM end-to-end test
+        shell: pwsh
+        run: cargo test --locked -p mimir --test e2e_live_vm -- --ignored --nocapture

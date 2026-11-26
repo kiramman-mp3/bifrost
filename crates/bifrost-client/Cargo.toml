@@ -1,0 +1,27 @@
+[package]
+name = "bifrost-client"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "Client-side control plane shared by Mimir and the desktop UI: Heimdall IPC when the daemon is up, direct runtime calls otherwise."
+
+[lints]
+workspace = true
+
+[dependencies]
+bifrost-bridge = { path = "../bifrost-bridge" }
+bifrost-core = { path = "../bifrost-core" }
+bifrost-display = { path = "../bifrost-display" }
+bifrost-runtime = { path = "../bifrost-runtime" }
+serde.workspace = true
+serde_json.workspace = true
+bifrost-diagnostics = { path = "../bifrost-diagnostics" }
+tokio.workspace = true
+valhalla = { path = "../valhalla" }
+
+[dev-dependencies]
+tempfile.workspace = true

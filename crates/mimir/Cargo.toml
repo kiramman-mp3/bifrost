@@ -6,6 +6,7 @@ rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+publish.workspace = true
 description = "Mimir — Administrative command-line interface (`bifrost`) for BIFRÖST."
 
 [lints]
@@ -19,6 +20,7 @@ path = "src/main.rs"
 bifrost-bridge = { path = "../bifrost-bridge" }
 bifrost-core = { path = "../bifrost-core" }
 bifrost-diagnostics = { path = "../bifrost-diagnostics" }
+bifrost-client = { path = "../bifrost-client" }
 bifrost-display = { path = "../bifrost-display" }
 bifrost-network = { path = "../bifrost-network" }
 bifrost-process = { path = "../bifrost-process" }

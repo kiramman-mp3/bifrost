@@ -76,7 +76,7 @@ impl VersionInfo {
                     name: "mimir".to_string(),
                     status: FeatureStatus::Implemented,
                     summary:
-                        "Full CLI (version, status, config, doctor, runtime, logs, devices, daemon, apps, install, share, clipboard, notifications, processes, network, images, recovery)"
+                        "Full CLI (version, status, config, setup, doctor, runtime, logs, devices, daemon, apps, install, uninstall, share, clipboard, notifications, processes, network, images, recovery, desktop)"
                             .to_string(),
                 },
                 ComponentCapability {
@@ -118,7 +118,7 @@ impl VersionInfo {
                     name: "bifrost-ui".to_string(),
                     status: FeatureStatus::Implemented,
                     summary:
-                        "Windows 11 Fluent Design 2 Tauri 2 desktop app with pure-Rust backend (Dashboard, Apps, Runtime Config, Diagnostics, Settings)"
+                        "Windows 11 Fluent Design 2 Tauri 2 desktop app with pure-Rust backend (Dashboard, Setup, Apps, Runtime Config, Diagnostics, Images & Recovery, Settings, system tray)"
                             .to_string(),
                 },
                 ComponentCapability {

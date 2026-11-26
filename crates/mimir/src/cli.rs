@@ -73,6 +73,16 @@ pub enum Command {
         strict: bool,
     },
 
+    /// Check GitHub for a newer BIFRÖST release (downloads and installs nothing).
+    Update,
+
+    /// Show the first-run checklist (virtualization, tools, image, first boot).
+    Setup {
+        /// Install a missing tool with winget in a visible window: qemu, adb or scrcpy.
+        #[arg(long, value_name = "TOOL", value_parser = ["qemu", "adb", "scrcpy"])]
+        install: Option<String>,
+    },
+
     /// Manage the Midgard Android runtime lifecycle (start, stop, restart, verify).
     Runtime {
         #[command(subcommand)]

@@ -34,9 +34,10 @@ main        # Stable releases only — never commit directly to main
 3. Verify formatting, lints, tests, and build before merging (with the GNU toolchain in a non-ASCII checkout path such as `BIFRÖST`, set an ASCII `CARGO_TARGET_DIR` first):
    ```bash
    cargo fmt --all -- --check
-   cargo clippy --workspace --all-targets -- -D warnings
-   cargo test --workspace
-   cargo build --workspace
+   cargo clippy --workspace --all-targets --locked -- -D warnings
+   cargo test --workspace --locked
+   cargo build --workspace --locked
+   cargo deny check   # cargo install cargo-deny --locked
    ```
 4. Integrate completed work into `develop` with `--no-ff`.
 5. Releases: prepare `release/vX.Y.Z` (version bump + `CHANGELOG.md` section), merge it into `main` and `develop`, then push the `vX.Y.Z` tag. Release binaries are built only by `.github/workflows/release.yml` (see `installer/README.md`).

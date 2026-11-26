@@ -363,15 +363,17 @@ button:focus-visible {
 }
 
 .checks-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(74px, max-content) 1fr;
   gap: 8px;
 }
 
 .check-row {
   display: grid;
-  grid-template-columns: 74px 1fr;
-  gap: 12px;
+  grid-column: 1 / -1;
+  /* Share the list's columns so every badge column is as wide as the longest label. */
+  grid-template-columns: subgrid;
+  column-gap: 12px;
   padding: 10px 12px;
   border-radius: 6px;
   background: var(--bg-input);
@@ -383,6 +385,8 @@ button:focus-visible {
   align-items: center;
   justify-content: center;
   height: 24px;
+  padding: 0 8px;
+  white-space: nowrap;
   border-radius: 4px;
   font-size: 11px;
   font-weight: 700;
@@ -683,4 +687,39 @@ body.installer-mode .installer-backdrop {
 .btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+/* First-run setup wizard */
+.badge.setup-done {
+  color: var(--pass);
+  border: 1px solid var(--pass);
+}
+
+.badge.setup-pending {
+  color: var(--warn);
+  border: 1px solid var(--warn);
+}
+
+.badge.setup-blocked {
+  opacity: 0.6;
+  border: 1px solid currentColor;
+}
+
+.setup-step.blocked strong {
+  opacity: 0.7;
+}
+
+.setup-step-action:not(:empty) {
+  margin-top: 8px;
+}
+
+.nav-item.needs-attention::after {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-left: 8px;
+  border-radius: 50%;
+  background: var(--warn);
+  vertical-align: middle;
 }

@@ -6,6 +6,7 @@ rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+publish.workspace = true
 description = "Midgard Android runtime lifecycle orchestration, state persistence, and log inspection for BIFRÖST."
 
 [lints]

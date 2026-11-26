@@ -6,6 +6,45 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-25
+
+### Security
+- **Dependency audit (`deny.toml`, CI)**: `cargo deny check` runs on every push and pull request (RustSec advisories, licenses compatible with Apache-2.0, crates.io as the only source). Its first run found RUSTSEC-2026-0367/0368/0369/0429/0545/0548 in `zip` 2.6.1 and RUSTSEC-2026-0594 in `cookie` 0.18.2. Valhalla never called the affected `extract`/`ZipStreamReader`/AES paths, but it parses untrusted APKs with `zip`, so it moved to `zip` 9.8 (pure-Rust deflate only) and `cookie` 0.18.3. APK entries whose names cannot be decoded now reject the archive.
+
+### Changed
+- **MSRV raised to Rust 1.89**, required by `zip` 9.
+- **CI builds with `--locked`** (clippy, tests and release build), so a stale `Cargo.lock` fails CI as it already failed the release workflow.
+- **Workspace crates are marked `publish = false`**; none is published to crates.io.
+
+### Added
+- **`bifrost-client` crate**: a `Session` facade shared by Mimir and the desktop UI. It loads the effective config, probes Heimdall once, and routes status, runtime, logs, app and install operations over IPC when the daemon answers or directly otherwise. It also owns the headless auto-boot before app launch/install and the detached Heimdall start, which were duplicated in both front ends (`mimir` lost ~300 lines, `bifrost-ui`'s `service.rs` ~200).
+
+- **Trusted Publishers card (`bifrost-ui`, `bifrost-storage`, `bifrost-core`)**: Images & Recovery lists `[images] trusted_keys` with SHA-256 fingerprints, adds keys only when they are valid Ed25519 points (the config schema only checks 64 hex characters), and asks for confirmation before removing one, naming the registered images whose `manifest.json.sig` verifies only with that key. `bifrost.toml` is edited with `toml_edit`, so comments and other settings are kept.
+
+- **System tray icon (`bifrost-ui`)**: the notification-area menu shows the Midgard state and offers Open, Start/Stop Midgard, pinned apps (those with BIFRÖST shortcuts) and Quit, rebuilt whenever the pointer enters the icon. Closing the window hides it to the tray (`[desktop] close_to_tray`, on by default, Settings checkbox), and launching the dashboard again focuses the existing window (`tauri-plugin-single-instance`). The App Installer and `--launch-app` modes keep their own windows.
+
+- **First-run setup (`bifrost-client`, `bifrost-ui`, `mimir`)**: a checklist derived from `doctor` and the ADB endpoint state (WHPX, QEMU, `adb`, optional `scrcpy`, active image, first Android boot until ADB is `ready`). The desktop app opens a Setup view while required steps remain; `bifrost setup` prints it. Missing tools install only on request, from an allowlist of `winget` packages, in a visible console without `--silent` or `--accept-package-agreements`, so the license prompt, installer UI and UAC stay in front of the user. The first boot runs Midgard with a window (restarting a headless VM) so the user can finish Android's welcome screens and allow USB debugging. Enabling Windows features stays a manual step with instructions.
+- **Tool lookup sees fresh installs (`bifrost-core`)**: `adb`, `scrcpy` and QEMU are also searched on the persisted user/machine `PATH` from the registry, so a tool `winget` just installed is found without restarting BIFRÖST. The three duplicated lookups now share `bifrost_core::find_on_path`.
+
+- **Update notice (`bifrost-client`, `mimir`, `bifrost-ui`)**: `bifrost update` and a Settings card compare the running build with the latest GitHub release and explain how to upgrade with the SHA-256-verified release bundle. The check runs only on request, uses Windows' own `curl.exe` (HTTPS only, 15 s limit, no user or host data) and downloads or installs nothing.
+
+- **Live VM e2e workflow (Experimental)**: `.github/workflows/e2e-live-vm.yml` runs the `e2e_live_vm` test on a self-hosted Windows 11 runner labelled `whpx`, only on manual dispatch (never for pull requests), and fails instead of passing vacuously when no image manifest is configured. No runner is registered yet; see `docs/research/self-hosted-e2e-runner.md`.
+
+- **GPU acceleration actually reaches the host GPU (`bifrost-hypervisor`, Experimental)**: with `graphics_mode = "gfxstream"` (headless), Android fell back to Mesa `llvmpipe` because the guest SELinux policy labels the GPU's sysfs node only at PCI slots 01/02/03/1e and QEMU placed it at 07. The GL device now sits at `addr=0x1e`, and SurfaceFlinger renders through virgl on the host GPU (ANGLE Direct3D 11). On the reference Intel Arc 140T, median UI frame time drops from about 81 ms to 44 ms and janky frames from about 80 % to 27 %. The mode is limited to OpenGL ES 2.0 with no Vulkan, so the 2D default (OpenGL ES 3.1 in software) stays the default.
+
+### Documentation
+- **Hardware compatibility matrix** (`docs/research/hardware-matrix.md`): the verified reference host and the untested configurations, with how to verify each.
+- **ADR-0007, guest GPU rendering**: documents the measured renderers, the root cause of the virgl software fallback and the benchmark behind the opt-in GPU mode.
+
+### Fixed
+- **Status badges overflowed (`bifrost-ui`)**: long labels such as `IMPLEMENTED` spilled out of the fixed 74 px badge column in Settings; check lists now share one column sized to the longest badge.
+- **Blocking desktop commands ran on the window thread (`bifrost-ui`)**: synchronous Tauri commands execute on the main thread, so ADB calls (processes, port forwards), image SHA-256 hashing, `userdata.img` backup/restore and the doctor report froze the window while running. All 20 I/O commands now run on the blocking pool.
+- **UI froze a Tokio worker while auto-booting (`bifrost-ui`)**: launching an app window with Midgard stopped waited up to 90 s for ADB on an async worker. Direct ADB, runtime and Valhalla calls from the UI now run on the blocking pool.
+- **Install with no active image (`mimir`, `bifrost-ui`)**: installing while no device is online and no image is active now reports why Midgard could not auto-start, instead of failing later with "no device".
+
+### Performance
+- **Toast identity registered once per process (`bifrost-bridge`)**: every notification used to rewrite the icon file and the HKCU AUMID values. Registration now runs until it succeeds once; failures are retried on the next toast. The toast icon is embedded from `crates/bifrost-bridge/assets` instead of reaching into the desktop app's directory.
+
 ## [0.4.0] - 2026-11-24
 
 ### Security

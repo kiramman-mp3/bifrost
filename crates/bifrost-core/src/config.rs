@@ -15,10 +15,12 @@ pub const CURRENT_SCHEMA_VERSION: u32 = 1;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum GraphicsMode {
-    /// Prefer hardware-accelerated `virtio-gpu` + `gfxstream`, falling back to SwiftShader if unavailable.
+    /// 2D `virtio-gpu-pci`; Android renders with ANGLE on SwiftShader (CPU). See ADR-0007.
     #[default]
     Auto,
-    /// Require hardware-accelerated `virtio-gpu` + `gfxstream`.
+    /// Experimental GPU acceleration. On QEMU (headless): `virtio-gpu-gl-pci` at PCI slot 0x1e,
+    /// rendered by virgl on the host GPU through ANGLE, OpenGL ES 2.0 only. On crosvm:
+    /// `gfxstream`. See ADR-0007.
     Gfxstream,
     /// Force CPU software rendering (SwiftShader) for diagnostics or headless bring-up.
     SwiftShader,
@@ -160,6 +162,8 @@ pub struct DesktopConfig {
     pub forward_notifications: bool,
     /// Automatically sync Windows <-> Android clipboard text changes via Heimdall.
     pub auto_sync_clipboard: bool,
+    /// Closing the desktop app window hides it to the system tray instead of exiting.
+    pub close_to_tray: bool,
 }
 
 impl Default for DesktopConfig {
@@ -168,6 +172,7 @@ impl Default for DesktopConfig {
             auto_sync_shortcuts: true,
             forward_notifications: true,
             auto_sync_clipboard: true,
+            close_to_tray: true,
         }
     }
 }
@@ -260,6 +265,51 @@ impl BifrostConfig {
             }
         }
         std::fs::write(&safe_path, serialized).map_err(|source| BifrostError::Io {
+            context: format!("writing config '{}'", safe_path.display()),
+            source,
+        })
+    }
+
+    /// Replaces `[images] trusted_keys` in a config file while keeping the rest of the
+    /// file (comments, ordering, formatting) intact. A missing file is created from the
+    /// defaults. The edited document is validated before anything is written.
+    pub fn write_trusted_keys(path: impl AsRef<Path>, keys: &[String]) -> Result<()> {
+        let safe_path = validate_host_file_path(path, Some("toml"))?;
+        let raw = if safe_path.exists() {
+            std::fs::read_to_string(&safe_path).map_err(|source| BifrostError::Io {
+                context: format!("reading config '{}'", safe_path.display()),
+                source,
+            })?
+        } else {
+            Self::default().to_toml_pretty()?
+        };
+        let mut doc: toml_edit::DocumentMut = raw
+            .parse()
+            .map_err(|err: toml_edit::TomlError| BifrostError::ConfigParse(err.to_string()))?;
+        let images = doc
+            .entry("images")
+            .or_insert_with(|| toml_edit::Item::Table(toml_edit::Table::new()))
+            .as_table_like_mut()
+            .ok_or_else(|| BifrostError::ConfigValidation {
+                field: "images".to_string(),
+                reason: "is not a table".to_string(),
+            })?;
+        let mut array = toml_edit::Array::new();
+        for key in keys {
+            array.push(key.as_str());
+        }
+        images.insert("trusted_keys", toml_edit::value(array));
+        let edited = doc.to_string();
+        Self::from_toml_str(&edited)?;
+        if let Some(parent) = safe_path.parent() {
+            if !parent.as_os_str().is_empty() {
+                std::fs::create_dir_all(parent).map_err(|source| BifrostError::Io {
+                    context: format!("creating config directory '{}'", parent.display()),
+                    source,
+                })?;
+            }
+        }
+        std::fs::write(&safe_path, edited).map_err(|source| BifrostError::Io {
             context: format!("writing config '{}'", safe_path.display()),
             source,
         })
@@ -368,6 +418,55 @@ impl BifrostConfig {
 mod tests {
     use super::*;
     use tempfile::TempDir;
+
+    #[test]
+    fn write_trusted_keys_preserves_comments_and_other_settings() {
+        let dir = std::env::temp_dir().join(format!("bifrost-cfg-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("bifrost.toml");
+        std::fs::write(
+            &path,
+            "# my notes
+schema_version = 1
+
+[runtime]
+cpu_cores = 3 # keep me
+",
+        )
+        .unwrap();
+        let key = "ab".repeat(32);
+        BifrostConfig::write_trusted_keys(&path, std::slice::from_ref(&key)).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("# my notes") && text.contains("cpu_cores = 3 # keep me"));
+        let cfg = BifrostConfig::load_from_file(&path).unwrap();
+        assert_eq!(cfg.images.trusted_keys, vec![key]);
+        assert_eq!(cfg.runtime.cpu_cores, 3);
+
+        BifrostConfig::write_trusted_keys(&path, &[]).unwrap();
+        assert!(BifrostConfig::load_from_file(&path)
+            .unwrap()
+            .images
+            .trusted_keys
+            .is_empty());
+        assert!(BifrostConfig::write_trusted_keys(&path, &["bad".to_string()]).is_err());
+        assert!(std::fs::read_to_string(&path)
+            .unwrap()
+            .contains("# my notes"));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn desktop_close_to_tray_defaults_on_for_existing_files() {
+        let cfg = BifrostConfig::from_toml_str(
+            "schema_version = 1
+[desktop]
+auto_sync_clipboard = false
+",
+        )
+        .unwrap();
+        assert!(cfg.desktop.close_to_tray);
+        assert!(!cfg.desktop.auto_sync_clipboard);
+    }
 
     #[test]
     fn validates_trusted_image_keys() {

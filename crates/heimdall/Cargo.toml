@@ -6,6 +6,7 @@ rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+publish.workspace = true
 description = "Heimdall — Background daemon, Midgard runtime supervisor, health monitor, and authenticated local IPC server for BIFRÖST."
 
 [lints]
