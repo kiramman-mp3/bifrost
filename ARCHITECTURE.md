@@ -1,7 +1,7 @@
 # BIFRÖST System Architecture
 
 > **Status**: Implemented through `v0.5.2` (Milestones 0–8 + post-M8 desktop integration)
-> **Primary Language**: Rust (14-crate Cargo workspace, `152` unit/IPC/fuzz tests)
+> **Primary Language**: Rust (14-crate Cargo workspace, `153` unit/IPC/fuzz tests)
 > **Target Platform**: Windows 11 x64 (Home, Pro, Enterprise)
 
 This document describes the architecture **as implemented**. Where the implementation deviates from the original Milestone 0 design, the deviation is called out and recorded in an ADR.
@@ -89,7 +89,7 @@ There is **no Midgard guest agent** and **no `virtio-vsock` channel** yet: every
 | Bridge | `bifrost-bridge`, `bifrost-process`, `bifrost-network` | Implemented | Loopback ADB wrapper, scoped shared folder (`/sdcard/BifrostShare`), Win32 clipboard, notification parsing + Toasts, guest processes, loopback port forwards, IPC framing and client. |
 | Valhalla | `valhalla` | Implemented | APK/APKM inspection (Zip-Slip, AXML, SHA-256, ADR-0004 ABI), `pm`/`am` install/launch/stop, Desktop & Start Menu `.lnk` + `.ico`, HKCU file association. |
 | Display | `bifrost-display` | Implemented (via `scrcpy`) | Android freeform setup and per-app `VirtualDisplay` windows using `scrcpy >= 3.0 --new-display` (see ADR-0005). |
-| Desktop UI | `apps/bifrost-ui` | Implemented | Tauri 2 Fluent shell (Dashboard, Setup, Apps, Runtime Config, Diagnostics, Images & Recovery, Settings), system tray, and compact App Installer dialog (`--install-apk`). |
+| Desktop UI | `apps/bifrost-ui` | Implemented | Tauri 2 native Windows 11 Mica shell with integrated titlebar, dynamic `HKCU` accent/theme/locale sync, consumer views (Home, Apps, Settings + conditional Setup), opt-in Developer view, system tray, and compact App Installer dialog (`--install-apk`). |
 
 ### 3.1 External host dependencies
 
@@ -183,4 +183,4 @@ bifrost/
 - **3D acceleration is experimental**: Default graphics are `virtio-gpu-pci` (2D DRM/KMS, ANGLE on SwiftShader CPU rendering, OpenGL ES 3.1); `virtio-gpu-gl-pci` + `egl-headless` at PCI slot `0x1e` (virgl on the host GPU, OpenGL ES 2.0) is opt-in (ADR-0007).
 - **No first-party image pipeline**: The verified image is a prebuilt LineageOS 24.0 `virtio_x86_64` bundle; reproducible AOSP builds in Linux CI (ADR-0001) are still planned.
 - **ARM64 translation**: `Unsupported` (ADR-0004).
-- **Test coverage**: Standard CI runs `152` unit, IPC, and property-based fuzz tests because GitHub-hosted runners lack nested WHPX; the live-VM end-to-end test (`crates/mimir/tests/e2e_live_vm.rs`) is opt-in (`--ignored`) and `.github/workflows/e2e-live-vm.yml` has no registered self-hosted `whpx` runner yet.
+- **Test coverage**: Standard CI runs `153` unit, IPC, and property-based fuzz tests because GitHub-hosted runners lack nested WHPX; the live-VM end-to-end test (`crates/mimir/tests/e2e_live_vm.rs`) is opt-in (`--ignored`) and `.github/workflows/e2e-live-vm.yml` has no registered self-hosted `whpx` runner yet.

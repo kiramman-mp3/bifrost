@@ -21,6 +21,40 @@ pub fn list_network_forwards() -> Result<Vec<PortForwardRule>> {
     NetworkManager::new().list_forwards(None)
 }
 
+/// Opens one of BIFRÖST's own per-user directories (`"shared"`, `"logs"`, or `"data"`)
+/// in Windows Explorer, creating it first if needed. Arbitrary paths are rejected.
+pub fn open_known_folder(kind: &str) -> Result<PathBuf> {
+    let (_, _, paths) = load_config_and_paths()?;
+    let target = match kind {
+        "shared" => paths.data_dir.join("shared"),
+        "logs" => paths.logs_dir,
+        "data" => paths.data_dir,
+        other => {
+            return Err(BifrostError::ConfigValidation {
+                field: "folder_kind".to_string(),
+                reason: format!(
+                    "unknown folder kind '{other}' (expected 'shared', 'logs', or 'data')"
+                ),
+            })
+        }
+    };
+    std::fs::create_dir_all(&target).map_err(|source| BifrostError::Io {
+        context: format!("creating directory '{}'", target.display()),
+        source,
+    })?;
+    #[cfg(windows)]
+    {
+        std::process::Command::new("explorer.exe")
+            .arg(&target)
+            .spawn()
+            .map_err(|source| BifrostError::Io {
+                context: format!("opening Explorer for '{}'", target.display()),
+                source,
+            })?;
+    }
+    Ok(target)
+}
+
 /// Opens a native Windows file picker dialog without blocking the async runtime.
 pub async fn pick_file_dialog(title: String, filter: String) -> Result<Option<PathBuf>> {
     tokio::task::spawn_blocking(move || run_native_file_dialog(&title, &filter))

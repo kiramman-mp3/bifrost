@@ -1,15 +1,15 @@
-// First-run setup wizard: checklist from the Rust setup plan, visible winget installs,
-// and the first visible Android boot (polled until ADB access is ready).
+// First-run setup checklist: only shown in the sidebar when required steps remain (or opened from Developer).
 
-import { escapeHtml, invoke, showToast } from "./core.js";
-import { activateSection } from "./views.js";
+import { escapeHtml, invoke, showToast, state } from "./core.js";
+import { t } from "./i18n.js";
+import { activateSection, applyDeveloperMode } from "./views.js";
 
 const DISMISS_KEY = "bifrost-setup-dismissed";
 const POLL_MS = 5000;
 const POLL_LIMIT_MS = 20 * 60 * 1000;
-const STATUS_LABEL = { done: "Done", pending: "To do", blocked: "Waiting" };
 let pollTimer = null;
 let busy = false;
+let forceVisible = false;
 
 function readDismissed() {
   try {
@@ -24,7 +24,7 @@ function writeDismissed(value) {
     if (value) localStorage.setItem(DISMISS_KEY, "1");
     else localStorage.removeItem(DISMISS_KEY);
   } catch {
-    // Storage unavailable: the wizard simply opens again next time.
+    // Ignore storage errors.
   }
 }
 
@@ -32,34 +32,54 @@ function actionButton(step) {
   if (step.status !== "pending") return "";
   switch (step.action.kind) {
     case "winget":
-      return `<button class="btn primary small" data-setup-install="${escapeHtml(step.id)}" type="button">Install with winget</button>`;
+      return `<button class="btn primary small" data-setup-install="${escapeHtml(step.id)}" type="button">${escapeHtml(t("setup.installWinget"))}</button>`;
     case "register_image":
-      return `<button class="btn small" data-setup-goto="images" type="button">Register an image</button>`;
+      return `<button class="btn small" data-setup-goto="developer" type="button">${escapeHtml(t("setup.registerImg"))}</button>`;
     case "first_boot":
-      return `<button class="btn primary small" data-setup-boot type="button">Boot Android with a window</button>`;
+      return `<button class="btn primary small" data-setup-boot type="button">${escapeHtml(t("setup.firstBoot"))}</button>`;
     default:
       return "";
   }
 }
 
 export function renderSetup(plan) {
+  if (!plan) return;
+  state.lastSetupPlan = plan;
+
+  const statusText = {
+    done: t("setup.done"),
+    pending: t("setup.pending"),
+    blocked: t("setup.blocked"),
+  };
+
   document.getElementById("setup-steps").innerHTML = plan.steps
     .map(
       (s) => `
-      <div class="check-row setup-step ${escapeHtml(s.status)}">
-        <span class="badge setup-${escapeHtml(s.status)}">${STATUS_LABEL[s.status] ?? escapeHtml(s.status)}</span>
-        <div>
-          <strong>${escapeHtml(s.title)}</strong>${s.required ? "" : ' <span class="muted">(optional)</span>'}
-          <div class="muted small-text">${escapeHtml(s.detail)}</div>
-          <div class="setup-step-action">${actionButton(s)}</div>
+      <div class="setting-row wrap-row">
+        <div class="setting-left">
+          <div class="setting-text">
+            <strong>${escapeHtml(s.title)} ${s.required ? "" : `<span class="muted small-text">${escapeHtml(t("setup.optional"))}</span>`}</strong>
+            <span class="muted small-text">${escapeHtml(s.detail)}</span>
+          </div>
+        </div>
+        <div class="actions">
+          ${actionButton(s)}
+          <span class="badge setup-${escapeHtml(s.status)}">${escapeHtml(statusText[s.status] ?? s.status)}</span>
         </div>
       </div>`
     )
     .join("");
+
   document.getElementById("setup-summary").textContent = plan.complete
-    ? "Setup is complete. Android apps are ready to run."
-    : "Finish the steps below once. BIFRÖST never installs anything without asking.";
-  document.getElementById("nav-setup").classList.toggle("needs-attention", !plan.complete);
+    ? t("setup.complete")
+    : t("setup.incomplete");
+
+  const navSetup = document.getElementById("nav-setup");
+  if (navSetup) {
+    const showNav = !plan.complete || forceVisible;
+    navSetup.classList.toggle("hidden", !showNav);
+    navSetup.classList.toggle("needs-attention", !plan.complete);
+  }
 }
 
 export async function refreshSetup() {
@@ -69,15 +89,22 @@ export async function refreshSetup() {
     renderSetup(plan);
     return plan;
   } catch (err) {
-    showToast(`Could not check setup: ${err}`, true);
+    showToast(`${err}`, true);
     return null;
   }
 }
 
-// Opens the wizard at start-up while required steps remain, unless the user hid it.
+export async function openSetupManually() {
+  forceVisible = true;
+  await refreshSetup();
+  activateSection("setup");
+}
+
 export async function maybeOpenSetup() {
   const plan = await refreshSetup();
-  if (plan && !plan.complete && !readDismissed()) activateSection("setup");
+  if (plan && !plan.complete && !readDismissed()) {
+    activateSection("setup");
+  }
 }
 
 function stopPolling() {
@@ -96,17 +123,17 @@ function pollUntilReady() {
     const plan = await refreshSetup();
     if (plan?.complete) {
       stopPolling();
-      showToast("Setup complete: Android is ready.");
+      showToast(t("setup.complete"));
     }
   }, POLL_MS);
 }
 
-async function runBusy(button, label, task) {
+async function runBusy(button, task) {
   if (busy) return;
   busy = true;
   const original = button.textContent;
   button.disabled = true;
-  button.textContent = label;
+  button.textContent = t("common.working");
   try {
     await task();
   } finally {
@@ -117,15 +144,10 @@ async function runBusy(button, label, task) {
 }
 
 async function installTool(button, stepId) {
-  const ok = window.confirm(
-    `BIFRÖST will open a winget window to install "${stepId}".\n\n` +
-      "Review the license prompt there. Windows may ask for administrator approval."
-  );
-  if (!ok) return;
-  await runBusy(button, "Installing…", async () => {
+  if (!window.confirm(t("setup.confirmWinget", { step: stepId }))) return;
+  await runBusy(button, async () => {
     try {
       renderSetup(await invoke("install_setup_tool", { stepId }));
-      showToast(`Installed ${stepId}.`);
     } catch (err) {
       showToast(`${err}`, true);
     }
@@ -133,60 +155,62 @@ async function installTool(button, stepId) {
 }
 
 async function firstBoot(button) {
-  const ok = window.confirm(
-    "Midgard will boot with a visible window (a running VM restarts).\n\n" +
-      "In that window, finish Android's welcome screens and, when asked, allow USB " +
-      'debugging with "Always allow from this computer".'
-  );
-  if (!ok) return;
-  await runBusy(button, "Booting…", async () => {
+  if (!window.confirm(t("setup.confirmBoot"))) return;
+  await runBusy(button, async () => {
     try {
       await invoke("start_first_boot");
-      showToast("Midgard is booting. Finish Android's setup in its window.");
       pollUntilReady();
     } catch (err) {
-      showToast(`Could not boot Midgard: ${err}`, true);
+      showToast(`${err}`, true);
     }
   });
 }
 
-async function checkForUpdates(button) {
+export async function checkForUpdates(button) {
   const status = document.getElementById("update-status");
-  await runBusy(button, "Checking…", async () => {
+  await runBusy(button, async () => {
     try {
       const info = await invoke("check_for_updates");
-      if (!info.update_available) {
-        status.textContent = `BIFRÖST ${info.current_version} is up to date (latest release: ${info.latest_version}).`;
-        return;
-      }
-      const bundle = info.bundle_asset ? ` (${info.bundle_asset})` : "";
-      status.innerHTML =
-        `BIFRÖST <strong>${escapeHtml(info.latest_version)}</strong> is available (installed: ${escapeHtml(info.current_version)}). ` +
-        `Download the release bundle${escapeHtml(bundle)} from <code>${escapeHtml(info.release_url)}</code> and run ` +
-        "<code>install-bifrost.ps1</code>; it verifies every file's SHA-256 and keeps your Android data.";
+      status.textContent = info.update_available
+        ? t("settings.updateAvailable", {
+            latest: info.latest_version,
+            current: info.current_version,
+            url: info.release_url,
+          })
+        : t("settings.upToDate", { current: info.current_version });
     } catch (err) {
-      status.textContent = `Could not check for updates: ${err}`;
+      status.textContent = `${err}`;
     }
   });
 }
 
 export function wireSetup() {
-  document.getElementById("btn-check-updates").addEventListener("click", (event) =>
-    checkForUpdates(event.currentTarget)
+  document.getElementById("btn-check-updates")?.addEventListener("click", (e) =>
+    checkForUpdates(e.currentTarget)
   );
-  document.getElementById("setup-steps").addEventListener("click", (event) => {
+  document.getElementById("setup-steps")?.addEventListener("click", (event) => {
     const target = event.target.closest("button");
     if (!target) return;
-    if (target.dataset.setupInstall) installTool(target, target.dataset.setupInstall);
-    else if (target.dataset.setupGoto) activateSection(target.dataset.setupGoto);
-    else if ("setupBoot" in target.dataset) firstBoot(target);
+    if (target.dataset.setupInstall) {
+      installTool(target, target.dataset.setupInstall);
+    } else if (target.dataset.setupGoto) {
+      state.devMode = true;
+      applyDeveloperMode(true);
+      activateSection(target.dataset.setupGoto);
+    } else if ("setupBoot" in target.dataset) {
+      firstBoot(target);
+    }
   });
-  document.getElementById("btn-setup-refresh").addEventListener("click", refreshSetup);
-  document.getElementById("btn-setup-hide").addEventListener("click", () => {
+  document.getElementById("btn-setup-refresh")?.addEventListener("click", refreshSetup);
+  document.getElementById("btn-setup-hide")?.addEventListener("click", () => {
     writeDismissed(true);
-    activateSection("dashboard");
+    forceVisible = false;
+    if (state.lastSetupPlan?.complete) {
+      document.getElementById("nav-setup")?.classList.add("hidden");
+    }
+    activateSection("home");
   });
-  document.getElementById("nav-setup").addEventListener("click", () => {
+  document.getElementById("nav-setup")?.addEventListener("click", () => {
     writeDismissed(false);
     refreshSetup();
   });
