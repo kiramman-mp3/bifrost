@@ -34,6 +34,7 @@ use valhalla::{
     InstalledPackage, PackageDetails, ShortcutManager, ShortcutRecord, ValhallaManager,
 };
 
+mod appearance;
 mod apps;
 mod dashboard;
 mod host;
@@ -41,6 +42,7 @@ mod images;
 mod runtime;
 mod setup;
 
+pub use appearance::*;
 pub use apps::*;
 pub use dashboard::*;
 pub use host::*;
@@ -109,5 +111,21 @@ mod tests {
         );
         assert!(parse_dialog_filter("").is_empty());
         assert!(parse_dialog_filter("Dangling label").is_empty());
+    }
+
+    #[test]
+    fn decodes_windows_dwm_abgr_accent_and_locale_cleanly() {
+        // 0xFFD77800 in Windows DWM ABGR order is R=0x00, G=0x78, B=0xD7 (#0078d7).
+        assert_eq!(decode_abgr_dword(0xFFD7_7800), (0x00, 0x78, 0xD7));
+        let snap = build_appearance(false, (0x00, 0x78, 0xD7), None, "es-EC");
+        assert_eq!(snap.system_theme, "dark");
+        assert_eq!(snap.accent, "#0078d7");
+        assert_eq!(snap.preferred_language, "es");
+        assert_eq!(snap.text_on_accent_light, "#000000");
+        assert_eq!(snap.text_on_accent_dark, "#ffffff");
+
+        let en = build_appearance(true, (0x10, 0x7C, 0x10), None, "en-US");
+        assert_eq!(en.system_theme, "light");
+        assert_eq!(en.preferred_language, "en");
     }
 }

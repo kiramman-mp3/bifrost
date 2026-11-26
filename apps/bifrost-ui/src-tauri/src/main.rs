@@ -32,7 +32,7 @@ use valhalla::{
     ApkInspection, HeimdallAutostartStatus, InstalledPackage, PackageDetails, ShortcutRecord,
 };
 
-use crate::service::{DashboardSnapshot, PackageInstallPreview};
+use crate::service::{DashboardSnapshot, PackageInstallPreview, WindowsAppearance};
 
 struct PendingInstallState(Mutex<Option<PathBuf>>);
 
@@ -47,6 +47,11 @@ async fn off_main_thread<T: Send + 'static>(
     op: impl FnOnce() -> bifrost_core::Result<T> + Send + 'static,
 ) -> Result<T, String> {
     map_err(bifrost_client::blocking(op).await)
+}
+
+#[tauri::command]
+async fn get_windows_appearance() -> Result<WindowsAppearance, String> {
+    off_main_thread(|| Ok(service::get_windows_appearance())).await
 }
 
 #[tauri::command]
@@ -87,6 +92,11 @@ async fn auto_tune_config() -> Result<BifrostConfig, String> {
 #[tauri::command]
 async fn start_runtime(manifest_path: PathBuf, headless: bool) -> Result<RuntimeRecord, String> {
     map_err(service::start_runtime(manifest_path, headless).await)
+}
+
+#[tauri::command]
+async fn start_active_runtime(headless: bool) -> Result<RuntimeRecord, String> {
+    map_err(service::start_active_image(headless).await)
 }
 
 #[tauri::command]
@@ -224,6 +234,11 @@ async fn stop_app(package: String) -> Result<(), String> {
 #[tauri::command]
 async fn list_shared_files() -> Result<Vec<SharedFileEntry>, String> {
     off_main_thread(service::list_shared_files).await
+}
+
+#[tauri::command]
+async fn open_known_folder(kind: String) -> Result<PathBuf, String> {
+    off_main_thread(move || service::open_known_folder(&kind)).await
 }
 
 #[tauri::command]
@@ -369,17 +384,23 @@ fn main() {
             if !is_installer_mode {
                 tray::install(app.handle())?;
             }
-            if is_installer_mode {
-                if let Some(win) = app.get_webview_window("main") {
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.set_effects(
+                    tauri::window::EffectsBuilder::new()
+                        .effect(tauri::window::Effect::Mica)
+                        .build(),
+                );
+                if is_installer_mode {
                     let _ = win.set_title("BIFRÖST — App Installer");
-                    let _ = win.set_min_size(Some(tauri::LogicalSize::new(500.0, 440.0)));
-                    let _ = win.set_size(tauri::LogicalSize::new(560.0, 500.0));
+                    let _ = win.set_min_size(Some(tauri::LogicalSize::new(500.0, 420.0)));
+                    let _ = win.set_size(tauri::LogicalSize::new(540.0, 470.0));
                     let _ = win.center();
                 }
             }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            get_windows_appearance,
             get_pending_install,
             close_installer_window,
             preview_package_install,
@@ -392,6 +413,7 @@ fn main() {
             save_config,
             auto_tune_config,
             start_runtime,
+            start_active_runtime,
             stop_runtime,
             restart_runtime,
             get_logs,
@@ -411,6 +433,7 @@ fn main() {
             remove_app_shortcut,
             stop_app,
             list_shared_files,
+            open_known_folder,
             list_processes,
             list_network_forwards,
             list_images,

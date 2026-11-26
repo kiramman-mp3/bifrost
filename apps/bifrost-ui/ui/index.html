@@ -1,504 +1,812 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="es" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>BIFRÖST — Android Subsystem for Windows</title>
+    <title>BIFRÖST</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
+    <!-- Integrated Native Windows 11 Titlebar -->
+    <header class="titlebar" id="app-titlebar">
+      <div class="titlebar-drag" id="titlebar-drag-region" data-tauri-drag-region>
+        <img src="icon.png" class="titlebar-icon" alt="" data-tauri-drag-region />
+        <span class="titlebar-title" id="titlebar-title" data-tauri-drag-region>BIFRÖST</span>
+      </div>
+      <div class="titlebar-controls" aria-label="Window controls">
+        <button class="caption-btn" id="win-minimize" type="button" aria-label="Minimize">
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+            <path d="M0 5h10" stroke="currentColor" stroke-width="1" />
+          </svg>
+        </button>
+        <button class="caption-btn" id="win-maximize" type="button" aria-label="Maximize">
+          <svg id="win-max-icon" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+            <rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1" />
+          </svg>
+          <svg id="win-restore-icon" class="hidden" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+            <path d="M2.5 2.5v-2h7v7h-2" fill="none" stroke="currentColor" stroke-width="1" />
+            <rect x="0.5" y="2.5" width="7" height="7" fill="none" stroke="currentColor" stroke-width="1" />
+          </svg>
+        </button>
+        <button class="caption-btn close" id="win-close" type="button" aria-label="Close">
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+            <path d="M0.5 0.5l9 9M9.5 0.5l-9 9" stroke="currentColor" stroke-width="1.1" />
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Drag & Drop Overlay -->
+    <div id="drop-overlay" class="drop-overlay hidden" aria-hidden="true">
+      <div class="drop-overlay-card">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+          <path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <strong data-i18n="drop.title">Suelta aquí tu archivo .apk o .apkm</strong>
+        <span class="muted small-text" data-i18n="drop.subtitle">BIFRÖST verificará la compatibilidad antes de instalarlo.</span>
+      </div>
+    </div>
+
+    <!-- App Installer Modal / Standalone Window -->
+    <div id="installer-modal" class="installer-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="installer-question">
+      <div class="installer-dialog">
+        <div class="installer-header">
+          <div class="installer-icon-wrap" id="installer-icon-wrap">
+            <img src="icon.png" class="installer-icon-fallback" id="installer-icon-fallback" alt="" />
+            <img id="installer-icon-img" class="installer-icon hidden" alt="App icon" />
+          </div>
+          <div class="installer-title-block">
+            <span class="muted small-text" id="installer-question" data-i18n="installer.askInstall">¿Quieres instalar esta aplicación?</span>
+            <h2 id="installer-app-title">…</h2>
+            <div class="muted small-text" id="installer-version-line"></div>
+          </div>
+        </div>
+
+        <div class="installer-meta" id="installer-meta"></div>
+
+        <div id="installer-progress-wrap" class="installer-progress-wrap hidden">
+          <div class="installer-progress-head">
+            <span id="installer-stage-label" class="small-text">…</span>
+            <span id="installer-percent-label" class="muted small-text">0%</span>
+          </div>
+          <div class="progress-track">
+            <div id="installer-progress-fill" class="progress-fill" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <div id="installer-warning" class="info-bar warn hidden"></div>
+        <div id="installer-error" class="info-bar error hidden"></div>
+
+        <div class="installer-actions">
+          <button class="btn" id="btn-installer-cancel" type="button" data-i18n="common.cancel">Cancelar</button>
+          <button class="btn primary" id="btn-installer-confirm" type="button" disabled data-i18n="installer.install">Instalar</button>
+          <button class="btn primary hidden" id="btn-installer-launch" type="button" data-i18n="installer.openApp">Abrir aplicación</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Floating InfoBar Toast -->
+    <div id="toast-banner" class="floating-toast hidden" role="status" aria-live="polite"></div>
+
+    <!-- WinUI 3 NavigationView Shell -->
     <div class="app-shell">
-      <aside class="sidebar" aria-label="Primary Navigation">
-        <div class="brand">
-          <div class="brand-mark" aria-hidden="true"></div>
-          <div>
-            <h1 class="brand-title">BIFRÖST</h1>
-            <p class="brand-subtitle">A Bridge Between Worlds.</p>
+      <aside class="nav-pane" aria-label="Primary Navigation">
+        <div class="nav-profile">
+          <img src="icon.png" class="nav-profile-icon" alt="" />
+          <div class="nav-profile-text">
+            <strong>BIFRÖST</strong>
+            <span id="sidebar-substatus" class="muted small-text">Android Subsystem</span>
           </div>
         </div>
 
         <nav class="nav-list" role="tablist" aria-orientation="vertical">
-          <button class="nav-item active" role="tab" aria-selected="true" data-section="dashboard">
-            Dashboard
+          <button class="nav-item hidden" id="nav-setup" role="tab" aria-selected="false" data-section="setup">
+            <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M10 2.5l6.5 3.75v7.5L10 17.5l-6.5-3.75v-7.5L10 2.5z" stroke-linejoin="round" />
+              <path d="M7.5 10l1.8 1.8 3.4-3.6" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <span data-i18n="nav.setup">Configuración inicial</span>
           </button>
-          <button class="nav-item" id="nav-setup" role="tab" aria-selected="false" data-section="setup">
-            Setup
+
+          <button class="nav-item active" role="tab" aria-selected="true" data-section="home">
+            <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M3 9.2L10 3l7 6.2V16a1 1 0 01-1 1h-4v-4.5H8V17H4a1 1 0 01-1-1V9.2z" stroke-linejoin="round" />
+            </svg>
+            <span data-i18n="nav.home">Inicio</span>
           </button>
+
           <button class="nav-item" role="tab" aria-selected="false" data-section="apps">
-            Applications
+            <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="3" y="3" width="6" height="6" rx="1.4" />
+              <rect x="11" y="3" width="6" height="6" rx="1.4" />
+              <rect x="3" y="11" width="6" height="6" rx="1.4" />
+              <rect x="11" y="11" width="6" height="6" rx="1.4" />
+            </svg>
+            <span data-i18n="nav.apps">Aplicaciones</span>
           </button>
-          <button class="nav-item" role="tab" aria-selected="false" data-section="runtime">
-            Runtime Config
-          </button>
-          <button class="nav-item" role="tab" aria-selected="false" data-section="diagnostics">
-            Diagnostics
-          </button>
-          <button class="nav-item" role="tab" aria-selected="false" data-section="images">
-            Images &amp; Recovery
-          </button>
-          <button class="nav-item" role="tab" aria-selected="false" data-section="settings">
-            Settings
+
+          <button class="nav-item hidden" id="nav-developer" role="tab" aria-selected="false" data-section="developer">
+            <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M6.5 6.5L3 10l3.5 3.5M13.5 6.5L17 10l-3.5 3.5M11.2 4.5l-2.4 11" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <span data-i18n="nav.developer">Desarrollador</span>
           </button>
         </nav>
 
-        <div class="sidebar-footer">
-          <div class="status-pill" id="sidebar-runtime-pill">
-            <span class="dot" id="sidebar-runtime-dot"></span>
-            <span id="sidebar-runtime-label">Checking…</span>
+        <div class="nav-footer">
+          <div class="runtime-chip" id="sidebar-runtime-pill">
+            <span class="status-dot" id="sidebar-runtime-dot"></span>
+            <span id="sidebar-runtime-label">…</span>
           </div>
-          <button class="btn subtle small" id="theme-toggle" type="button">
-            Theme: Dark
+
+          <button class="nav-item" id="nav-settings" role="tab" aria-selected="false" data-section="settings">
+            <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="10" cy="10" r="2.6" />
+              <path d="M10 2.6v1.8M10 15.6v1.8M2.6 10h1.8M15.6 10h1.8M4.8 4.8l1.3 1.3M13.9 13.9l1.3 1.3M15.2 4.8l-1.3 1.3M6.1 13.9l-1.3 1.3" stroke-linecap="round" />
+            </svg>
+            <span data-i18n="nav.settings">Ajustes</span>
           </button>
         </div>
       </aside>
 
-      <main class="content">
-        <div id="drop-overlay" class="drop-overlay hidden" aria-hidden="true">
-          <div class="drop-overlay-card">
-            <strong>Drop <code>.apk</code>, <code>.apkm</code>, or <code>manifest.json</code> here</strong>
-            <span class="muted small-text">BIFRÖST will inspect the package offline for x86_64 compatibility before installing.</span>
-          </div>
-        </div>
-        <div id="installer-modal" class="installer-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="installer-question">
-          <div class="installer-dialog">
-            <div class="installer-header">
-              <div class="installer-icon-wrap" id="installer-icon-wrap">
-                <div class="brand-mark installer-icon-fallback" id="installer-icon-fallback"></div>
-                <img id="installer-icon-img" class="installer-icon hidden" alt="App icon" />
+      <!-- Rounded Top-Left WinUI 3 Layer Frame -->
+      <main class="content-frame">
+        <div class="content-scroll">
+          <!-- 0. FIRST-RUN SETUP -->
+          <section id="section-setup" class="page" role="tabpanel">
+            <header class="page-header">
+              <div>
+                <h1 data-i18n="setup.title">Configuración inicial</h1>
+                <p class="muted" id="setup-summary">…</p>
               </div>
-              <div class="installer-title-block">
-                <span class="muted small-text" id="installer-question">Do you want to install this application?</span>
-                <h2 id="installer-app-title">Inspecting package…</h2>
-                <div class="muted small-text" id="installer-version-line"></div>
-              </div>
-            </div>
-
-            <div class="installer-meta" id="installer-meta"></div>
-
-            <div id="installer-progress-wrap" class="installer-progress-wrap hidden">
-              <div class="installer-progress-head">
-                <span id="installer-stage-label" class="small-text">Preparing installation…</span>
-                <span id="installer-percent-label" class="muted small-text">0%</span>
-              </div>
-              <div class="progress-track">
-                <div id="installer-progress-fill" class="progress-fill" style="width: 0%"></div>
-              </div>
-            </div>
-
-            <div id="installer-warning" class="installer-warning hidden"></div>
-            <div id="installer-error" class="installer-error hidden"></div>
-
-            <div class="installer-actions">
-              <button class="btn" id="btn-installer-cancel" type="button">Cancel</button>
-              <button class="btn primary" id="btn-installer-confirm" type="button" disabled>Install</button>
-              <button class="btn primary hidden" id="btn-installer-launch" type="button">Launch App</button>
-            </div>
-          </div>
-        </div>
-        <div id="toast-banner" class="toast hidden" role="status" aria-live="polite"></div>
-
-        <!-- FIRST-RUN SETUP -->
-        <section id="section-setup" class="panel" role="tabpanel">
-          <header class="panel-header">
-            <div>
-              <h2>Setup</h2>
-              <p class="muted" id="setup-summary">Checking what this PC still needs…</p>
-            </div>
-            <div class="actions">
-              <button class="btn" id="btn-setup-refresh" type="button">Check again</button>
-              <button class="btn subtle" id="btn-setup-hide" type="button">Hide for now</button>
-            </div>
-          </header>
-
-          <article class="card">
-            <h3>First-run checklist</h3>
-            <div id="setup-steps" class="checks-list"></div>
-          </article>
-        </section>
-
-        <!-- 1. DASHBOARD -->
-        <section id="section-dashboard" class="panel active" role="tabpanel">
-          <header class="panel-header">
-            <div>
-              <h2>Dashboard</h2>
-              <p class="muted">Midgard Android runtime overview, host allocation, and quick controls.</p>
-            </div>
-            <div class="actions">
-              <button class="btn" id="btn-heimdall-toggle" type="button">Start Heimdall</button>
-              <button class="btn" id="btn-refresh-all" type="button">Refresh</button>
-            </div>
-          </header>
-
-          <div class="grid stats-grid">
-            <article class="card stat-card">
-              <span class="stat-label">Runtime State</span>
-              <strong class="stat-value" id="dash-state">—</strong>
-              <span class="stat-meta" id="dash-heimdall">Heimdall: —</span>
-            </article>
-            <article class="card stat-card">
-              <span class="stat-label">Android Version</span>
-              <strong class="stat-value" id="dash-android">—</strong>
-              <span class="stat-meta" id="dash-image">Image: —</span>
-            </article>
-            <article class="card stat-card">
-              <span class="stat-label">CPU Allocation</span>
-              <strong class="stat-value" id="dash-cpu">—</strong>
-              <span class="stat-meta" id="dash-cpu-host">Host CPU: —</span>
-            </article>
-            <article class="card stat-card">
-              <span class="stat-label">RAM Allocation</span>
-              <strong class="stat-value" id="dash-ram">—</strong>
-              <span class="stat-meta" id="dash-ram-host">Host RAM: —</span>
-            </article>
-            <article class="card stat-card">
-              <span class="stat-label">Storage Allocation</span>
-              <strong class="stat-value" id="dash-storage">—</strong>
-              <span class="stat-meta" id="dash-storage-host">Free disk: —</span>
-            </article>
-            <article class="card stat-card">
-              <span class="stat-label">Host Readiness</span>
-              <strong class="stat-value" id="dash-readiness">—</strong>
-              <span class="stat-meta" id="dash-adb">ADB devices: 0</span>
-            </article>
-          </div>
-
-          <article class="card">
-            <h3>Quick Runtime Controls</h3>
-            <div class="form-row">
-              <label for="manifest-input">Midgard Bundle Manifest (<code>manifest.json</code>)</label>
-              <div class="input-with-btn">
-                <input
-                  id="manifest-input"
-                  type="text"
-                  placeholder="C:\Users\...\bifrost\images\midgard\manifest.json"
-                />
-                <button class="btn" id="btn-browse-manifest" type="button">Browse…</button>
-              </div>
-            </div>
-            <div class="actions">
-              <label class="checkbox-label">
-                <input id="start-headless" type="checkbox" checked />
-                Headless mode
-              </label>
-              <button class="btn primary" id="btn-runtime-start" type="button">Start Midgard</button>
-              <button class="btn" id="btn-runtime-restart" type="button">Restart</button>
-              <button class="btn danger" id="btn-runtime-stop" type="button">Stop</button>
-            </div>
-          </article>
-
-          <article class="card">
-            <div class="card-header-inline">
-              <h3>Running Android Processes</h3>
-              <button class="btn subtle small" id="btn-refresh-procs" type="button">Refresh</button>
-            </div>
-            <div id="dash-processes" class="list-box muted">
-              No online Android device connected.
-            </div>
-          </article>
-        </section>
-
-        <!-- 2. APPLICATION MANAGER (VALHALLA) -->
-        <section id="section-apps" class="panel" role="tabpanel">
-          <header class="panel-header">
-            <div>
-              <h2>Application Manager (Valhalla)</h2>
-              <p class="muted">Inspect APKs for x86_64 compatibility, install via Android PackageManager, and launch apps.</p>
-            </div>
-            <div class="actions">
-              <label class="checkbox-label">
-                <input id="apps-third-party" type="checkbox" checked />
-                Third-party only
-              </label>
-              <button class="btn" id="btn-refresh-apps" type="button">Refresh List</button>
-            </div>
-          </header>
-
-          <article class="card">
-            <div class="card-header-inline">
-              <h3>Inspect or Install APK / APKM</h3>
-              <span class="muted small-text">Tip: drag &amp; drop an <code>.apk</code> or <code>.apkm</code> anywhere on this window</span>
-            </div>
-            <div class="form-row">
-              <label for="apk-path-input">Local <code>.apk</code> or <code>.apkm</code> path</label>
-              <div class="input-with-btn">
-                <input id="apk-path-input" type="text" placeholder="C:\path\to\application.apk or .apkm" />
-                <button class="btn" id="btn-browse-apk" type="button">Browse…</button>
-              </div>
-            </div>
-            <div class="actions">
-              <button class="btn" id="btn-inspect-apk" type="button">Inspect Offline (ZIP / ABI)</button>
-              <button class="btn primary" id="btn-install-apk" type="button">Install APK</button>
-            </div>
-            <pre id="apk-inspect-output" class="code-box hidden"></pre>
-          </article>
-
-          <article class="card">
-            <h3>Installed Applications</h3>
-            <div id="apps-table-container" class="list-box muted">
-              Click "Refresh List" when Midgard or an ADB device is online.
-            </div>
-          </article>
-
-          <article class="card hidden" id="app-details-card">
-            <div class="card-header-inline">
-              <h3 id="app-details-title">Package Metadata</h3>
-              <button class="btn subtle small" id="btn-close-details" type="button">Close</button>
-            </div>
-            <pre id="app-details-body" class="code-box"></pre>
-          </article>
-        </section>
-
-        <!-- 3. RUNTIME CONFIGURATION -->
-        <section id="section-runtime" class="panel" role="tabpanel">
-          <header class="panel-header">
-            <div>
-              <h2>Runtime Configuration</h2>
-              <p class="muted">Validated by Rust <code>bifrost-core</code> and stored in <code>bifrost.toml</code>.</p>
-            </div>
-          </header>
-
-          <form id="config-form" class="card form-grid">
-            <div class="form-row">
-              <label for="cfg-cpu">CPU Cores (1–64)</label>
-              <input id="cfg-cpu" type="number" min="1" max="64" required />
-            </div>
-            <div class="form-row">
-              <label for="cfg-ram">RAM Allocation (MB, 1024–65536)</label>
-              <input id="cfg-ram" type="number" min="1024" max="65536" step="256" required />
-            </div>
-            <div class="form-row">
-              <label for="cfg-storage">Userdata Storage (GB, 8–1024)</label>
-              <input id="cfg-storage" type="number" min="8" max="1024" required />
-            </div>
-            <div class="form-row">
-              <label for="cfg-graphics">Graphics Mode</label>
-              <select id="cfg-graphics">
-                <option value="auto">Auto — CPU rendering, OpenGL ES 3.1 (Recommended Default)</option>
-                <option value="gfxstream">GPU acceleration — host GPU via virgl (Experimental: OpenGL ES 2.0 only, no Vulkan, headless)</option>
-                <option value="swift_shader">SwiftShader (CPU Diagnostics)</option>
-              </select>
-              <div class="graphics-advice-row">
-                <button class="btn" id="btn-graphics-advice" type="button">Check installed apps</button>
-                <span class="muted small-text" id="graphics-advice-text">Reads the OpenGL ES version each installed app requires (Midgard must be running).</span>
-              </div>
-            </div>
-            <div class="form-row">
-              <label for="cfg-width">Display Width (px)</label>
-              <input id="cfg-width" type="number" min="320" max="7680" required />
-            </div>
-            <div class="form-row">
-              <label for="cfg-height">Display Height (px)</label>
-              <input id="cfg-height" type="number" min="320" max="4320" required />
-            </div>
-            <div class="form-row">
-              <label for="cfg-dpi">Display DPI (120–640)</label>
-              <input id="cfg-dpi" type="number" min="120" max="640" required />
-            </div>
-            <div class="form-row">
-              <label for="cfg-adb-host">ADB Bind Address (Loopback enforced by default)</label>
-              <input id="cfg-adb-host" type="text" required />
-            </div>
-            <div class="form-row">
-              <label for="cfg-adb-port">ADB Port (1024–65535)</label>
-              <input id="cfg-adb-port" type="number" min="1024" max="65535" required />
-            </div>
-            <div class="form-row">
-              <label for="cfg-log-level">Logging Level</label>
-              <select id="cfg-log-level">
-                <option value="error">Error</option>
-                <option value="warn">Warn</option>
-                <option value="info">Info</option>
-                <option value="debug">Debug</option>
-                <option value="trace">Trace</option>
-              </select>
-            </div>
-            <div class="form-row full-span">
-              <label>Audio &amp; Windows 11 Desktop Integration</label>
               <div class="actions">
-                <label class="checkbox-label">
-                  <input id="cfg-audio-enabled" type="checkbox" checked />
-                  Native Windows Audio (DirectSound)
+                <button class="btn" id="btn-setup-refresh" type="button" data-i18n="setup.recheck">Volver a comprobar</button>
+                <button class="btn subtle" id="btn-setup-hide" type="button" data-i18n="setup.later">Omitir por ahora</button>
+              </div>
+            </header>
+
+            <div id="setup-steps" class="settings-stack"></div>
+          </section>
+
+          <!-- 1. HOME (CONSUMER OVERVIEW) -->
+          <section id="section-home" class="page active" role="tabpanel">
+            <header class="page-header">
+              <div>
+                <h1 data-i18n="home.title">Inicio</h1>
+                <p class="muted" data-i18n="home.subtitle">Ejecuta tus aplicaciones de Android integradas en Windows 11.</p>
+              </div>
+              <div class="actions">
+                <button class="btn subtle" id="btn-refresh-all" type="button" title="Refresh">
+                  <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6">
+                    <path d="M16.5 10a6.5 6.5 0 11-1.9-4.6M16.5 3.5v3.5H13" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                  <span data-i18n="common.refresh">Actualizar</span>
+                </button>
+              </div>
+            </header>
+
+            <!-- Hero Subsystem Card -->
+            <article class="hero-card" id="home-hero-card">
+              <div class="hero-status-left">
+                <div class="hero-orb" id="hero-orb">
+                  <img src="icon.png" alt="" class="hero-orb-img" />
+                </div>
+                <div class="hero-copy">
+                  <div class="hero-badge-row">
+                    <span class="status-pill-inline" id="hero-status-badge">…</span>
+                    <span class="muted small-text" id="dash-android">…</span>
+                  </div>
+                  <h2 id="hero-headline">Subsistema Android</h2>
+                  <p class="muted" id="hero-description">…</p>
+                </div>
+              </div>
+              <div class="hero-actions">
+                <button class="btn primary large" id="btn-hero-power" type="button">Encender</button>
+                <button class="btn hidden" id="btn-hero-restart" type="button" data-i18n="home.restart">Reiniciar</button>
+              </div>
+            </article>
+
+            <div id="home-adb-warning" class="info-bar warn hidden"></div>
+
+            <!-- Quick Action Tiles -->
+            <div class="tiles-grid">
+              <button class="action-tile" id="tile-install-apk" type="button">
+                <div class="tile-icon accent-surface">
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6">
+                    <path d="M10 3v9.5m0 0l-3.2-3.2M10 12.5l3.2-3.2M3.5 14.5v1.5a1 1 0 001 1h11a1 1 0 001-1v-1.5" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </div>
+                <div class="tile-body">
+                  <strong data-i18n="home.tileInstallTitle">Instalar aplicación</strong>
+                  <span class="muted small-text" data-i18n="home.tileInstallDesc">Elige un archivo .apk o .apkm de tu equipo</span>
+                </div>
+              </button>
+
+              <button class="action-tile" id="tile-goto-apps" type="button">
+                <div class="tile-icon">
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6">
+                    <rect x="3" y="3" width="6" height="6" rx="1.4" />
+                    <rect x="11" y="3" width="6" height="6" rx="1.4" />
+                    <rect x="3" y="11" width="6" height="6" rx="1.4" />
+                    <rect x="11" y="11" width="6" height="6" rx="1.4" />
+                  </svg>
+                </div>
+                <div class="tile-body">
+                  <strong data-i18n="home.tileAppsTitle">Mis aplicaciones</strong>
+                  <span class="muted small-text" data-i18n="home.tileAppsDesc">Abre tus apps en ventanas independientes</span>
+                </div>
+              </button>
+
+              <button class="action-tile" id="tile-open-shared" type="button">
+                <div class="tile-icon">
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6">
+                    <path d="M2.5 5.5A1.5 1.5 0 014 4h4l1.8 2H16a1.5 1.5 0 011.5 1.5v7A1.5 1.5 0 0116 16H4a1.5 1.5 0 01-1.5-1.5v-9z" stroke-linejoin="round" />
+                  </svg>
+                </div>
+                <div class="tile-body">
+                  <strong data-i18n="home.tileShareTitle">Carpeta compartida</strong>
+                  <span class="muted small-text" id="home-share-subtitle">Abrir en el Explorador de Windows</span>
+                </div>
+              </button>
+            </div>
+
+            <!-- Clean System Summary Stack -->
+            <h3 class="section-heading" data-i18n="home.summaryHeading">Resumen del sistema</h3>
+            <div class="settings-stack">
+              <div class="setting-row">
+                <div class="setting-left">
+                  <div class="setting-icon">
+                    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <rect x="4" y="4" width="12" height="12" rx="2" />
+                      <path d="M8 8h4v4H8z" />
+                    </svg>
+                  </div>
+                  <div class="setting-text">
+                    <strong data-i18n="home.resourcesTitle">Recursos asignados a Android</strong>
+                    <span class="muted small-text" id="home-resources-summary">…</span>
+                  </div>
+                </div>
+                <button class="btn small" id="btn-home-goto-resources" type="button" data-i18n="home.adjust">Ajustar</button>
+              </div>
+
+              <div class="setting-row">
+                <div class="setting-left">
+                  <div class="setting-icon">
+                    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <circle cx="10" cy="10" r="7" />
+                      <path d="M7 10.2l2 2 4-4.2" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </div>
+                  <div class="setting-text">
+                    <strong data-i18n="home.readinessTitle">Compatibilidad de este PC</strong>
+                    <span class="muted small-text" id="home-readiness-summary">…</span>
+                  </div>
+                </div>
+                <span class="badge pass" id="dash-readiness">OK</span>
+              </div>
+            </div>
+          </section>
+
+          <!-- 2. APPLICATIONS -->
+          <section id="section-apps" class="page" role="tabpanel">
+            <header class="page-header">
+              <div>
+                <h1 data-i18n="apps.title">Aplicaciones</h1>
+                <p class="muted" data-i18n="apps.subtitle">Abre, ancla al menú Inicio o instala aplicaciones de Android.</p>
+              </div>
+              <div class="actions">
+                <button class="btn" id="btn-refresh-apps" type="button" data-i18n="common.refresh">Actualizar</button>
+                <button class="btn primary" id="btn-pick-install-apk" type="button" data-i18n="apps.installBtn">Instalar .apk / .apkm</button>
+              </div>
+            </header>
+
+            <div class="apps-toolbar">
+              <div class="search-box">
+                <svg class="search-icon" width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6">
+                  <circle cx="9" cy="9" r="5.5" />
+                  <path d="M13.2 13.2L17 17" stroke-linecap="round" />
+                </svg>
+                <input id="apps-search-input" type="search" placeholder="Buscar aplicaciones instaladas…" data-i18n-placeholder="apps.searchPlaceholder" />
+              </div>
+
+              <div class="actions dev-only hidden" data-dev-only>
+                <label class="inline-switch-label">
+                  <span class="small-text muted" data-i18n="apps.onlyUserApps">Solo apps de usuario</span>
+                  <input id="apps-third-party" class="win-switch" type="checkbox" checked />
                 </label>
-                <label class="checkbox-label">
-                  <input id="cfg-auto-sync-shortcuts" type="checkbox" checked />
-                  Auto-sync Desktop &amp; Start Menu icons
-                </label>
-                <label class="checkbox-label">
-                  <input id="cfg-forward-notifications" type="checkbox" checked />
-                  Forward Android notifications to Windows 11 Toasts
-                </label>
-                <label class="checkbox-label">
-                  <input id="cfg-auto-sync-clipboard" type="checkbox" checked />
-                  Auto-sync Windows &rarr; Android clipboard
-                </label>
-                <label class="checkbox-label">
-                  <input id="cfg-close-to-tray" type="checkbox" checked />
-                  Keep BIFRÖST in the system tray when the window is closed
-                </label>
+                <button class="btn small" id="btn-inspect-apk-pick" type="button" data-i18n="apps.inspectBtn">Inspeccionar paquete…</button>
               </div>
             </div>
 
-            <div class="actions full-span">
-              <button class="btn primary" type="submit">Validate &amp; Save Configuration</button>
-              <button class="btn" id="btn-autotune-config" type="button">Auto-Tune for this PC</button>
-              <span class="muted small-text" id="cfg-path-label"></span>
-            </div>
-          </form>
-        </section>
+            <article class="win-card hidden" id="apk-inspect-card">
+              <div class="card-header-inline">
+                <strong data-i18n="apps.inspectTitle">Inspección técnica del paquete</strong>
+                <button class="btn subtle small" id="btn-close-inspect" type="button" data-i18n="common.close">Cerrar</button>
+              </div>
+              <pre id="apk-inspect-output" class="code-box"></pre>
+            </article>
 
-        <!-- 4. DIAGNOSTICS -->
-        <section id="section-diagnostics" class="panel" role="tabpanel">
-          <header class="panel-header">
-            <div>
-              <h2>Diagnostics</h2>
-              <p class="muted">Native Windows 11 compatibility checks, WHPX status, GPU info, ADB status, and runtime logs.</p>
-            </div>
-            <div class="actions">
-              <button class="btn" id="btn-run-doctor" type="button">Run Doctor</button>
-              <button class="btn" id="btn-export-diag" type="button">Copy JSON Report</button>
-            </div>
-          </header>
+            <div id="apps-table-container" class="settings-stack"></div>
 
-          <article class="card">
-            <h3>System Compatibility (<code>bifrost doctor</code>)</h3>
-            <div id="diag-checks" class="checks-list"></div>
-          </article>
+            <article class="win-card hidden" id="app-details-card">
+              <div class="card-header-inline">
+                <strong id="app-details-title">Package Metadata</strong>
+                <button class="btn subtle small" id="btn-close-details" type="button" data-i18n="common.close">Cerrar</button>
+              </div>
+              <pre id="app-details-body" class="code-box"></pre>
+            </article>
+          </section>
 
-          <article class="card">
-            <div class="card-header-inline">
-              <h3>Midgard Runtime &amp; Serial Logs</h3>
-              <button class="btn subtle small" id="btn-refresh-logs" type="button">Refresh Logs</button>
-            </div>
-            <pre id="diag-logs" class="code-box">No logs loaded yet.</pre>
-          </article>
-        </section>
+          <!-- 3. SETTINGS (WINDOWS 11 SETTINGS CARDS) -->
+          <section id="section-settings" class="page" role="tabpanel">
+            <header class="page-header">
+              <div>
+                <h1 data-i18n="settings.title">Ajustes</h1>
+                <p class="muted" data-i18n="settings.subtitle">Personaliza la apariencia, la integración con Windows y el rendimiento.</p>
+              </div>
+              <span class="save-indicator hidden" id="settings-saved-pill" data-i18n="settings.saved">Guardado</span>
+            </header>
 
-        <!-- 5. IMAGES & RECOVERY -->
-        <section id="section-images" class="panel" role="tabpanel">
-          <header class="panel-header">
-            <div>
-              <h2>Midgard Images &amp; Recovery</h2>
-              <p class="muted">Manage SHA-256 verified Android runtime bundles and back up or restore persistent <code>userdata.img</code>.</p>
-            </div>
-            <div class="actions">
-              <button class="btn" id="btn-refresh-images" type="button">Refresh Images</button>
-            </div>
-          </header>
+            <!-- Personalization -->
+            <h3 class="section-heading" data-i18n="settings.groupAppearance">Apariencia e idioma</h3>
+            <div class="settings-stack">
+              <div class="setting-row">
+                <div class="setting-left">
+                  <div class="setting-icon">
+                    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <path d="M10 2.5a7.5 7.5 0 107.5 7.5c0-.6-.5-1-1.1-1H14a2 2 0 01-2-2V4.6c0-.6-.4-1.1-1-1.1A7.5 7.5 0 0010 2.5z" />
+                    </svg>
+                  </div>
+                  <div class="setting-text">
+                    <strong data-i18n="settings.themeTitle">Tema de la aplicación</strong>
+                    <span class="muted small-text" data-i18n="settings.themeDesc">Adopta automáticamente el modo claro/oscuro y el color de énfasis de Windows.</span>
+                  </div>
+                </div>
+                <div class="actions">
+                  <span class="accent-dot-preview" id="win-accent-swatch" title="Windows Accent Color"></span>
+                  <select id="pref-theme" class="win-select">
+                    <option value="system" data-i18n="settings.themeSystem">Usar configuración de Windows</option>
+                    <option value="dark" data-i18n="settings.themeDark">Oscuro</option>
+                    <option value="light" data-i18n="settings.themeLight">Claro</option>
+                  </select>
+                </div>
+              </div>
 
-          <article class="card">
-            <h3>Registered Midgard Images</h3>
-            <div id="images-list" class="list-box muted">Loading registered images…</div>
-          </article>
-
-          <article class="card">
-            <h3>Register Midgard Image Bundle</h3>
-            <div class="form-row">
-              <label for="img-manifest-input">Verified bundle <code>manifest.json</code></label>
-              <div class="input-with-btn">
-                <input
-                  id="img-manifest-input"
-                  type="text"
-                  placeholder="C:\Users\...\bifrost\images\lineage\manifest.json"
-                />
-                <button class="btn" id="btn-browse-img-manifest" type="button">Browse…</button>
+              <div class="setting-row">
+                <div class="setting-left">
+                  <div class="setting-icon">
+                    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <circle cx="10" cy="10" r="7.2" />
+                      <path d="M2.8 10h14.4M10 2.8c2 2.1 3 4.5 3 7.2s-1 5.1-3 7.2c-2-2.1-3-4.5-3-7.2s1-5.1 3-7.2z" />
+                    </svg>
+                  </div>
+                  <div class="setting-text">
+                    <strong data-i18n="settings.langTitle">Idioma</strong>
+                    <span class="muted small-text" id="settings-locale-hint">…</span>
+                  </div>
+                </div>
+                <select id="pref-lang" class="win-select">
+                  <option value="auto" data-i18n="settings.langAuto">Automático (Windows)</option>
+                  <option value="es">Español</option>
+                  <option value="en">English</option>
+                </select>
               </div>
             </div>
-            <div class="form-row">
-              <label class="checkbox-label">
-                <input id="img-allow-unsigned" type="checkbox" />
-                Allow unsigned bundle (SHA-256 only, no trusted Ed25519 signature)
+
+            <!-- Windows Integration -->
+            <h3 class="section-heading" data-i18n="settings.groupIntegration">Integración con Windows</h3>
+            <div class="settings-stack">
+              <label class="setting-row clickable">
+                <div class="setting-left">
+                  <div class="setting-icon">
+                    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <path d="M4 8v4h3l4 3.5v-11L7 8H4zm10-1.5a4 4 0 010 7" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </div>
+                  <div class="setting-text">
+                    <strong data-i18n="settings.audioTitle">Sonido de aplicaciones</strong>
+                    <span class="muted small-text" data-i18n="settings.audioDesc">Reproduce el audio de Android directamente en tus altavoces o auriculares.</span>
+                  </div>
+                </div>
+                <input id="cfg-audio-enabled" class="win-switch auto-save-cfg" type="checkbox" checked />
+              </label>
+
+              <label class="setting-row clickable">
+                <div class="setting-left">
+                  <div class="setting-icon">
+                    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <path d="M10 3.2a4.8 4.8 0 00-4.8 4.8v3.2L3.8 13v1h12.4v-1l-1.4-1.8V8A4.8 4.8 0 0010 3.2zM8.5 16a1.6 1.6 0 003 0" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </div>
+                  <div class="setting-text">
+                    <strong data-i18n="settings.notifTitle">Notificaciones en Windows</strong>
+                    <span class="muted small-text" data-i18n="settings.notifDesc">Muestra los avisos de tus apps de Android en el centro de notificaciones de Windows 11.</span>
+                  </div>
+                </div>
+                <input id="cfg-forward-notifications" class="win-switch auto-save-cfg" type="checkbox" checked />
+              </label>
+
+              <label class="setting-row clickable">
+                <div class="setting-left">
+                  <div class="setting-icon">
+                    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <rect x="6" y="4" width="9" height="12" rx="1.5" />
+                      <path d="M5 7H4.5A1.5 1.5 0 003 8.5v7A1.5 1.5 0 004.5 17h7a1.5 1.5 0 001.5-1.5V15" />
+                    </svg>
+                  </div>
+                  <div class="setting-text">
+                    <strong data-i18n="settings.clipTitle">Portapapeles compartido</strong>
+                    <span class="muted small-text" data-i18n="settings.clipDesc">Lo que copies en Windows se podrá pegar al instante dentro de Android.</span>
+                  </div>
+                </div>
+                <input id="cfg-auto-sync-clipboard" class="win-switch auto-save-cfg" type="checkbox" checked />
+              </label>
+
+              <label class="setting-row clickable">
+                <div class="setting-left">
+                  <div class="setting-icon">
+                    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <path d="M4 15.5h12M6 4.5h8l2 7H4l2-7z" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </div>
+                  <div class="setting-text">
+                    <strong data-i18n="settings.shortcutsTitle">Accesos directos en Escritorio y Menú Inicio</strong>
+                    <span class="muted small-text" data-i18n="settings.shortcutsDesc">Crea iconos en Windows automáticamente cuando instales nuevas aplicaciones.</span>
+                  </div>
+                </div>
+                <input id="cfg-auto-sync-shortcuts" class="win-switch auto-save-cfg" type="checkbox" checked />
+              </label>
+
+              <label class="setting-row clickable">
+                <div class="setting-left">
+                  <div class="setting-icon">
+                    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <rect x="3" y="4" width="14" height="12" rx="2" />
+                      <path d="M12 13h3" stroke-linecap="round" />
+                    </svg>
+                  </div>
+                  <div class="setting-text">
+                    <strong data-i18n="settings.trayTitle">Minimizar a la bandeja al cerrar</strong>
+                    <span class="muted small-text" data-i18n="settings.trayDesc">Mantiene el acceso rápido junto al reloj de Windows al cerrar esta ventana.</span>
+                  </div>
+                </div>
+                <input id="cfg-close-to-tray" class="win-switch auto-save-cfg" type="checkbox" checked />
+              </label>
+
+              <label class="setting-row clickable">
+                <div class="setting-left">
+                  <div class="setting-icon">
+                    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <path d="M10 3v5m4.2-3.2a6.5 6.5 0 11-8.4 0" stroke-linecap="round" />
+                    </svg>
+                  </div>
+                  <div class="setting-text">
+                    <strong data-i18n="settings.autostartTitle">Iniciar servicio en segundo plano con Windows</strong>
+                    <span class="muted small-text" id="settings-autostart-status">…</span>
+                  </div>
+                </div>
+                <input id="toggle-heimdall-autostart" class="win-switch" type="checkbox" />
               </label>
             </div>
-            <div class="actions">
-              <button class="btn primary" id="btn-register-image" type="button">Verify &amp; Register Image</button>
-            </div>
-          </article>
 
-          <article class="card">
-            <h3>Trusted Publishers</h3>
-            <p class="muted small-text">
-              Ed25519 public keys in <code>[images] trusted_keys</code>. A bundle registers as signed only when its
-              <code>manifest.json.sig</code> verifies against one of these keys. Compare the fingerprint with the one the
-              publisher announces before adding a key.
-            </p>
-            <div id="trusted-keys-list" class="list-box muted">Loading trusted publisher keys…</div>
-            <div class="form-row">
-              <label for="trusted-key-input">Publisher public key (64 hex characters)</label>
-              <div class="input-with-btn">
-                <input id="trusted-key-input" type="text" spellcheck="false" autocomplete="off" placeholder="e.g. 3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c" />
-                <button class="btn primary" id="btn-add-trusted-key" type="button">Add Key</button>
+            <!-- Performance & Graphics -->
+            <h3 class="section-heading" id="settings-resources-anchor" data-i18n="settings.groupPerformance">Rendimiento y gráficos</h3>
+            <div class="settings-stack">
+              <div class="setting-row">
+                <div class="setting-left">
+                  <div class="setting-icon">
+                    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <path d="M3.5 14.5a6.5 6.5 0 1113 0M10 10l3-3" stroke-linecap="round" />
+                    </svg>
+                  </div>
+                  <div class="setting-text">
+                    <strong data-i18n="settings.autotuneTitle">Optimización automática de recursos</strong>
+                    <span class="muted small-text" data-i18n="settings.autotuneDesc">Calcula el equilibrio ideal de procesador y memoria RAM para tu equipo.</span>
+                  </div>
+                </div>
+                <button class="btn" id="btn-autotune-config" type="button" data-i18n="settings.autotuneBtn">Optimizar ahora</button>
+              </div>
+
+              <div class="setting-row wrap-row">
+                <div class="setting-left">
+                  <div class="setting-icon">
+                    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <rect x="4" y="4" width="12" height="12" rx="2" />
+                      <path d="M7 2v2M13 2v2M7 16v2M13 16v2M2 7h2M2 13h2M16 7h2M16 13h2" stroke-linecap="round" />
+                    </svg>
+                  </div>
+                  <div class="setting-text">
+                    <strong data-i18n="settings.allocTitle">Procesador y memoria RAM</strong>
+                    <span class="muted small-text" id="settings-host-limits">…</span>
+                  </div>
+                </div>
+                <div class="inline-fields">
+                  <label class="mini-field">
+                    <span data-i18n="settings.cores">Núcleos</span>
+                    <input id="cfg-cpu" class="win-input compact" type="number" min="1" max="64" required />
+                  </label>
+                  <label class="mini-field">
+                    <span>RAM (MB)</span>
+                    <input id="cfg-ram" class="win-input compact" type="number" min="1024" max="65536" step="256" required />
+                  </label>
+                  <button class="btn primary small" id="btn-save-resources" type="button" data-i18n="common.apply">Aplicar</button>
+                </div>
+              </div>
+
+              <div class="setting-row wrap-row">
+                <div class="setting-left">
+                  <div class="setting-icon">
+                    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <rect x="2.5" y="4" width="15" height="10" rx="1.6" />
+                      <path d="M7 17h6M10 14v3" stroke-linecap="round" />
+                    </svg>
+                  </div>
+                  <div class="setting-text">
+                    <strong data-i18n="settings.graphicsTitle">Aceleración gráfica</strong>
+                    <span class="muted small-text" id="graphics-advice-text" data-i18n="settings.graphicsDesc">El modo compatible soporta todas las apps (OpenGL ES 3.1). La aceleración GPU usa tu tarjeta gráfica (OpenGL ES 2.0).</span>
+                  </div>
+                </div>
+                <div class="actions">
+                  <select id="cfg-graphics" class="win-select auto-save-cfg">
+                    <option value="auto" data-i18n="settings.gfxAuto">Automático — Máxima compatibilidad (Recomendado)</option>
+                    <option value="gfxstream" data-i18n="settings.gfxGpu">Aceleración por GPU (Experimental)</option>
+                    <option value="swift_shader" class="dev-only hidden" data-dev-only>SwiftShader (Diagnóstico CPU)</option>
+                  </select>
+                  <button class="btn small" id="btn-graphics-advice" type="button" data-i18n="settings.gfxCheckBtn">Analizar mis apps</button>
+                </div>
+              </div>
+
+              <div class="setting-row wrap-row dev-only hidden" data-dev-only>
+                <div class="setting-left">
+                  <div class="setting-text">
+                    <strong data-i18n="settings.displayAdvTitle">Disco de usuario y geometría de pantalla base</strong>
+                    <span class="muted small-text" data-i18n="settings.displayAdvDesc">Tamaño máximo del disco de datos (GB) y dimensiones iniciales para nuevas pantallas virtuales.</span>
+                  </div>
+                </div>
+                <div class="inline-fields">
+                  <label class="mini-field">
+                    <span data-i18n="settings.diskGb">Disco (GB)</span>
+                    <input id="cfg-storage" class="win-input compact" type="number" min="8" max="1024" />
+                  </label>
+                  <label class="mini-field">
+                    <span data-i18n="settings.width">Ancho</span>
+                    <input id="cfg-width" class="win-input compact" type="number" min="320" max="7680" />
+                  </label>
+                  <label class="mini-field">
+                    <span data-i18n="settings.height">Alto</span>
+                    <input id="cfg-height" class="win-input compact" type="number" min="320" max="4320" />
+                  </label>
+                  <label class="mini-field">
+                    <span>DPI</span>
+                    <input id="cfg-dpi" class="win-input compact" type="number" min="120" max="640" />
+                  </label>
+                  <button class="btn small" id="btn-save-display-adv" type="button" data-i18n="common.apply">Aplicar</button>
+                </div>
               </div>
             </div>
-          </article>
 
-          <article class="card">
-            <h3>Persistent Userdata Backup &amp; Restore</h3>
-            <p class="muted small-text">
-              Backups compute and verify a SHA-256 digest of your Android <code>userdata.img</code>. Stop Midgard before restoring.
-            </p>
-            <div class="form-row">
-              <label for="recovery-dir-input">Backup / Restore Folder</label>
-              <div class="input-with-btn">
-                <input
-                  id="recovery-dir-input"
-                  type="text"
-                  placeholder="C:\Users\...\Backups\bifrost-userdata"
-                />
-                <button class="btn" id="btn-browse-recovery-dir" type="button">Browse…</button>
+            <!-- Data, Shared Folder & Updates -->
+            <h3 class="section-heading" data-i18n="settings.groupData">Tus datos y actualizaciones</h3>
+            <div class="settings-stack">
+              <div class="setting-row">
+                <div class="setting-left">
+                  <div class="setting-icon">
+                    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <path d="M2.5 5.5A1.5 1.5 0 014 4h4l1.8 2H16a1.5 1.5 0 011.5 1.5v7A1.5 1.5 0 0116 16H4a1.5 1.5 0 01-1.5-1.5v-9z" stroke-linejoin="round" />
+                    </svg>
+                  </div>
+                  <div class="setting-text">
+                    <strong data-i18n="settings.shareTitle">Carpeta compartida con Android</strong>
+                    <span class="muted small-text" id="settings-share-count">…</span>
+                  </div>
+                </div>
+                <button class="btn small" id="btn-open-shared-folder" type="button" data-i18n="settings.openExplorer">Abrir carpeta</button>
+              </div>
+
+              <div class="setting-row wrap-row">
+                <div class="setting-left">
+                  <div class="setting-icon">
+                    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <path d="M4 13.5v2A1.5 1.5 0 005.5 17h9a1.5 1.5 0 001.5-1.5v-2M10 3v9.5m0 0l-3-3m3 3l3-3" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </div>
+                  <div class="setting-text">
+                    <strong data-i18n="settings.backupTitle">Copia de seguridad de Android</strong>
+                    <span class="muted small-text" data-i18n="settings.backupDesc">Guarda o restaura tus apps y datos personales verificados con suma SHA-256.</span>
+                  </div>
+                </div>
+                <div class="actions">
+                  <button class="btn small" id="btn-backup-userdata" type="button" data-i18n="settings.backupCreate">Crear copia…</button>
+                  <button class="btn small danger" id="btn-restore-userdata" type="button" data-i18n="settings.backupRestore">Restaurar…</button>
+                </div>
+              </div>
+
+              <div class="setting-row wrap-row">
+                <div class="setting-left">
+                  <div class="setting-icon">
+                    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <circle cx="10" cy="10" r="7.2" />
+                      <path d="M10 6.5v4m0 3h.01" stroke-linecap="round" />
+                    </svg>
+                  </div>
+                  <div class="setting-text">
+                    <strong id="settings-version-title">BIFRÖST</strong>
+                    <span class="muted small-text" id="update-status" data-i18n="settings.updateIdle">Comprueba si existe una versión nueva en GitHub sin descargar nada automáticamente.</span>
+                  </div>
+                </div>
+                <button class="btn small" id="btn-check-updates" type="button" data-i18n="settings.checkUpdates">Buscar actualizaciones</button>
               </div>
             </div>
-            <div class="actions">
-              <button class="btn primary" id="btn-backup-userdata" type="button">Create Verified Backup</button>
-              <button class="btn danger" id="btn-restore-userdata" type="button">Restore Verified Backup</button>
+
+            <!-- For Developers -->
+            <h3 class="section-heading" data-i18n="settings.groupAdvanced">Avanzado</h3>
+            <div class="settings-stack">
+              <label class="setting-row clickable">
+                <div class="setting-left">
+                  <div class="setting-icon">
+                    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <path d="M6.5 6.5L3 10l3.5 3.5M13.5 6.5L17 10l-3.5 3.5M11.2 4.5l-2.4 11" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </div>
+                  <div class="setting-text">
+                    <strong data-i18n="settings.devModeTitle">Modo desarrollador</strong>
+                    <span class="muted small-text" data-i18n="settings.devModeDesc">Habilita la pestaña Desarrollador con control de ADB, procesos, registros serie, imágenes del sistema, firmas Ed25519 y diagnóstico detallado.</span>
+                  </div>
+                </div>
+                <input id="toggle-dev-mode" class="win-switch" type="checkbox" />
+              </label>
             </div>
-          </article>
-        </section>
+          </section>
 
-        <!-- 6. SETTINGS -->
-        <section id="section-settings" class="panel" role="tabpanel">
-          <header class="panel-header">
-            <div>
-              <h2>Settings &amp; Platform Status</h2>
-              <p class="muted">Storage paths, shared folders, component maturity, and security invariants.</p>
+          <!-- 4. DEVELOPER MODE (ADVANCED / TECHNICAL) -->
+          <section id="section-developer" class="page" role="tabpanel">
+            <header class="page-header">
+              <div>
+                <h1 data-i18n="dev.title">Desarrollador</h1>
+                <p class="muted" data-i18n="dev.subtitle">Supervisión técnica de Heimdall, Midgard, red ADB, imágenes Ed25519 y registros.</p>
+              </div>
+              <div class="actions">
+                <button class="btn small" id="btn-open-setup" type="button" data-i18n="dev.openSetup">Ver asistente inicial</button>
+              </div>
+            </header>
+
+            <!-- Engine & Supervisor -->
+            <h3 class="section-heading" data-i18n="dev.groupEngine">Motor de virtualización y supervisor</h3>
+            <div class="win-card">
+              <div class="card-header-inline">
+                <div>
+                  <strong>Heimdall &amp; Midgard VM</strong>
+                  <div class="muted small-text" id="dash-heimdall">…</div>
+                </div>
+                <button class="btn small" id="btn-heimdall-toggle" type="button">Heimdall</button>
+              </div>
+
+              <div class="form-row">
+                <label for="manifest-input" data-i18n="dev.manifestLabel">Manifiesto de arranque (manifest.json)</label>
+                <div class="input-with-btn">
+                  <input id="manifest-input" class="win-input" type="text" placeholder="C:\Users\...\manifest.json" />
+                  <button class="btn" id="btn-browse-manifest" type="button" data-i18n="common.browse">Examinar…</button>
+                </div>
+              </div>
+
+              <div class="actions">
+                <label class="inline-switch-label">
+                  <input id="start-headless" class="win-switch" type="checkbox" checked />
+                  <span class="small-text" data-i18n="dev.headless">Arranque sin ventana de consola (Headless)</span>
+                </label>
+                <button class="btn primary small" id="btn-runtime-start" type="button" data-i18n="dev.startVm">Iniciar con manifiesto</button>
+                <button class="btn small" id="btn-runtime-restart" type="button" data-i18n="home.restart">Reiniciar</button>
+                <button class="btn small danger" id="btn-runtime-stop" type="button" data-i18n="dev.stopVm">Detener</button>
+              </div>
             </div>
-          </header>
 
-          <article class="card">
-            <div class="card-header-inline">
-              <h3>Updates</h3>
-              <button class="btn subtle small" id="btn-check-updates" type="button">Check for updates</button>
+            <!-- ADB & Logging -->
+            <h3 class="section-heading" data-i18n="dev.groupAdb">Puente ADB y nivel de trazas</h3>
+            <div class="win-card">
+              <div class="inline-fields">
+                <label class="mini-field grow">
+                  <span>ADB Bind Address</span>
+                  <input id="cfg-adb-host" class="win-input" type="text" />
+                </label>
+                <label class="mini-field">
+                  <span>ADB Port</span>
+                  <input id="cfg-adb-port" class="win-input compact" type="number" min="1024" max="65535" />
+                </label>
+                <label class="mini-field">
+                  <span>Log Level</span>
+                  <select id="cfg-log-level" class="win-select">
+                    <option value="error">Error</option>
+                    <option value="warn">Warn</option>
+                    <option value="info">Info</option>
+                    <option value="debug">Debug</option>
+                    <option value="trace">Trace</option>
+                  </select>
+                </label>
+                <button class="btn primary small" id="btn-save-dev-config" type="button" data-i18n="common.apply">Aplicar</button>
+              </div>
+              <div class="muted small-text" id="dev-adb-summary">…</div>
+              <div id="dev-forwards-list" class="list-box"></div>
             </div>
-            <p class="muted" id="update-status">BIFRÖST checks GitHub only when you ask. It never downloads or installs anything by itself.</p>
-          </article>
 
-          <article class="card">
-            <h3>Storage &amp; Integration Paths</h3>
-            <dl class="kv-list" id="settings-paths"></dl>
-          </article>
+            <!-- System Images & Ed25519 Trust Store -->
+            <h3 class="section-heading" data-i18n="dev.groupImages">Imágenes de Android y llaves Ed25519</h3>
+            <div class="win-card">
+              <div class="card-header-inline">
+                <strong data-i18n="dev.registeredImages">Imágenes registradas</strong>
+                <button class="btn subtle small" id="btn-refresh-images" type="button" data-i18n="common.refresh">Actualizar</button>
+              </div>
+              <div id="images-list" class="list-box muted">…</div>
 
-          <article class="card">
-            <div class="card-header-inline">
-              <h3>Windows 11 Login Autostart (Heimdall)</h3>
-              <button class="btn small" id="btn-heimdall-autostart" type="button">Enable Autostart</button>
+              <hr class="card-divider" />
+
+              <div class="form-row">
+                <label for="img-manifest-input" data-i18n="dev.registerNewImage">Registrar nuevo bundle (manifest.json)</label>
+                <div class="input-with-btn">
+                  <input id="img-manifest-input" class="win-input" type="text" placeholder="C:\Users\...\manifest.json" />
+                  <button class="btn" id="btn-browse-img-manifest" type="button" data-i18n="common.browse">Examinar…</button>
+                  <button class="btn primary" id="btn-register-image" type="button" data-i18n="dev.registerBtn">Registrar</button>
+                </div>
+              </div>
+              <label class="inline-switch-label">
+                <input id="img-allow-unsigned" class="win-switch" type="checkbox" />
+                <span class="small-text muted" data-i18n="dev.allowUnsigned">Permitir imagen sin firma Ed25519 (solo verificación SHA-256)</span>
+              </label>
+
+              <hr class="card-divider" />
+
+              <strong data-i18n="dev.trustedKeys">Editores de confianza (Ed25519)</strong>
+              <div id="trusted-keys-list" class="list-box muted">…</div>
+              <div class="input-with-btn">
+                <input id="trusted-key-input" class="win-input" type="text" spellcheck="false" autocomplete="off" placeholder="64 hex chars Ed25519 public key" />
+                <button class="btn small" id="btn-add-trusted-key" type="button" data-i18n="dev.addKey">Añadir llave</button>
+              </div>
             </div>
-            <p class="muted small-text" id="settings-autostart-status">
-              Start Heimdall silently at Windows login (HKCU\...\Run, no administrator privileges required) so desktop shortcut sync, notifications, and clipboard bridge stay ready.
-            </p>
-          </article>
 
-          <article class="card">
-            <div class="card-header-inline">
-              <h3>Shared Folder (Host Side)</h3>
-              <button class="btn subtle small" id="btn-refresh-share" type="button">Refresh</button>
+            <!-- Live Android Processes -->
+            <h3 class="section-heading" data-i18n="dev.groupProcesses">Procesos de Android en ejecución</h3>
+            <div class="win-card">
+              <div class="card-header-inline">
+                <span class="muted small-text"><code>ps -A</code> (RSS)</span>
+                <button class="btn subtle small" id="btn-refresh-procs" type="button" data-i18n="common.refresh">Actualizar</button>
+              </div>
+              <div id="dash-processes" class="list-box muted">…</div>
             </div>
-            <div id="settings-shared-files" class="list-box muted">Loading…</div>
-          </article>
 
-          <article class="card">
-            <h3>Component Maturity &amp; Transparency</h3>
-            <div id="settings-capabilities" class="checks-list"></div>
-          </article>
-        </section>
+            <!-- Hardware Diagnostics & Logs -->
+            <h3 class="section-heading" data-i18n="dev.groupDiagnostics">Diagnóstico (bifrost doctor), registros y rutas</h3>
+            <div class="win-card">
+              <div class="card-header-inline">
+                <strong><code>bifrost doctor</code></strong>
+                <div class="actions">
+                  <button class="btn small" id="btn-run-doctor" type="button" data-i18n="dev.runDoctor">Ejecutar comprobación</button>
+                  <button class="btn small" id="btn-export-diag" type="button" data-i18n="dev.copyJson">Copiar JSON</button>
+                </div>
+              </div>
+              <div id="diag-checks" class="list-box"></div>
+            </div>
+
+            <div class="win-card">
+              <div class="card-header-inline">
+                <strong data-i18n="dev.serialLogs">Consola serie y stderr del hipervisor</strong>
+                <div class="actions">
+                  <button class="btn subtle small" id="btn-open-logs-folder" type="button" data-i18n="dev.openLogsDir">Abrir carpeta logs</button>
+                  <button class="btn subtle small" id="btn-refresh-logs" type="button" data-i18n="common.refresh">Actualizar</button>
+                </div>
+              </div>
+              <pre id="diag-logs" class="code-box">…</pre>
+            </div>
+
+            <div class="win-card">
+              <div class="card-header-inline">
+                <strong data-i18n="dev.pathsAndCaps">Rutas del sistema y madurez de componentes</strong>
+                <button class="btn subtle small" id="btn-open-data-folder" type="button" data-i18n="dev.openDataDir">Abrir directorio de datos</button>
+              </div>
+              <dl class="kv-list" id="settings-paths"></dl>
+              <hr class="card-divider" />
+              <div id="settings-capabilities" class="list-box"></div>
+            </div>
+          </section>
+        </div>
       </main>
     </div>
 

@@ -283,7 +283,7 @@ checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 
 [[package]]
 name = "bifrost-bridge"
-version = "0.5.2"
+version = "0.6.0"
 dependencies = [
  "bifrost-core",
  "getrandom 0.2.17",
@@ -300,7 +300,7 @@ dependencies = [
 
 [[package]]
 name = "bifrost-client"
-version = "0.5.2"
+version = "0.6.0"
 dependencies = [
  "bifrost-bridge",
  "bifrost-core",
@@ -316,7 +316,7 @@ dependencies = [
 
 [[package]]
 name = "bifrost-core"
-version = "0.5.2"
+version = "0.6.0"
 dependencies = [
  "directories",
  "proptest",
@@ -333,7 +333,7 @@ dependencies = [
 
 [[package]]
 name = "bifrost-diagnostics"
-version = "0.5.2"
+version = "0.6.0"
 dependencies = [
  "bifrost-core",
  "serde",
@@ -344,7 +344,7 @@ dependencies = [
 
 [[package]]
 name = "bifrost-display"
-version = "0.5.2"
+version = "0.6.0"
 dependencies = [
  "bifrost-bridge",
  "bifrost-core",
@@ -355,7 +355,7 @@ dependencies = [
 
 [[package]]
 name = "bifrost-hypervisor"
-version = "0.5.2"
+version = "0.6.0"
 dependencies = [
  "bifrost-core",
  "bifrost-storage",
@@ -370,7 +370,7 @@ dependencies = [
 
 [[package]]
 name = "bifrost-network"
-version = "0.5.2"
+version = "0.6.0"
 dependencies = [
  "bifrost-bridge",
  "bifrost-core",
@@ -380,7 +380,7 @@ dependencies = [
 
 [[package]]
 name = "bifrost-process"
-version = "0.5.2"
+version = "0.6.0"
 dependencies = [
  "bifrost-bridge",
  "bifrost-core",
@@ -390,7 +390,7 @@ dependencies = [
 
 [[package]]
 name = "bifrost-runtime"
-version = "0.5.2"
+version = "0.6.0"
 dependencies = [
  "bifrost-core",
  "bifrost-hypervisor",
@@ -403,7 +403,7 @@ dependencies = [
 
 [[package]]
 name = "bifrost-storage"
-version = "0.5.2"
+version = "0.6.0"
 dependencies = [
  "bifrost-core",
  "ed25519-dalek",
@@ -418,7 +418,7 @@ dependencies = [
 
 [[package]]
 name = "bifrost-ui"
-version = "0.5.2"
+version = "0.6.0"
 dependencies = [
  "bifrost-bridge",
  "bifrost-client",
@@ -438,6 +438,7 @@ dependencies = [
  "tokio",
  "tracing",
  "valhalla",
+ "winreg",
 ]
 
 [[package]]
@@ -1875,7 +1876,7 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "heimdall"
-version = "0.5.2"
+version = "0.6.0"
 dependencies = [
  "bifrost-bridge",
  "bifrost-core",
@@ -2573,7 +2574,7 @@ checksum = "d5848f5a9e8117cf94f2f90faac24a87ff81600ff8628c1e3deaab572e76bfa1"
 
 [[package]]
 name = "mimir"
-version = "0.5.2"
+version = "0.6.0"
 dependencies = [
  "bifrost-bridge",
  "bifrost-client",
@@ -4954,7 +4955,7 @@ dependencies = [
 
 [[package]]
 name = "valhalla"
-version = "0.5.2"
+version = "0.6.0"
 dependencies = [
  "bifrost-bridge",
  "bifrost-core",

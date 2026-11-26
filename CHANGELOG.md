@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-26
+
+### Changed
+- **Native Windows 11 WinUI 3 / Mica Desktop Shell (`bifrost-ui`)**: redesigned `apps/bifrost-ui` as a borderless, transparent DWM Mica window (`Effect::Mica`, integrated titlebar with native `46×38` caption controls, rounded `LayerFillColor` content frame, and WinUI 3 `SettingsCard` / `ToggleSwitch` rows). Reads the user's live Windows 11 `AccentPalette` / `AccentColor` (ABGR), `AppsUseLightTheme`, and `LocaleName` from `HKCU` (`service::appearance`) so accent colors, Dark/Light mode, and Spanish/English UI text adapt automatically to Windows. Simplified the default navigation for end users to three views (**Home**, **Apps**, **Settings**, plus **Setup** only while required steps remain) with instant auto-saving toggles, 1-click Android power on/off (`start_active_runtime`), and 1-click Explorer folder opening (`open_known_folder`), moving technical controls (Heimdall daemon, manual `manifest.json` boot, ADB port forwards, `Ed25519` trust store, live processes, `bifrost doctor`, and serial/VMM logs) behind a **Developer Mode** switch.
+
+### Documentation
+- **Workspace & capability synchronization (`ARCHITECTURE.md`, `README.md`)**: aligned workspace crate count (`14`), passing test counts across every crate (`153` tests: `131` unit/IPC + `22` property-based fuzz), project file tree, and live-VM e2e runner status.
+
 ## [0.5.2] - 2026-11-25
 
 ### Documentation
