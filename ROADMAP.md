@@ -108,6 +108,7 @@ Details per release are in [CHANGELOG.md](CHANGELOG.md).
 - [x] **v0.5.0**: First-run setup (`bifrost setup` and Setup view), system tray, update notice (`bifrost update`), shared `bifrost-client` session, trusted publishers card, dependency audit in CI, hardware matrix, and opt-in GPU acceleration through virgl on the host GPU (OpenGL ES 2.0, ADR-0007).
 - [x] **v0.5.1**: First published 0.5 build. Fixes shortcut names that could end in a dot (found by the release property test, which stopped v0.5.0) and the rejected live-VM e2e workflow.
 - [x] **v0.5.2**: Graphics mode advice from the OpenGL ES version installed apps require (`bifrost apps graphics`, Settings check, install warnings) and the explained virgl `SET_SCANOUT` host errors (ADR-0007).
+- [x] **v0.6.0**: Native Windows 11 Mica / WinUI 3 desktop shell (integrated titlebar, dynamic Windows accent/theme/locale from `HKCU`, bilingual ES/EN UI, simplified Home/Apps/Settings consumer flow, and opt-in Developer Mode).
 
 ---
 
