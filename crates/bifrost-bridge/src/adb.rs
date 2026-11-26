@@ -337,6 +337,30 @@ impl AdbClient {
         Ok(stdout)
     }
 
+    /// Runs an ADB command and returns its raw standard output, for binary data such as
+    /// `adb exec-out` (which, unlike `adb shell`, does not translate line endings).
+    pub fn run_adb_bytes(&self, args: &[&str]) -> Result<Vec<u8>> {
+        let adb_bin = self.locate_adb()?;
+        debug!(adb = %adb_bin.display(), args = ?args, "invoking adb (binary output)");
+
+        let output = Command::new(&adb_bin)
+            .args(args)
+            .output()
+            .map_err(|source| BifrostError::Io {
+                context: format!("executing '{}'", adb_bin.display()),
+                source,
+            })?;
+        if !output.status.success() {
+            return Err(BifrostError::Bridge(format!(
+                "adb {:?} failed (exit {:?}): {}",
+                args,
+                output.status.code(),
+                String::from_utf8_lossy(&output.stderr).trim()
+            )));
+        }
+        Ok(output.stdout)
+    }
+
     /// Runs an ADB command and streams `input` to its standard input.
     ///
     /// Used to hand arbitrary data (e.g. clipboard text) to a fixed `adb shell` script,

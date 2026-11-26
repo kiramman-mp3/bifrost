@@ -18,9 +18,9 @@ pub use file_assoc::{
     register_apk_handler, set_heimdall_autostart, unregister_apk_handler, ApkAssociationStatus,
     HeimdallAutostartStatus, BIFROST_APK_PROG_ID, BIFROST_HEIMDALL_RUN_VALUE,
 };
-pub use manager::{InstallOutcome, LaunchOutcome, ValhallaManager};
+pub use manager::{AppGlesRequirement, InstallOutcome, LaunchOutcome, ValhallaManager};
 pub use package::{
-    parse_dumpsys_package, parse_pm_list_packages, parse_resolved_activity, validate_package_name,
-    InstalledPackage, PackageDetails,
+    parse_dumpsys_package, parse_pm_list_packages, parse_resolved_activity,
+    validate_guest_apk_path, validate_package_name, InstalledPackage, PackageDetails,
 };
 pub use shortcuts::{derive_display_name, sanitize_shortcut_name, ShortcutManager, ShortcutRecord};
