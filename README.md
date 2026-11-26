@@ -491,6 +491,14 @@ Distribution tooling lives under [installer/](installer/README.md), [.github/wor
 - [x] **Milestone 6**: Windows integration (shared dirs, Win32 clipboard, notifications, processes, loopback networking, `crosvm-whpx` backend, and per-app `VirtualDisplay` windows).
 - [x] **Milestone 7**: Windows 11 Fluent Design desktop application (`apps/bifrost-ui`).
 - [x] **Milestone 8**: Ed25519 signed image registry, upgrade safety, verified userdata recovery, Windows installer/uninstaller, and CI.
+- [x] **v0.5.0**: First-run setup, system tray, update notice, and opt-in GPU acceleration through virgl (OpenGL ES 2.0).
+- [ ] Graphics mode maturity: explain the virgl `SET_SCANOUT` host errors and recommend a graphics mode from the installed apps' OpenGL ES requirement.
+- [ ] OpenGL ES 3.x and Vulkan on the host GPU through `crosvm` + `gfxstream` with a gfxstream-enabled Midgard image.
+- [ ] Native Win32 + D3D12 per-app windows replacing `scrcpy`.
+- [ ] More verified hardware (NVIDIA, AMD, 8–16 GB RAM).
+- [ ] Signed MSI/MSIX installer that also provides QEMU, `adb` and `scrcpy`.
+- [ ] Live-verified image upgrade that keeps Android user data.
+- [ ] Issue templates, project page and demo video for contributors.
 
 See [ROADMAP.md](ROADMAP.md) for detailed milestone exit criteria.
 
