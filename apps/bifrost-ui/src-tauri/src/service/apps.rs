@@ -1,6 +1,8 @@
 //! Android apps: inspection, the App Installer flow, launch/stop and Windows shortcuts.
 
 use super::*;
+use bifrost_client::graphics::{install_warning, GraphicsAdvice};
+use valhalla::format_gles_version;
 
 /// Preview metadata rendered by the Windows 11 App Installer confirmation dialog.
 #[derive(Debug, Serialize)]
@@ -18,6 +20,10 @@ pub struct PackageInstallPreview {
     pub abi_supported: bool,
     pub detected_abis: Vec<String>,
     pub icon_data_url: Option<String>,
+    /// OpenGL ES version the app requires (`3.0`), when its manifest declares one.
+    pub required_gles: Option<String>,
+    /// Set when the configured graphics mode cannot provide that version (ADR-0007).
+    pub gles_warning: Option<String>,
 }
 
 /// Real-time progress update emitted during `.apk` / `.apkm` installation.
@@ -72,6 +78,12 @@ pub async fn preview_package_install(apk_path: PathBuf) -> Result<PackageInstall
         }
     }
 
+    let graphics_mode = LoadedConfig::load(None)
+        .map(|loaded| loaded.config.runtime.graphics_mode)
+        .unwrap_or_default();
+    let gles_warning = install_warning(graphics_mode, inspection.required_gles_version);
+    let required_gles = inspection.required_gles_version.map(format_gles_version);
+
     Ok(PackageInstallPreview {
         path: inspection.path,
         display_name,
@@ -86,7 +98,14 @@ pub async fn preview_package_install(apk_path: PathBuf) -> Result<PackageInstall
         abi_supported: inspection.abi_compatibility.is_supported(),
         detected_abis: inspection.detected_abis,
         icon_data_url,
+        required_gles,
+        gles_warning,
     })
+}
+
+/// Recommends a graphics mode from the OpenGL ES versions installed apps require.
+pub async fn graphics_advice() -> Result<GraphicsAdvice> {
+    session().await?.graphics_advice(None).await
 }
 
 pub(super) fn encode_base64(input: &[u8]) -> String {

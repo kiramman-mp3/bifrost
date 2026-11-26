@@ -20,7 +20,10 @@ mod axml;
 mod icon;
 
 use apkm::inspect_and_stage_apkm_bundle;
-pub use axml::{extract_manifest_metadata, extract_manifest_package};
+pub use axml::{
+    extract_manifest_metadata, extract_manifest_package, extract_required_gles_version,
+    format_gles_version,
+};
 use icon::score_icon_candidate;
 pub use icon::{extract_apk_icon_png, wrap_png_as_ico};
 
@@ -63,6 +66,10 @@ pub struct ApkInspection {
     pub app_name: Option<String>,
     #[serde(default)]
     pub version_name: Option<String>,
+    /// Highest OpenGL ES version required by `<uses-feature android:glEsVersion>`
+    /// (`major << 16 | minor`), or `None` when the manifest declares none.
+    #[serde(default)]
+    pub required_gles_version: Option<u32>,
     #[serde(default)]
     pub is_split_bundle: bool,
     #[serde(default)]
@@ -163,6 +170,7 @@ pub(crate) fn inspect_and_stage_package(
             package_name: single.package_name,
             app_name: None,
             version_name: single.version_name,
+            required_gles_version: single.required_gles_version,
             is_split_bundle: false,
             split_apk_count: 1,
             detected_abis,
@@ -180,6 +188,7 @@ struct SingleApkSummary {
     has_dex: bool,
     package_name: Option<String>,
     version_name: Option<String>,
+    required_gles_version: Option<u32>,
     abis: BTreeSet<String>,
     best_icon_png: Option<Vec<u8>>,
 }
@@ -202,6 +211,7 @@ fn inspect_single_apk_archive(path: &Path, capture_icon: bool) -> Result<SingleA
     let mut has_dex = false;
     let mut package_name = None;
     let mut version_name = None;
+    let mut required_gles_version = None;
     let mut abis = BTreeSet::new();
     let mut best_icon_score: u64 = 0;
     let mut best_icon_png: Option<Vec<u8>> = None;
@@ -234,6 +244,7 @@ fn inspect_single_apk_archive(path: &Path, capture_icon: bool) -> Result<SingleA
                     let (pkg, ver) = extract_manifest_metadata(&raw);
                     package_name = pkg;
                     version_name = ver;
+                    required_gles_version = extract_required_gles_version(&raw);
                 }
             }
         } else if name.ends_with(".dex") && !name.contains('/') {
@@ -269,6 +280,7 @@ fn inspect_single_apk_archive(path: &Path, capture_icon: bool) -> Result<SingleA
         has_dex,
         package_name,
         version_name,
+        required_gles_version,
         abis,
         best_icon_png,
     })

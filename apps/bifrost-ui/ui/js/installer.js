@@ -106,7 +106,20 @@ export async function openInstallDialog(apkPath) {
       `<span class="meta-chip">${escapeHtml(formatBytes(preview.size_bytes))}</span>`,
       `<span class="meta-chip">${preview.is_split_bundle ? `Split Bundle (${preview.split_apk_count} APKs)` : "Single APK"}</span>`,
     ];
+    if (preview.required_gles) {
+      chips.push(
+        `<span class="meta-chip ${preview.gles_warning ? "warn" : ""}">OpenGL ES ${escapeHtml(preview.required_gles)}</span>`,
+      );
+    }
     metaEl.innerHTML = chips.join("");
+
+    const warningEl = document.getElementById("installer-warning");
+    if (preview.gles_warning) {
+      warningEl.textContent = preview.gles_warning;
+      warningEl.classList.remove("hidden");
+    } else {
+      warningEl.classList.add("hidden");
+    }
 
     if (!preview.abi_supported) {
       errorEl.textContent =

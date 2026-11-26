@@ -19,6 +19,7 @@ pub(super) fn inspect_and_stage_apkm_bundle(
     let mut has_dex = false;
     let mut package_name = extracted.info_package_name;
     let mut version_name = extracted.info_version_name;
+    let mut required_gles_version: Option<u32> = None;
     let mut abi_set = BTreeSet::new();
     let mut compatible_splits = Vec::with_capacity(extracted.all_split_apks.len());
     let mut icon_png = extracted.top_level_icon_png;
@@ -37,6 +38,9 @@ pub(super) fn inspect_and_stage_apkm_bundle(
             if let Some(ver) = summary.version_name {
                 version_name = Some(ver);
             }
+        }
+        if let Some(gles) = summary.required_gles_version {
+            required_gles_version = Some(required_gles_version.map_or(gles, |r| r.max(gles)));
         }
         if icon_png.is_none() {
             icon_png = summary.best_icon_png;
@@ -69,6 +73,7 @@ pub(super) fn inspect_and_stage_apkm_bundle(
             package_name,
             app_name: extracted.info_app_name,
             version_name,
+            required_gles_version,
             is_split_bundle: true,
             split_apk_count: extracted.all_split_apks.len(),
             detected_abis,

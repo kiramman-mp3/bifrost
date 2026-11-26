@@ -35,6 +35,27 @@ export function wireEvents() {
       showToast(String(err), true);
     }
   });
+  document.getElementById("btn-graphics-advice").addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    const text = document.getElementById("graphics-advice-text");
+    const modeLabel = { auto: "Auto", gfxstream: "GPU acceleration", swift_shader: "SwiftShader" };
+    button.disabled = true;
+    text.textContent = "Reading installed apps…";
+    try {
+      const advice = await invoke("graphics_advice");
+      const recommended = modeLabel[advice.recommended_mode] ?? advice.recommended_mode;
+      const current = document.getElementById("cfg-graphics").value;
+      const action =
+        advice.recommended_mode === current
+          ? "This is the selected mode."
+          : `Select it above and save to switch (takes effect at the next Midgard start).`;
+      text.textContent = `Recommended: ${recommended} (${advice.apps_checked} apps checked). ${advice.summary} ${action}`;
+    } catch (err) {
+      text.textContent = `Could not check apps: ${err}`;
+    } finally {
+      button.disabled = false;
+    }
+  });
   document.getElementById("btn-refresh-procs").addEventListener("click", refreshProcesses);
   document.getElementById("btn-refresh-logs").addEventListener("click", refreshLogs);
   document.getElementById("btn-refresh-share").addEventListener("click", refreshSharedFiles);

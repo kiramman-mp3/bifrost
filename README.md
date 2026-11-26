@@ -10,7 +10,7 @@
 
 **BIFRÖST** is an open-source, Rust-powered Android subsystem for Windows 11 x64 designed to run real Android applications with deep native desktop integration — *"A Bridge Between Worlds."*
 
-Inspired by Bifröst from Norse mythology and engineered as a modern, auditable, community-maintained successor to Microsoft's discontinued Windows Subsystem for Android (WSA), BIFRÖST v0.5.1 delivers **Milestones 0 through 8 plus full WSA-grade desktop integration** across a modular Rust workspace (`14` crates, `146` passing tests): native Windows 11 / WHPX + host tooling diagnostics, invisible headless auto-boot on app launch or APK/APKM install, QEMU-WHPX with dedicated `iothread` VirtIO block I/O + DirectSound audio + `virtio-gpu-pci` / opt-in headless GPU acceleration through virgl on the host GPU (`virtio-gpu-gl-pci`, OpenGL ES 2.0) + `crosvm-WHPX` backend, Heimdall authenticated Named Pipe daemon with optional silent Windows login autostart + automatic in-Android shortcut sync + real-time Windows 11 Toast notifications + auto clipboard sync, unprivileged `HKCU` `.apk` / `.apkm` Explorer double-click & context menu handler launching a native Fluent App Installer dialog (with Install/Update detection & live progress bar), Valhalla single-pass APK/APKM split-bundle & ABI manager, WSA-style dedicated dynamically resizable per-app windows (`--flex-display`, 60 FPS), Windows 11 Fluent Design 2 Tauri 2 desktop app (with host auto-tune, cached instant refreshes, native file/folder pickers, `.apk`/`.apkm` drag-and-drop, and Midgard Images & Recovery management), first-run setup wizard, system tray, update notice, and unprivileged Windows installer.
+Inspired by Bifröst from Norse mythology and engineered as a modern, auditable, community-maintained successor to Microsoft's discontinued Windows Subsystem for Android (WSA), BIFRÖST v0.5.1 delivers **Milestones 0 through 8 plus full WSA-grade desktop integration** across a modular Rust workspace (`14` crates, `152` passing tests): native Windows 11 / WHPX + host tooling diagnostics, invisible headless auto-boot on app launch or APK/APKM install, QEMU-WHPX with dedicated `iothread` VirtIO block I/O + DirectSound audio + `virtio-gpu-pci` / opt-in headless GPU acceleration through virgl on the host GPU (`virtio-gpu-gl-pci`, OpenGL ES 2.0) + `crosvm-WHPX` backend, Heimdall authenticated Named Pipe daemon with optional silent Windows login autostart + automatic in-Android shortcut sync + real-time Windows 11 Toast notifications + auto clipboard sync, unprivileged `HKCU` `.apk` / `.apkm` Explorer double-click & context menu handler launching a native Fluent App Installer dialog (with Install/Update detection & live progress bar), Valhalla single-pass APK/APKM split-bundle & ABI manager, WSA-style dedicated dynamically resizable per-app windows (`--flex-display`, 60 FPS), Windows 11 Fluent Design 2 Tauri 2 desktop app (with host auto-tune, cached instant refreshes, native file/folder pickers, `.apk`/`.apkm` drag-and-drop, and Midgard Images & Recovery management), first-run setup wizard, system tray, update notice, and unprivileged Windows installer.
 
 > [!TIP]
 > **Quick start (`v0.5.1`)**: Download the latest Windows x64 release bundle or run directly from source:
@@ -86,7 +86,7 @@ The `bifrost-ui` desktop app (`apps/bifrost-ui`) has seven views, Dark and Light
 - **Frontend / Desktop UI**: Tauri 2 (`apps/bifrost-ui`), WebView2, offline-first HTML/CSS/ES with Windows 11 Fluent Design 2 styling (Dark & Light themes).
 - **Backend & Control Plane**: Rust (`edition = "2021"`, `rust-version = "1.89"`), Cargo workspace (`14` crates), `tokio`, `serde`, `serde_json`, `toml`, `tracing`, `thiserror`, `clap`, `sha2`, `ed25519-dalek`, `zip`, `windows` crate.
 - **Virtualization & Android Guest**: Windows Hypervisor Platform (`WHPX`), QEMU `11.1.0` (`q35,accel=whpx`, EDK2 UEFI `pflash`, VirtIO storage/net/serial/RNG, QMP) and `crosvm` (`whpx` + `gfxstream`), Android `x86_64` VirtIO / AOSP / LineageOS, `adb`, `scrcpy >= 3.0`.
-- **Testing & Quality Gates**: `cargo test --workspace` (`146` passing tests: `124` unit/IPC + `22` property-based fuzz; `4` opt-in tests ignored by default), `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo fmt --all -- --check`, `cargo deny check` (`deny.toml`).
+- **Testing & Quality Gates**: `cargo test --workspace` (`152` passing tests: `130` unit/IPC + `22` property-based fuzz; `4` opt-in tests ignored by default), `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo fmt --all -- --check`, `cargo deny check` (`deny.toml`).
 - **Distribution & CI**: PowerShell release packager (`build-release-bundle.ps1`), unprivileged SHA-256-verified Windows user-space installer/uninstaller (`install-bifrost.ps1`, `uninstall-bifrost.ps1`), and GitHub Actions Windows CI (`.github/workflows/ci.yml`).
 
 ---
@@ -406,7 +406,7 @@ cargo deny check   # requires `cargo install cargo-deny --locked`
 | `cargo fmt --all -- --check` | Verify Rust code formatting across workspace | **Implemented** |
 | `cargo clippy --workspace --all-targets --locked -- -D warnings` | Run strict Clippy static analysis against the committed `Cargo.lock` | **Implemented** |
 | `cargo deny check` | Audit dependencies: RustSec advisories, Apache-2.0-compatible licenses and registry sources (`deny.toml`) | **Implemented** |
-| `cargo test --workspace` | Execute unit, IPC & property-based fuzz tests (`146` tests across 14 workspace crates) | **Implemented** |
+| `cargo test --workspace` | Execute unit, IPC & property-based fuzz tests (`152` tests across 14 workspace crates) | **Implemented** |
 | `cargo run -p bifrost-ui` | Launch BIFRÖST Windows 11 Fluent Design desktop application | **Implemented** |
 | `heimdall run` | Start background Heimdall supervisor on owner-DACL Windows Named Pipe | **Implemented** |
 | `bifrost version [--json]` | Display BIFRÖST version, host target, and capability maturity | **Implemented** |
@@ -420,7 +420,8 @@ cargo deny check   # requires `cargo install cargo-deny --locked`
 | `bifrost logs [--tail N]` | Inspect Midgard serial console and VMM stderr logs | **Implemented** |
 | `bifrost devices [--json]` | List connected Android devices via Heimdall Bridge / loopback ADB | **Implemented** |
 | `bifrost apps list \| info \| launch [--window] \| stop \| shortcut` | Discover, inspect, launch (WSA-style flex window), stop, and manage Desktop/Start Menu shortcuts | **Implemented** |
-| `bifrost install <app.apk\|.apkm> [--inspect-only]` | Inspect ZIP/AXML/SHA-256/`x86_64` ABI, install `.apk` or `.apkm` split bundle via Android `pm`, and create Desktop + Start Menu icons | **Implemented** |
+| `bifrost apps graphics [--json]` | Read the OpenGL ES version each installed app requires and recommend a graphics mode (ADR-0007) | **Implemented** |
+| `bifrost install <app.apk\|.apkm> [--inspect-only]` | Inspect ZIP/AXML/SHA-256/`x86_64` ABI and the required OpenGL ES version (warning when the graphics mode cannot provide it), install `.apk` or `.apkm` split bundle via Android `pm`, and create Desktop + Start Menu icons | **Implemented** |
 | `bifrost uninstall <pkg> [--keep-data]` | Uninstall an Android package via Android `pm` | **Implemented** |
 | `bifrost share list \| push \| pull` | Manage scoped Windows ↔ Android shared files (`/sdcard/BifrostShare`) | **Implemented** |
 | `bifrost clipboard get \| sync-to-android` | Read native Win32 Unicode clipboard and sync text to Android | **Implemented** |
@@ -492,7 +493,8 @@ Distribution tooling lives under [installer/](installer/README.md), [.github/wor
 - [x] **Milestone 7**: Windows 11 Fluent Design desktop application (`apps/bifrost-ui`).
 - [x] **Milestone 8**: Ed25519 signed image registry, upgrade safety, verified userdata recovery, Windows installer/uninstaller, and CI.
 - [x] **v0.5.0**: First-run setup, system tray, update notice, and opt-in GPU acceleration through virgl (OpenGL ES 2.0).
-- [ ] Graphics mode maturity: explain the virgl `SET_SCANOUT` host errors and recommend a graphics mode from the installed apps' OpenGL ES requirement.
+- [x] Graphics mode advice from the installed apps' OpenGL ES requirement (`bifrost apps graphics`, Settings, App Installer warning).
+- [ ] Graphics mode maturity: explain the virgl `SET_SCANOUT` host errors.
 - [ ] OpenGL ES 3.x and Vulkan on the host GPU through `crosvm` + `gfxstream` with a gfxstream-enabled Midgard image.
 - [ ] Native Win32 + D3D12 per-app windows replacing `scrcpy`.
 - [ ] More verified hardware (NVIDIA, AMD, 8–16 GB RAM).

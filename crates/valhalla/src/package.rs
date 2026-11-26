@@ -1,5 +1,7 @@
 //! Android package identifier validation and `pm` / `dumpsys` output parsers.
 
+use std::path::Path;
+
 use bifrost_core::{BifrostError, Result};
 use serde::{Deserialize, Serialize};
 
@@ -57,6 +59,25 @@ pub fn validate_package_name(package: &str) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// Accepts an APK path reported by `pm list packages -f` only when it is an absolute
+/// guest path to an `.apk` made of conservative characters, with no `..` component.
+pub fn validate_guest_apk_path(path: &str) -> Result<()> {
+    let ok = path.starts_with('/')
+        && path.len() <= 512
+        && Path::new(path).extension().and_then(|e| e.to_str()) == Some("apk")
+        && !path.split('/').any(|part| part == "..")
+        && path.chars().all(|c| {
+            c.is_ascii_alphanumeric() || matches!(c, '/' | '.' | '_' | '-' | '~' | '=' | '+')
+        });
+    if ok {
+        Ok(())
+    } else {
+        Err(BifrostError::Package(format!(
+            "unexpected guest APK path '{path}'"
+        )))
+    }
 }
 
 /// Parses output from `pm list packages -f` into sorted [`InstalledPackage`] records.
@@ -163,6 +184,25 @@ pub fn parse_resolved_activity(output: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn accepts_only_plain_absolute_guest_apk_paths() {
+        assert!(validate_guest_apk_path(
+            "/data/app/~~Zk3_q-Ab==/org.fdroid.fdroid-Xy9+z==/base.apk"
+        )
+        .is_ok());
+        assert!(validate_guest_apk_path("/system/app/BasicDreams/BasicDreams.apk").is_ok());
+        for bad in [
+            "data/app/base.apk",
+            "/data/app/../../sdcard/x.apk",
+            "/data/app/x.apk; reboot",
+            "/data/app/$(id).apk",
+            "/data/app/x apk.apk",
+            "/data/app/base.odex",
+        ] {
+            assert!(validate_guest_apk_path(bad).is_err(), "{bad}");
+        }
+    }
 
     #[test]
     fn validates_android_package_identifiers() {

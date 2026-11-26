@@ -63,6 +63,8 @@ So with this QEMU build the ceiling is **OpenGL ES 2.0 on the host GPU**. ES 3.x
 
 ## Consequences
 
+- Choosing between the modes is supported by data: `bifrost apps graphics` (and the Settings check) reads `<uses-feature android:glEsVersion>` from every installed app and recommends the GPU mode only when no app needs more than OpenGL ES 2.0. Installing an app that needs more than the configured mode provides shows a warning. Apps that use OpenGL ES 3 only when it is available do not declare it and fall back to 2.0.
+
 - Users can trade ES 3.x compatibility for much smoother rendering, per machine.
 - The `gfxstream` config value now names the virgl path on QEMU. It keeps its name for compatibility with existing `bifrost.toml` files; on the `crosvm-whpx` backend it selects real gfxstream.
 - NVIDIA and AMD GPUs are untested (see `docs/research/hardware-matrix.md`). ANGLE's D3D11 backend is vendor-neutral, but driver quirks are possible.

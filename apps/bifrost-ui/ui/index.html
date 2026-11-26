@@ -85,6 +85,7 @@
               </div>
             </div>
 
+            <div id="installer-warning" class="installer-warning hidden"></div>
             <div id="installer-error" class="installer-error hidden"></div>
 
             <div class="installer-actions">
@@ -276,6 +277,10 @@
                 <option value="gfxstream">GPU acceleration — host GPU via virgl (Experimental: OpenGL ES 2.0 only, no Vulkan, headless)</option>
                 <option value="swift_shader">SwiftShader (CPU Diagnostics)</option>
               </select>
+              <div class="graphics-advice-row">
+                <button class="btn" id="btn-graphics-advice" type="button">Check installed apps</button>
+                <span class="muted small-text" id="graphics-advice-text">Reads the OpenGL ES version each installed app requires (Midgard must be running).</span>
+              </div>
             </div>
             <div class="form-row">
               <label for="cfg-width">Display Width (px)</label>

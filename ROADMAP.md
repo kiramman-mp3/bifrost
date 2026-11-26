@@ -112,7 +112,7 @@ Details per release are in [CHANGELOG.md](CHANGELOG.md).
 
 ## Next — GPU Mode Maturity (`In progress`)
 - [ ] Explain or fix the `virtio_gpu_virgl_process_cmd: ctrl 0x103, error 0x1203` (`SET_SCANOUT`) host errors and the isolated multi-second GPU frame seen in the virgl mode (ADR-0007).
-- [ ] Recommend a graphics mode from what the installed apps declare: the virgl GPU mode is only offered when no installed app requires OpenGL ES 3.0 or higher (`<uses-feature android:glEsVersion>`).
+- [x] Recommend a graphics mode from what the installed apps declare (`<uses-feature android:glEsVersion>`): `bifrost apps graphics`, a Settings check, and an App Installer / `bifrost install` warning when the configured mode cannot provide an app's version.
 
 ---
 

@@ -155,6 +155,11 @@ async fn preview_package_install(apk_path: PathBuf) -> Result<PackageInstallPrev
 }
 
 #[tauri::command]
+async fn graphics_advice() -> Result<bifrost_client::graphics::GraphicsAdvice, String> {
+    map_err(service::graphics_advice().await)
+}
+
+#[tauri::command]
 async fn inspect_apk_file(apk_path: PathBuf) -> Result<ApkInspection, String> {
     off_main_thread(move || service::inspect_apk_file(apk_path)).await
 }
@@ -378,6 +383,7 @@ fn main() {
             get_pending_install,
             close_installer_window,
             preview_package_install,
+            graphics_advice,
             get_dashboard,
             start_heimdall,
             stop_heimdall,
