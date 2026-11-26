@@ -43,7 +43,23 @@ Reference host from the hardware matrix (Intel Core Ultra 9 285H, Intel Arc 140T
 | Host stderr | clean | ~2,000 `virtio_gpu_virgl_process_cmd: ctrl 0x103, error 0x1203` (`SET_SCANOUT` on the unused `egl-headless` scanout), no visible effect |
 | Boot from a fresh `userdata` | 1–5 min on both, dominated by first-boot work and trade-in mode | same |
 
-One virgl run had a single GPU frame outlier of about 5 s (90th GPU percentile 4950 ms) that the other run did not show; it is not yet explained.
+One virgl run had a single GPU frame outlier of about 5 s (90th GPU percentile 4950 ms). It did not recur in the follow-up below.
+
+### Follow-up: `SET_SCANOUT` errors and the GPU stall (2026-11-25)
+
+The error is `VIRTIO_GPU_RESP_ERR_INVALID_RESOURCE_ID` (0x1203) answering `VIRTIO_GPU_CMD_SET_SCANOUT` (0x103): the guest asks QEMU to show a resource on the `egl-headless` scanout that QEMU's virgl path does not accept. Two fresh instances (same 4 vCPU / 4096 MB setup) counted the errors after each phase and ran the Settings benchmark four times each:
+
+| Phase | `blob=on,hostmem=256M` (shipped) | `blob=off` |
+|---|---|---|
+| Boot until `sys.boot_completed` | 1,895 | 3,515 |
+| 60 s idle, 30 s screen off, wake | +1 | +1 |
+| 4 benchmark runs | +0 | +0 |
+| Opening and closing a scrcpy app window | +0 | not measured |
+| Median frame time | 36–38 ms | 44–46 ms |
+| Janky frames | 18–21 % | 37–40 % |
+| 90th GPU percentile | 21–24 ms (no stall) | 19–20 ms (no stall) |
+
+The errors happen while Android boots, when `drm_hwcomposer` brings up the display (it also logs `could not create drm fb -22` then); they stop once the system is up, so frames shown to the user (through SurfaceFlinger, `screencap` and scrcpy, none of which read the QEMU scanout) are not affected. `blob=off` does not remove them and is slower, so `blob=on` stays. The 5 s GPU frame did not recur in eight runs and is treated as a one-off on a busy host. Both are host-side log noise and no longer block the mode; they would only matter for a future path that presents the QEMU scanout itself.
 
 Variants that do not work with the stock QEMU 11.1.0 Windows build:
 
@@ -63,7 +79,9 @@ So with this QEMU build the ceiling is **OpenGL ES 2.0 on the host GPU**. ES 3.x
 
 ## Consequences
 
+- Choosing between the modes is supported by data: `bifrost apps graphics` (and the Settings check) reads `<uses-feature android:glEsVersion>` from every installed app and recommends the GPU mode only when no app needs more than OpenGL ES 2.0. Installing an app that needs more than the configured mode provides shows a warning. Apps that use OpenGL ES 3 only when it is available do not declare it and fall back to 2.0.
+
 - Users can trade ES 3.x compatibility for much smoother rendering, per machine.
 - The `gfxstream` config value now names the virgl path on QEMU. It keeps its name for compatibility with existing `bifrost.toml` files; on the `crosvm-whpx` backend it selects real gfxstream.
 - NVIDIA and AMD GPUs are untested (see `docs/research/hardware-matrix.md`). ANGLE's D3D11 backend is vendor-neutral, but driver quirks are possible.
-- The `SET_SCANOUT` errors and the single 5 s GPU stall need investigation before this mode could become a default.
+- The `SET_SCANOUT` errors are explained (boot-time only, no visible effect) and the 5 s GPU stall did not recur. What still keeps the GPU mode from being the default is OpenGL ES 2.0 and the lack of measurements on NVIDIA and AMD GPUs.

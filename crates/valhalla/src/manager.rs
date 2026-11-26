@@ -8,10 +8,10 @@ use bifrost_core::{BifrostError, Result};
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
-use crate::apk::{inspect_and_stage_package, ApkInspection};
+use crate::apk::{extract_required_gles_version, inspect_and_stage_package, ApkInspection};
 use crate::package::{
-    parse_dumpsys_package, parse_pm_list_packages, parse_resolved_activity, validate_package_name,
-    InstalledPackage, PackageDetails,
+    parse_dumpsys_package, parse_pm_list_packages, parse_resolved_activity,
+    validate_guest_apk_path, validate_package_name, InstalledPackage, PackageDetails,
 };
 use crate::shortcuts::{ShortcutManager, ShortcutRecord};
 
@@ -26,6 +26,19 @@ pub struct InstallOutcome {
     #[serde(default)]
     pub shortcuts: Option<ShortcutRecord>,
 }
+
+/// OpenGL ES requirement of one installed app, read from its `AndroidManifest.xml`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AppGlesRequirement {
+    pub package_name: String,
+    /// `major << 16 | minor` from `<uses-feature android:glEsVersion>`; `None` = none declared.
+    pub required_gles_version: Option<u32>,
+    /// False when the manifest could not be read (path rejected, `unzip` failed, not AXML).
+    pub readable: bool,
+}
+
+/// Upper bound on a manifest read back from the guest.
+const MAX_GUEST_MANIFEST_BYTES: usize = 8 * 1024 * 1024;
 
 /// Result returned after launching an Android application.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -329,6 +342,60 @@ impl ValhallaManager {
             component: None,
             am_output: monkey_out.trim().to_string(),
         })
+    }
+
+    /// Reads the OpenGL ES version each third-party app requires.
+    ///
+    /// Android does not report `<uses-feature android:glEsVersion>` in `dumpsys`, so the
+    /// binary manifest is extracted from each installed base APK with the guest's own
+    /// `unzip -p` (only `AndroidManifest.xml` crosses ADB, not the whole APK) and parsed
+    /// on the host. Paths come from `pm list packages -f` and are validated first.
+    pub fn installed_gles_requirements(
+        &self,
+        serial: Option<&str>,
+    ) -> Result<Vec<AppGlesRequirement>> {
+        let target = self.resolve_target_serial(serial)?;
+        let packages = self.list_packages(Some(&target), true)?;
+        let mut out = Vec::with_capacity(packages.len());
+        for pkg in packages {
+            let required = pkg
+                .apk_path
+                .as_deref()
+                .filter(|path| validate_guest_apk_path(path).is_ok())
+                .and_then(|path| self.read_guest_manifest(&target, path))
+                .map(|manifest| extract_required_gles_version(&manifest));
+            out.push(AppGlesRequirement {
+                package_name: pkg.package_name,
+                required_gles_version: required.flatten(),
+                readable: required.is_some(),
+            });
+        }
+        Ok(out)
+    }
+
+    /// Extracts `AndroidManifest.xml` from a guest APK; `None` unless it looks like AXML.
+    fn read_guest_manifest(&self, target: &str, apk_path: &str) -> Option<Vec<u8>> {
+        // Unlike `adb shell`, which joins its arguments into one raw command line,
+        // `adb exec-out` escapes each argument itself, so the path is passed as is
+        // (quoting it here would make the quotes part of the file name).
+        match self.adb.run_adb_bytes(&[
+            "-s",
+            target,
+            "exec-out",
+            "unzip",
+            "-p",
+            apk_path,
+            "AndroidManifest.xml",
+        ]) {
+            Ok(bytes) if bytes.len() <= MAX_GUEST_MANIFEST_BYTES && bytes.starts_with(&[3, 0]) => {
+                Some(bytes)
+            }
+            Ok(_) => None,
+            Err(err) => {
+                warn!(apk = apk_path, error = %err, "could not read guest APK manifest");
+                None
+            }
+        }
     }
 
     /// Force-stops a running Android application via `am force-stop`.

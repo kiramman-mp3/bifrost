@@ -678,6 +678,28 @@ body.installer-mode .installer-backdrop {
   word-break: break-word;
 }
 
+.installer-warning {
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--warn);
+  color: var(--warn);
+  font-size: 12px;
+  word-break: break-word;
+}
+
+.meta-chip.warn {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.graphics-advice-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .installer-actions {
   display: flex;
   justify-content: flex-end;

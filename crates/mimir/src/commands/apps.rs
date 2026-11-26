@@ -1,6 +1,7 @@
 //! `bifrost apps`, `install` and `uninstall` (Valhalla package management).
 
 use super::*;
+use bifrost_client::graphics::install_warning;
 
 pub(super) async fn handle_apps(
     action: &AppsAction,
@@ -112,6 +113,29 @@ pub(super) async fn handle_apps(
             }
             Ok(format!("Force-stopped Android package '{package}'."))
         }
+        AppsAction::Graphics { serial } => {
+            let advice = session.graphics_advice(serial.clone()).await?;
+            if as_json {
+                return serde_json::to_string_pretty(&advice)
+                    .map_err(|err| BifrostError::ConfigSerialize(err.to_string()));
+            }
+            let mode = |m: GraphicsMode| match m {
+                GraphicsMode::Gfxstream => "gfxstream (GPU acceleration, Experimental)",
+                GraphicsMode::SwiftShader => "swift_shader (CPU diagnostics)",
+                GraphicsMode::Auto => "auto (CPU rendering)",
+            };
+            Ok(format!(
+                "Apps checked:     {}
+Current mode:     {}
+Recommended mode: {}
+
+{}",
+                advice.apps_checked,
+                mode(advice.current_mode),
+                mode(advice.recommended_mode),
+                advice.summary
+            ))
+        }
         AppsAction::Shortcut {
             package,
             name,
@@ -185,8 +209,12 @@ pub(super) async fn handle_install(
         } else {
             String::new()
         };
-        return Ok(format!(
-            "Package Path:      {}\nPackage Name:      {}{}\nSize:              {} bytes\nSHA-256:           {}\nZIP Entries:       {}\nAndroidManifest:   {}\nDEX Bytecode:      {}\nABI Compatibility: {}",
+        let gles = info.required_gles_version.map_or_else(
+            || "none declared".to_string(),
+            |v| format!("{} or newer", valhalla::format_gles_version(v)),
+        );
+        let mut report = format!(
+            "Package Path:      {}\nPackage Name:      {}{}\nSize:              {} bytes\nSHA-256:           {}\nZIP Entries:       {}\nAndroidManifest:   {}\nDEX Bytecode:      {}\nABI Compatibility: {}\nOpenGL ES:         {}",
             info.path.display(),
             info.package_name.as_deref().unwrap_or("unknown"),
             bundle_line,
@@ -195,8 +223,16 @@ pub(super) async fn handle_install(
             info.entry_count,
             info.has_android_manifest,
             info.has_dex,
-            abi_summary
-        ));
+            abi_summary,
+            gles
+        );
+        let mode = LoadedConfig::load(explicit_config.map(PathBuf::as_path))
+            .map(|loaded| loaded.config.runtime.graphics_mode)
+            .unwrap_or_default();
+        if let Some(warning) = install_warning(mode, info.required_gles_version) {
+            report.push_str(&format!("\nWarning:           {warning}"));
+        }
+        return Ok(report);
     }
 
     let session = Session::open(explicit_config.map(PathBuf::as_path)).await?;
@@ -231,6 +267,12 @@ pub(super) async fn handle_install(
         outcome.serial,
         outcome.inspection.sha256
     );
+    if let Some(warning) = install_warning(
+        session.config().runtime.graphics_mode,
+        outcome.inspection.required_gles_version,
+    ) {
+        msg.push_str(&format!("\nWarning: {warning}"));
+    }
     if let Some(ref sc) = outcome.shortcuts {
         msg.push_str(&format!(
             "\nDesktop Shortcut:    {}\nStart Menu Shortcut: {}",

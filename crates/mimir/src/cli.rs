@@ -310,6 +310,12 @@ pub enum AppsAction {
         #[arg(long)]
         serial: Option<String>,
     },
+    /// Recommend a graphics mode from the OpenGL ES versions installed apps require (ADR-0007).
+    Graphics {
+        /// Target Android device serial (defaults to this configuration's Midgard endpoint).
+        #[arg(long)]
+        serial: Option<String>,
+    },
     /// Create or remove Windows Desktop and Start Menu shortcuts for an installed app.
     Shortcut {
         /// Android package identifier (e.g., org.fdroid.fdroid).

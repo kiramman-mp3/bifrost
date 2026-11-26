@@ -107,12 +107,13 @@ Details per release are in [CHANGELOG.md](CHANGELOG.md).
 - [x] **v0.4.0**: Security & reliability hardening: quoted/stdin `adb shell` input, image trust store (ADR-0006), QMP off TCP, no PowerShell at runtime, cross-process VM lifecycle lock, Heimdall single-instance fix, ADB trade-in/authorization diagnostics, pinned CI actions, signed release pipeline, live-VM end-to-end test.
 - [x] **v0.5.0**: First-run setup (`bifrost setup` and Setup view), system tray, update notice (`bifrost update`), shared `bifrost-client` session, trusted publishers card, dependency audit in CI, hardware matrix, and opt-in GPU acceleration through virgl on the host GPU (OpenGL ES 2.0, ADR-0007).
 - [x] **v0.5.1**: First published 0.5 build. Fixes shortcut names that could end in a dot (found by the release property test, which stopped v0.5.0) and the rejected live-VM e2e workflow.
+- [x] **v0.5.2**: Graphics mode advice from the OpenGL ES version installed apps require (`bifrost apps graphics`, Settings check, install warnings) and the explained virgl `SET_SCANOUT` host errors (ADR-0007).
 
 ---
 
-## Next — GPU Mode Maturity (`In progress`)
-- [ ] Explain or fix the `virtio_gpu_virgl_process_cmd: ctrl 0x103, error 0x1203` (`SET_SCANOUT`) host errors and the isolated multi-second GPU frame seen in the virgl mode (ADR-0007).
-- [ ] Recommend a graphics mode from what the installed apps declare: the virgl GPU mode is only offered when no installed app requires OpenGL ES 3.0 or higher (`<uses-feature android:glEsVersion>`).
+## Next — GPU Mode Maturity (`Implemented`)
+- [x] Explain the `virtio_gpu_virgl_process_cmd: ctrl 0x103, error 0x1203` (`SET_SCANOUT`) host errors (boot-time only, no visible effect; `blob=off` does not remove them and is slower) and the isolated multi-second GPU frame (did not recur in eight runs), see ADR-0007.
+- [x] Recommend a graphics mode from what the installed apps declare (`<uses-feature android:glEsVersion>`): `bifrost apps graphics`, a Settings check, and an App Installer / `bifrost install` warning when the configured mode cannot provide an app's version.
 
 ---
 

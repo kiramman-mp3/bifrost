@@ -9,7 +9,8 @@ use std::io::Write;
 
 use proptest::prelude::*;
 use valhalla::apk::{
-    extract_manifest_metadata, extract_manifest_package, inspect_apk, wrap_png_as_ico,
+    extract_manifest_metadata, extract_manifest_package, extract_required_gles_version,
+    inspect_apk, wrap_png_as_ico,
 };
 use valhalla::package::{parse_dumpsys_package, parse_pm_list_packages, parse_resolved_activity};
 use valhalla::sanitize_shortcut_name;
@@ -55,6 +56,7 @@ proptest! {
     fn axml_parsers_never_panic(bytes in axml_like()) {
         let _ = extract_manifest_package(&bytes);
         let _ = extract_manifest_metadata(&bytes);
+        let _ = extract_required_gles_version(&bytes);
     }
 
     #[test]

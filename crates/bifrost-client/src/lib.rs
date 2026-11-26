@@ -6,6 +6,7 @@
 //! once, applies that rule for each operation, and runs every direct (blocking) call on
 //! Tokio's blocking pool so async callers such as the Tauri UI never stall a worker.
 
+pub mod graphics;
 pub mod setup;
 pub mod update;
 
@@ -385,6 +386,22 @@ impl Session {
             ValhallaManager::new().install_apk(serial.as_deref(), apk_path)
         })
         .await
+    }
+
+    /// Recommends a graphics mode from the OpenGL ES versions the installed apps require.
+    ///
+    /// Talks to Android over ADB directly (read-only): `serial` defaults to this
+    /// configuration's Midgard endpoint, which must already be online.
+    pub async fn graphics_advice(
+        &self,
+        serial: Option<String>,
+    ) -> Result<graphics::GraphicsAdvice> {
+        let serial = serial.unwrap_or_else(|| self.loaded.adb_endpoint());
+        let current = self.config().runtime.graphics_mode;
+        let apps =
+            blocking(move || ValhallaManager::new().installed_gles_requirements(Some(&serial)))
+                .await?;
+        Ok(graphics::advise(current, &apps))
     }
 
     /// Uninstalls `package` and returns PackageManager's output line.
