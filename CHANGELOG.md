@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-25
+
 ### Fixed
 - **Shortcut names could end in a dot (`valhalla`)**: an app label such as `Viewer 0 ."."` became `Viewer 0 .`, because trailing dots and spaces were stripped only once. Windows drops the trailing dot, so the shortcut file would not match its expected name. Any mix of trailing dots and spaces is now removed. Found by the release workflow's property test, which stopped the v0.5.0 release before it was published.
 - **Live VM e2e workflow was rejected by GitHub (CI)**: it read the `runner` context in job-level `env`, which is not allowed, so every push showed a failed run. The Cargo target directory is now set from a step.
