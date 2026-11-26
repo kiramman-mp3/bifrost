@@ -326,7 +326,11 @@ pub fn sanitize_shortcut_name(raw: &str) -> Option<String> {
         }
     }
 
-    let trimmed = out.trim().trim_end_matches('.').trim().to_string();
+    // Windows silently drops trailing dots and spaces, so strip any mix of them.
+    let trimmed = out
+        .trim_start()
+        .trim_end_matches(|c: char| c == '.' || c.is_whitespace())
+        .to_string();
     if trimmed.is_empty() || trimmed == "." || trimmed == ".." {
         return None;
     }
@@ -541,6 +545,18 @@ mod tests {
         );
         assert_eq!(sanitize_shortcut_name("CON"), Some("CON App".to_string()));
         assert_eq!(sanitize_shortcut_name("..."), None);
+    }
+
+    #[test]
+    fn strips_alternating_trailing_dots_and_spaces() {
+        // Found by the release proptest: an invalid character between dots turned into a
+        // space, and a single dot-then-space trim left a trailing '.'.
+        assert_eq!(
+            sanitize_shortcut_name("Viewer 0 .\"."),
+            Some("Viewer 0".to_string())
+        );
+        assert_eq!(sanitize_shortcut_name("App . . ."), Some("App".to_string()));
+        assert_eq!(sanitize_shortcut_name(". . ."), None);
     }
 
     #[test]
