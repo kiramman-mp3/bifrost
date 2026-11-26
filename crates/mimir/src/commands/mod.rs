@@ -12,8 +12,8 @@ use bifrost_bridge::{
 };
 use bifrost_client::{blocking, DaemonStart, LoadedConfig, Session, StatusSnapshot};
 use bifrost_core::{
-    validate_host_file_path, BifrostConfig, BifrostError, BifrostPaths, Result, RuntimeState,
-    VersionInfo,
+    validate_host_file_path, BifrostConfig, BifrostError, BifrostPaths, GraphicsMode, Result,
+    RuntimeState, VersionInfo,
 };
 use bifrost_diagnostics::{render_human_report, run_doctor, OverallReadiness};
 use bifrost_display::{AppWindowSpec, DisplayController};
