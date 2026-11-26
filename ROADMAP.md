@@ -110,8 +110,8 @@ Details per release are in [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
-## Next — GPU Mode Maturity (`In progress`)
-- [ ] Explain or fix the `virtio_gpu_virgl_process_cmd: ctrl 0x103, error 0x1203` (`SET_SCANOUT`) host errors and the isolated multi-second GPU frame seen in the virgl mode (ADR-0007).
+## Next — GPU Mode Maturity (`Implemented`)
+- [x] Explain the `virtio_gpu_virgl_process_cmd: ctrl 0x103, error 0x1203` (`SET_SCANOUT`) host errors (boot-time only, no visible effect; `blob=off` does not remove them and is slower) and the isolated multi-second GPU frame (did not recur in eight runs), see ADR-0007.
 - [x] Recommend a graphics mode from what the installed apps declare (`<uses-feature android:glEsVersion>`): `bifrost apps graphics`, a Settings check, and an App Installer / `bifrost install` warning when the configured mode cannot provide an app's version.
 
 ---
