@@ -10,10 +10,10 @@
 
 **BIFRÖST** is an open-source, Rust-powered Android subsystem for Windows 11 x64 designed to run real Android applications with deep native desktop integration — *"A Bridge Between Worlds."*
 
-Inspired by Bifröst from Norse mythology and engineered as a modern, auditable, community-maintained successor to Microsoft's discontinued Windows Subsystem for Android (WSA), BIFRÖST v0.5.2 delivers **Milestones 0 through 8 plus full WSA-grade desktop integration** across a modular Rust workspace (`14` crates, `153` passing tests): native Windows 11 / WHPX + host tooling diagnostics, invisible headless auto-boot on app launch or APK/APKM install, QEMU-WHPX with dedicated `iothread` VirtIO block I/O + DirectSound audio + `virtio-gpu-pci` / opt-in headless GPU acceleration through virgl on the host GPU (`virtio-gpu-gl-pci`, OpenGL ES 2.0) + `crosvm-WHPX` backend, Heimdall authenticated Named Pipe daemon with optional silent Windows login autostart + automatic in-Android shortcut sync + real-time Windows 11 Toast notifications + auto clipboard sync, unprivileged `HKCU` `.apk` / `.apkm` Explorer double-click & context menu handler launching a native Fluent App Installer dialog (with Install/Update detection & live progress bar), Valhalla single-pass APK/APKM split-bundle & ABI manager, WSA-style dedicated dynamically resizable per-app windows (`--flex-display`, 60 FPS), native Windows 11 Mica Tauri 2 desktop app (integrated titlebar, dynamic Windows accent & theme, auto ES/EN language, simplified Home/Apps/Settings consumer flow + Developer Mode, native pickers, and `.apk`/`.apkm` drag-and-drop), first-run setup wizard, system tray, update notice, and unprivileged Windows installer.
+Inspired by Bifröst from Norse mythology and engineered as a modern, auditable, community-maintained successor to Microsoft's discontinued Windows Subsystem for Android (WSA), BIFRÖST v0.6.0 delivers **Milestones 0 through 8 plus full WSA-grade desktop integration** across a modular Rust workspace (`14` crates, `153` passing tests): native Windows 11 / WHPX + host tooling diagnostics, invisible headless auto-boot on app launch or APK/APKM install, QEMU-WHPX with dedicated `iothread` VirtIO block I/O + DirectSound audio + `virtio-gpu-pci` / opt-in headless GPU acceleration through virgl on the host GPU (`virtio-gpu-gl-pci`, OpenGL ES 2.0) + `crosvm-WHPX` backend, Heimdall authenticated Named Pipe daemon with optional silent Windows login autostart + automatic in-Android shortcut sync + real-time Windows 11 Toast notifications + auto clipboard sync, unprivileged `HKCU` `.apk` / `.apkm` Explorer double-click & context menu handler launching a native Fluent App Installer dialog (with Install/Update detection & live progress bar), Valhalla single-pass APK/APKM split-bundle & ABI manager, WSA-style dedicated dynamically resizable per-app windows (`--flex-display`, 60 FPS), native Windows 11 Mica Tauri 2 desktop app (integrated titlebar, dynamic Windows accent & theme, auto ES/EN language, simplified Home/Apps/Settings consumer flow + Developer Mode, native pickers, and `.apk`/`.apkm` drag-and-drop), first-run setup wizard, system tray, update notice, and unprivileged Windows installer.
 
 > [!TIP]
-> **Quick start (`v0.5.2`)**: Download the latest Windows x64 release bundle or run directly from source:
+> **Quick start (`v0.6.0`)**: Download the latest Windows x64 release bundle or run directly from source:
 > ```powershell
 > $env:CARGO_TARGET_DIR = "$env:TEMP\bifrost-target" # required with MinGW ld if repo path contains non-ASCII characters
 > cargo test --workspace
@@ -138,7 +138,7 @@ BIFRÖST/
 ├── CLAUDE.md                                      # Engineering context, Git workflow, and documentation rules
 ├── CONTRIBUTING.md                                # Contribution guidelines, Git Flow, and Rust standards
 ├── README.md                                      # Project overview and documentation entry point
-├── ROADMAP.md                                     # Milestones M0–M8, v0.1.0–v0.5.2 releases, and next steps
+├── ROADMAP.md                                     # Milestones M0–M8, v0.1.0–v0.6.0 releases, and next steps
 ├── SECURITY.md                                    # Mandatory security invariants and vulnerability disclosure policy
 ├── master_prompt.md                               # Master engineering specification
 ├── android/
@@ -504,6 +504,7 @@ Distribution tooling lives under [installer/](installer/README.md), [.github/wor
 - [x] **v0.5.0**: First-run setup, system tray, update notice, and opt-in GPU acceleration through virgl (OpenGL ES 2.0).
 - [x] Graphics mode advice from the installed apps' OpenGL ES requirement (`bifrost apps graphics`, Settings, App Installer warning).
 - [x] Virgl `SET_SCANOUT` host errors explained: boot-time only, no visible effect (ADR-0007).
+- [x] **v0.6.0**: Native Windows 11 Mica / WinUI 3 desktop shell, dynamic system accent/theme/locale, bilingual ES/EN UI, and Developer Mode.
 - [ ] OpenGL ES 3.x and Vulkan on the host GPU through `crosvm` + `gfxstream` with a gfxstream-enabled Midgard image.
 - [ ] Native Win32 + D3D12 per-app windows replacing `scrcpy`.
 - [ ] More verified hardware (NVIDIA, AMD, 8–16 GB RAM).
@@ -519,7 +520,7 @@ See [ROADMAP.md](ROADMAP.md) for detailed milestone exit criteria.
 
 | Contributor | Commits |
 |---|---:|
-| Johan Rodríguez | 313 |
+| Johan Rodríguez | 316 |
 
 ---
 
