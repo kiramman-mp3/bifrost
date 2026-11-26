@@ -10,7 +10,7 @@
 
 **BIFRÖST** is an open-source, Rust-powered Android subsystem for Windows 11 x64 designed to run real Android applications with deep native desktop integration — *"A Bridge Between Worlds."*
 
-Inspired by Bifröst from Norse mythology and engineered as a modern, auditable, community-maintained successor to Microsoft's discontinued Windows Subsystem for Android (WSA), BIFRÖST v0.5.2 delivers **Milestones 0 through 8 plus full WSA-grade desktop integration** across a modular Rust workspace (`14` crates, `152` passing tests): native Windows 11 / WHPX + host tooling diagnostics, invisible headless auto-boot on app launch or APK/APKM install, QEMU-WHPX with dedicated `iothread` VirtIO block I/O + DirectSound audio + `virtio-gpu-pci` / opt-in headless GPU acceleration through virgl on the host GPU (`virtio-gpu-gl-pci`, OpenGL ES 2.0) + `crosvm-WHPX` backend, Heimdall authenticated Named Pipe daemon with optional silent Windows login autostart + automatic in-Android shortcut sync + real-time Windows 11 Toast notifications + auto clipboard sync, unprivileged `HKCU` `.apk` / `.apkm` Explorer double-click & context menu handler launching a native Fluent App Installer dialog (with Install/Update detection & live progress bar), Valhalla single-pass APK/APKM split-bundle & ABI manager, WSA-style dedicated dynamically resizable per-app windows (`--flex-display`, 60 FPS), Windows 11 Fluent Design 2 Tauri 2 desktop app (with host auto-tune, cached instant refreshes, native file/folder pickers, `.apk`/`.apkm` drag-and-drop, and Midgard Images & Recovery management), first-run setup wizard, system tray, update notice, and unprivileged Windows installer.
+Inspired by Bifröst from Norse mythology and engineered as a modern, auditable, community-maintained successor to Microsoft's discontinued Windows Subsystem for Android (WSA), BIFRÖST v0.5.2 delivers **Milestones 0 through 8 plus full WSA-grade desktop integration** across a modular Rust workspace (`14` crates, `153` passing tests): native Windows 11 / WHPX + host tooling diagnostics, invisible headless auto-boot on app launch or APK/APKM install, QEMU-WHPX with dedicated `iothread` VirtIO block I/O + DirectSound audio + `virtio-gpu-pci` / opt-in headless GPU acceleration through virgl on the host GPU (`virtio-gpu-gl-pci`, OpenGL ES 2.0) + `crosvm-WHPX` backend, Heimdall authenticated Named Pipe daemon with optional silent Windows login autostart + automatic in-Android shortcut sync + real-time Windows 11 Toast notifications + auto clipboard sync, unprivileged `HKCU` `.apk` / `.apkm` Explorer double-click & context menu handler launching a native Fluent App Installer dialog (with Install/Update detection & live progress bar), Valhalla single-pass APK/APKM split-bundle & ABI manager, WSA-style dedicated dynamically resizable per-app windows (`--flex-display`, 60 FPS), native Windows 11 Mica Tauri 2 desktop app (integrated titlebar, dynamic Windows accent & theme, auto ES/EN language, simplified Home/Apps/Settings consumer flow + Developer Mode, native pickers, and `.apk`/`.apkm` drag-and-drop), first-run setup wizard, system tray, update notice, and unprivileged Windows installer.
 
 > [!TIP]
 > **Quick start (`v0.5.2`)**: Download the latest Windows x64 release bundle or run directly from source:
@@ -86,7 +86,7 @@ The `bifrost-ui` desktop app (`apps/bifrost-ui`) has seven views, Dark and Light
 - **Frontend / Desktop UI**: Tauri 2 (`apps/bifrost-ui`), WebView2, offline-first HTML/CSS/ES with Windows 11 Fluent Design 2 styling (Dark & Light themes).
 - **Backend & Control Plane**: Rust (`edition = "2021"`, `rust-version = "1.89"`), Cargo workspace (`14` crates), `tokio`, `serde`, `serde_json`, `toml`, `tracing`, `thiserror`, `clap`, `sha2`, `ed25519-dalek`, `zip`, `windows` crate.
 - **Virtualization & Android Guest**: Windows Hypervisor Platform (`WHPX`), QEMU `11.1.0` (`q35,accel=whpx`, EDK2 UEFI `pflash`, VirtIO storage/net/serial/RNG, QMP) and `crosvm` (`whpx` + `gfxstream`), Android `x86_64` VirtIO / AOSP / LineageOS, `adb`, `scrcpy >= 3.0`.
-- **Testing & Quality Gates**: `cargo test --workspace` (`152` passing tests: `130` unit/IPC + `22` property-based fuzz; `4` opt-in tests ignored by default), `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo fmt --all -- --check`, `cargo deny check` (`deny.toml`).
+- **Testing & Quality Gates**: `cargo test --workspace` (`153` passing tests: `131` unit/IPC + `22` property-based fuzz; `4` opt-in tests ignored by default), `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo fmt --all -- --check`, `cargo deny check` (`deny.toml`).
 - **Distribution & CI**: PowerShell release packager (`build-release-bundle.ps1`), unprivileged SHA-256-verified Windows user-space installer/uninstaller (`install-bifrost.ps1`, `uninstall-bifrost.ps1`), and GitHub Actions Windows CI (`.github/workflows/ci.yml`).
 
 ---
@@ -146,19 +146,21 @@ BIFRÖST/
 │       ├── README.md
 │       └── manifest.example.json
 ├── apps/
-│   └── bifrost-ui/                                # Windows 11 Fluent Design 2 desktop application (Tauri 2)
-│       ├── ui/                                    # Offline-first HTML/CSS/ES frontend (Dark & Light themes, 7 sections, drag & drop)
+│   └── bifrost-ui/                                # Native Windows 11 Mica / WinUI 3 desktop application (Tauri 2)
+│       ├── ui/                                    # Offline-first HTML/CSS/ES frontend (Mica, dynamic accent, ES/EN i18n, Developer Mode)
 │       │   ├── index.html
 │       │   ├── styles.css
+│       │   ├── icon.png                           # Embedded titlebar & launcher icon
 │       │   └── js/                                # Native ES modules, no bundler (CSP `script-src 'self'`)
-│       │       ├── main.js                        # Entry: installer mode (--install-apk) or dashboard
+│       │       ├── main.js                        # Entry: installer mode (--install-apk) or Home
+│       │       ├── i18n.js                        # Bilingual Spanish & English UI dictionary
 │       │       ├── core.js                        # invoke, shared state, formatting helpers
-│       │       ├── views.js                       # Dashboard, config, diagnostics & settings rendering
-│       │       ├── data.js                        # refresh* calls to the Rust backend
+│       │       ├── shell.js                       # Integrated titlebar, dynamic Windows accent/theme/lang, drag & drop
+│       │       ├── views.js                       # Home, Apps, Settings & Developer rendering
+│       │       ├── data.js                        # refresh* & auto-save config calls to Rust
 │       │       ├── installer.js                   # App Installer dialog
-│       │       ├── shell.js                       # Navigation, theme, drag & drop
-│       │       ├── setup.js                       # First-run setup wizard
-│       │       └── events.js                      # Button & form wiring
+│       │       ├── setup.js                       # First-run setup checklist
+│       │       └── events.js                      # Button, tile & switch wiring
 │       └── src-tauri/                             # Pure-Rust backend (`#![forbid(unsafe_code)]`)
 │           ├── Cargo.toml
 │           ├── tauri.conf.json
@@ -166,16 +168,17 @@ BIFRÖST/
 │           ├── capabilities/default.json          # Least-privilege Tauri 2 capability
 │           ├── icons/                             # App icon assets (icon.png, icon.ico)
 │           └── src/
-│               ├── main.rs                        # Thin `#[tauri::command]` bindings
+│               ├── main.rs                        # Mica window setup & thin `#[tauri::command]` bindings
 │               ├── tray.rs                        # System tray icon, quick actions & close-to-tray
 │               └── service/                       # Testable Rust service on top of bifrost-client
 │                   ├── mod.rs                     # Config loading & session helper
+│                   ├── appearance.rs              # HKCU Windows 11 accent palette, theme & locale discovery
 │                   ├── dashboard.rs               # Dashboard snapshot, Heimdall, doctor, config
 │                   ├── runtime.rs                 # Midgard start/stop/restart & logs
 │                   ├── apps.rs                    # App Installer flow, launch/stop, shortcuts
 │                   ├── images.rs                  # Image registry, trusted keys, userdata backup/restore
 │                   ├── setup.rs                   # First-run checklist, winget installs, first visible boot
-│                   └── host.rs                    # Shared folder, processes, port forwards, file pickers
+│                   └── host.rs                    # Shared folder, Explorer opener, processes, port forwards, pickers
 ├── installer/
 │   ├── README.md                                  # Distribution, installation, upgrade & recovery runbook
 │   └── windows/
@@ -411,7 +414,7 @@ cargo deny check   # requires `cargo install cargo-deny --locked`
 | `cargo fmt --all -- --check` | Verify Rust code formatting across workspace | **Implemented** |
 | `cargo clippy --workspace --all-targets --locked -- -D warnings` | Run strict Clippy static analysis against the committed `Cargo.lock` | **Implemented** |
 | `cargo deny check` | Audit dependencies: RustSec advisories, Apache-2.0-compatible licenses and registry sources (`deny.toml`) | **Implemented** |
-| `cargo test --workspace` | Execute unit, IPC & property-based fuzz tests (`152` tests across 14 workspace crates) | **Implemented** |
+| `cargo test --workspace` | Execute unit, IPC & property-based fuzz tests (`153` tests across 14 workspace crates) | **Implemented** |
 | `cargo run -p bifrost-ui` | Launch BIFRÖST Windows 11 Fluent Design desktop application | **Implemented** |
 | `heimdall run` | Start background Heimdall supervisor on owner-DACL Windows Named Pipe | **Implemented** |
 | `bifrost version [--json]` | Display BIFRÖST version, host target, and capability maturity | **Implemented** |
@@ -477,7 +480,7 @@ Distribution tooling lives under [installer/](installer/README.md), [.github/wor
 | `bifrost-client` (`Session` facade, setup, update, graphics advice) | **Implemented** | Shared IPC/direct routing for `mimir` and `bifrost-ui`, first-run checklist, release notice, OpenGL ES advisor (`18` unit tests) |
 | `valhalla` (APK/ABI inspection & `pm`/`am` manager) | **Implemented** | Completed in Milestone 5 (`20` unit + `7` fuzz tests; enforces ADR-0004 `x86_64` ABI check & Zip-Slip rejection) |
 | `mimir` CLI (`bifrost.exe`) | **Implemented** | Full administrative command set live (`7` CLI tests + `1` opt-in live-VM `e2e` test) |
-| `bifrost-ui` (Tauri 2 Fluent desktop app) | **Implemented** | Completed in Milestone 7 (Dashboard, Setup, Apps, Config, Diagnostics, Images & Recovery, Settings, system tray; `5` backend service tests) |
+| `bifrost-ui` (Tauri 2 native Mica desktop app) | **Implemented** | Integrated titlebar, dynamic Windows accent/theme/locale, Home/Apps/Settings + Developer Mode, system tray (`6` backend service tests) |
 | Distribution, Ed25519 updates & recovery | **Implemented** | Completed in Milestone 8 (Ed25519 signatures, image registry, userdata backup/restore, Windows installer/uninstaller & CI) |
 | `heimdall` supervisor daemon | **Implemented** | Authenticated Named Pipe IPC, app sync, Toasts, clipboard sync (`6` tests) |
 | Independent per-app Windows desktop windows (`bifrost-display`) | **Implemented** | Android freeform + isolated `VirtualDisplay` windows via external `scrcpy` (ADR-0005; `1` test) |
@@ -516,7 +519,7 @@ See [ROADMAP.md](ROADMAP.md) for detailed milestone exit criteria.
 
 | Contributor | Commits |
 |---|---:|
-| Johan Rodríguez | 310 |
+| Johan Rodríguez | 313 |
 
 ---
 
