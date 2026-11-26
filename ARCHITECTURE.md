@@ -1,6 +1,6 @@
 # BIFRÖST System Architecture
 
-> **Status**: Implemented through `v0.4.0` (Milestones 0–8 + post-M8 desktop integration)
+> **Status**: Implemented through `v0.5.0` (Milestones 0–8 + post-M8 desktop integration)
 > **Primary Language**: Rust (13-crate Cargo workspace, `116` unit/IPC/fuzz tests)
 > **Target Platform**: Windows 11 x64 (Home, Pro, Enterprise)
 
