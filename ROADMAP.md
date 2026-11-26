@@ -105,6 +105,13 @@ Details per release are in [CHANGELOG.md](CHANGELOG.md).
 - [x] **v0.3.2**: `.apkm` split bundle support with ABI split filtering.
 - [x] **v0.3.3**: Fluent App Installer dialog, host CPU/RAM auto-tune, single-pass install pipeline, performance tuning.
 - [x] **v0.4.0**: Security & reliability hardening: quoted/stdin `adb shell` input, image trust store (ADR-0006), QMP off TCP, no PowerShell at runtime, cross-process VM lifecycle lock, Heimdall single-instance fix, ADB trade-in/authorization diagnostics, pinned CI actions, signed release pipeline, live-VM end-to-end test.
+- [x] **v0.5.0**: First-run setup (`bifrost setup` and Setup view), system tray, update notice (`bifrost update`), shared `bifrost-client` session, trusted publishers card, dependency audit in CI, hardware matrix, and opt-in GPU acceleration through virgl on the host GPU (OpenGL ES 2.0, ADR-0007).
+
+---
+
+## Next — GPU Mode Maturity (`In progress`)
+- [ ] Explain or fix the `virtio_gpu_virgl_process_cmd: ctrl 0x103, error 0x1203` (`SET_SCANOUT`) host errors and the isolated multi-second GPU frame seen in the virgl mode (ADR-0007).
+- [ ] Recommend a graphics mode from what the installed apps declare: the virgl GPU mode is only offered when no installed app requires OpenGL ES 3.0 or higher (`<uses-feature android:glEsVersion>`).
 
 ---
 
@@ -113,10 +120,19 @@ Details per release are in [CHANGELOG.md](CHANGELOG.md).
 - [x] Local Ed25519 trust store for Midgard images ([ADR-0006](docs/decisions/ADR-0006-image-trust-store.md)) — *done in v0.4.0*.
 - [ ] Publish official signed Midgard bundles from a reproducible Linux CI pipeline (ADR-0001) and ship the release key as a default trusted key.
 - [ ] Midgard guest agent over `virtio-vsock` (events instead of ADB polling, Android → Windows clipboard).
-- [ ] Windows `crosvm` + `gfxstream` build pipeline and live validation of `CrosvmWhpxBackend`.
+- [ ] Windows `crosvm` + `gfxstream` build pipeline and live validation of `CrosvmWhpxBackend`, with a Midgard image that carries the gfxstream guest drivers, to expose OpenGL ES 3.x and Vulkan on the host GPU (ADR-0003, ADR-0007).
 - [ ] Native Win32 + D3D12 per-app window host replacing `scrcpy` (ADR-0003 Stage 2 target).
 - [x] End-to-end test against a live Midgard VM (`crates/mimir/tests/e2e_live_vm.rs`, opt-in) — *done in v0.4.0*.
 - [ ] Broader unit coverage for `bifrost-display`, `bifrost-process`, `bifrost-network` and `bifrost-runtime`.
+- [ ] Verify more hosts in the [hardware matrix](docs/research/hardware-matrix.md): an NVIDIA and an AMD GPU (default and GPU modes), an AMD Ryzen CPU, and 8 GB / 16 GB RAM machines.
+- [ ] Signed MSI or MSIX installer that installs or downloads QEMU, `adb` and `scrcpy` (each verified by hash), so a new user needs one download.
+- [ ] Live-verified Midgard image upgrade (LineageOS 24 to a later build) that keeps `userdata`, as an opt-in e2e test.
+- [ ] Contributor on-ramp: GitHub issue templates (bug report, hardware report following the matrix procedure), project page and a short demo video.
+
+---
+
+## Research (`Experimental`, no commitment)
+- [ ] ARM64 app compatibility through an open-source, redistributable binary translator. ARM64 support stays `Unsupported` (ADR-0004) unless such a translator proves viable; proprietary translators (`libhoudini`, `libndk_translation`) remain excluded.
 
 ---
 
