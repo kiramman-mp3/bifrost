@@ -6,6 +6,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Documentation
+- **ADR-0007 follow-up on the GPU mode's host errors**: the `SET_SCANOUT` / `INVALID_RESOURCE_ID` messages QEMU prints with `graphics_mode = "gfxstream"` occur only while Android boots (about 1,900 per boot with the shipped `blob=on`), not during use, idle, screen off or scrcpy windows. `blob=off` produces more of them and renders slower (median frame 45 ms vs 37 ms). The isolated 5 s GPU frame did not recur in eight benchmark runs.
+
 ### Added
 - **Graphics mode advice (`valhalla`, `bifrost-client`, `mimir`, `bifrost-ui`)**: APK inspection now reads the OpenGL ES version an app requires (`<uses-feature android:glEsVersion>`, the highest across an `.apkm` bundle's splits). `bifrost apps graphics` and a Settings button read the same value for every installed third-party app and recommend GPU acceleration only when none needs more than OpenGL ES 2.0. Android does not report this value in `dumpsys`, so each base APK's `AndroidManifest.xml` is extracted with the guest's own `unzip` over `adb exec-out` (paths validated first) and parsed on the host. `bifrost install`, `--inspect-only` and the App Installer warn when the configured mode cannot provide an app's version.
 

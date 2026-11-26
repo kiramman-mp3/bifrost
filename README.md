@@ -494,7 +494,7 @@ Distribution tooling lives under [installer/](installer/README.md), [.github/wor
 - [x] **Milestone 8**: Ed25519 signed image registry, upgrade safety, verified userdata recovery, Windows installer/uninstaller, and CI.
 - [x] **v0.5.0**: First-run setup, system tray, update notice, and opt-in GPU acceleration through virgl (OpenGL ES 2.0).
 - [x] Graphics mode advice from the installed apps' OpenGL ES requirement (`bifrost apps graphics`, Settings, App Installer warning).
-- [ ] Graphics mode maturity: explain the virgl `SET_SCANOUT` host errors.
+- [x] Virgl `SET_SCANOUT` host errors explained: boot-time only, no visible effect (ADR-0007).
 - [ ] OpenGL ES 3.x and Vulkan on the host GPU through `crosvm` + `gfxstream` with a gfxstream-enabled Midgard image.
 - [ ] Native Win32 + D3D12 per-app windows replacing `scrcpy`.
 - [ ] More verified hardware (NVIDIA, AMD, 8–16 GB RAM).
