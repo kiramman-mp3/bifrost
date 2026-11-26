@@ -124,12 +124,14 @@ For detailed component contracts, runtime boot sequences, and security boundarie
 
 ```bash
 BIFRÖST/
-├── .github/workflows/ci.yml                       # Automated Windows x64 CI (fmt, clippy, test, release build)
+├── .github/workflows/ci.yml                       # Automated Windows x64 CI (fmt, clippy, test, release build, cargo-deny)
 ├── .github/workflows/release.yml                  # Tag-driven release: optional Authenticode signing, provenance, GitHub Release
+├── .github/workflows/fuzz.yml                     # Weekly & manual deep proptest fuzzing (20,000 cases per property)
 ├── .github/workflows/e2e-live-vm.yml              # Manual live Midgard VM e2e on a self-hosted WHPX runner (Experimental)
 ├── .gitignore                                     # Rust, /dist/, Windows, disk images, logs, and secrets exclusions
 ├── Cargo.toml                                     # Cargo workspace manifest (14 crates, unsafe_code = "deny")
 ├── Cargo.lock                                     # Reproducible dependency lockfile
+├── deny.toml                                      # cargo-deny policy (RustSec advisories, Apache-2.0 licenses, crates.io)
 ├── LICENSE                                        # Apache License 2.0
 ├── ARCHITECTURE.md                                # System architecture, diagrams, and security boundaries
 ├── CHANGELOG.md                                   # Versioned project changelog (Keep a Changelog)
@@ -210,6 +212,7 @@ BIFRÖST/
 │   │       ├── verify.rs                          # Streaming SHA-256 verification & root containment
 │   │       ├── signature.rs                       # Pure-Rust Ed25519 manifest signature verification
 │   │       ├── trust.rs                           # Trust-store signature policy & explicit unsigned opt-in (ADR-0006)
+│   │       ├── trust_store.rs                     # Trusted publisher key parsing, SHA-256 fingerprints & removal impact
 │   │       ├── registry.rs                        # Local Midgard image catalog & upgrade/downgrade safety
 │   │       ├── recovery.rs                        # SHA-256-verified userdata backup & guarded restore
 │   │       └── disk.rs                            # Persistent userdata.img creation & guarded wipe
@@ -230,6 +233,7 @@ BIFRÖST/
 │   │       └── manager.rs                         # MidgardRuntime start/stop/restart/status/logs
 │   ├── bifrost-bridge/                            # Loopback ADB, shared dirs, Win32 clipboard, notifications & IPC
 │   │   ├── Cargo.toml
+│   │   ├── assets/bifrost-toast.png               # Embedded Windows 11 Toast notification icon
 │   │   ├── tests/fuzz_untrusted_inputs.rs         # proptest fuzzing of untrusted inputs (weekly deep run in CI)
 │   │   └── src/
 │   │       ├── lib.rs
@@ -244,6 +248,7 @@ BIFRÖST/
 │   │   ├── Cargo.toml
 │   │   └── src/
 │   │       ├── lib.rs                             # Config loading, status reconciliation, headless auto-boot, Heimdall start
+│   │       ├── graphics.rs                        # OpenGL ES requirement advisor & install warnings (ADR-0007)
 │   │       ├── setup.rs                           # First-run setup plan & allowlisted, visible winget installs
 │   │       └── update.rs                          # Latest-release check via Windows curl.exe (notice only)
 │   ├── bifrost-display/                           # Per-app Android VirtualDisplay & independent Windows 11 window launcher
@@ -465,15 +470,16 @@ Distribution tooling lives under [installer/](installer/README.md), [.github/wor
 | Area | Status | Notes |
 |---|---|---|
 | Feasibility research, architecture, ADRs | **Implemented** | Completed in Milestone 0 |
-| `bifrost-core` (state, config, paths, errors, logging) | **Implemented** | Completed in Milestone 1 (`14` unit + `2` fuzz tests) |
+| `bifrost-core` (state, config, paths, errors, logging) | **Implemented** | Completed in Milestone 1 (`20` unit + `2` fuzz tests) |
 | `bifrost-diagnostics` (`bifrost doctor`) | **Implemented** | Completed in Milestone 2 (`5` evaluator tests + 8 live Windows 11 Home WHPX & host tooling checks) |
-| `bifrost-storage`, `bifrost-hypervisor`, `bifrost-runtime` | **Implemented** | Completed in Milestone 3 (`23` unit tests: storage `10`, hypervisor `11`, runtime `2`, plus `3` storage fuzz tests; verified live LineageOS 24.0 `x86_64` boot + QMP shutdown on Windows 11 Home WHPX) |
-| `bifrost-bridge`, `bifrost-process`, `bifrost-network` | **Implemented** | Shared dirs, Win32 clipboard, notifications, processes, loopback port forwards (`18` unit + `10` fuzz tests) |
-| `valhalla` (APK/ABI inspection & `pm`/`am` manager) | **Implemented** | Completed in Milestone 5 (`16` unit + `7` fuzz tests; enforces ADR-0004 `x86_64` ABI check & Zip-Slip rejection) |
-| `mimir` CLI (`bifrost.exe`) | **Implemented** | Full administrative command set live (`6` tests) |
-| `bifrost-ui` (Tauri 2 Fluent desktop app) | **Implemented** | Completed in Milestone 7 (Dashboard, Apps, Config, Diagnostics, Images & Recovery, Settings; `4` backend service tests) |
+| `bifrost-storage`, `bifrost-hypervisor`, `bifrost-runtime` | **Implemented** | Completed in Milestone 3 (`28` unit tests: storage `15`, hypervisor `11`, runtime `2`, plus `3` storage fuzz tests; verified live LineageOS 24.0 `x86_64` boot + QMP shutdown on Windows 11 Home WHPX) |
+| `bifrost-bridge`, `bifrost-process`, `bifrost-network` | **Implemented** | Shared dirs, Win32 clipboard, notifications, processes, loopback port forwards (`20` unit + `10` fuzz tests) |
+| `bifrost-client` (`Session` facade, setup, update, graphics advice) | **Implemented** | Shared IPC/direct routing for `mimir` and `bifrost-ui`, first-run checklist, release notice, OpenGL ES advisor (`18` unit tests) |
+| `valhalla` (APK/ABI inspection & `pm`/`am` manager) | **Implemented** | Completed in Milestone 5 (`20` unit + `7` fuzz tests; enforces ADR-0004 `x86_64` ABI check & Zip-Slip rejection) |
+| `mimir` CLI (`bifrost.exe`) | **Implemented** | Full administrative command set live (`7` CLI tests + `1` opt-in live-VM `e2e` test) |
+| `bifrost-ui` (Tauri 2 Fluent desktop app) | **Implemented** | Completed in Milestone 7 (Dashboard, Setup, Apps, Config, Diagnostics, Images & Recovery, Settings, system tray; `5` backend service tests) |
 | Distribution, Ed25519 updates & recovery | **Implemented** | Completed in Milestone 8 (Ed25519 signatures, image registry, userdata backup/restore, Windows installer/uninstaller & CI) |
-| `heimdall` supervisor daemon | **Implemented** | Authenticated Named Pipe IPC, app sync, Toasts, clipboard sync (`5` tests) |
+| `heimdall` supervisor daemon | **Implemented** | Authenticated Named Pipe IPC, app sync, Toasts, clipboard sync (`6` tests) |
 | Independent per-app Windows desktop windows (`bifrost-display`) | **Implemented** | Android freeform + isolated `VirtualDisplay` windows via external `scrcpy` (ADR-0005; `1` test) |
 | `crosvm-whpx` + `gfxstream` backend | **Experimental** | Host wrapper only; no Windows `crosvm` binary validated yet |
 | Midgard guest agent (`virtio-vsock`) | **Planned** | Host ↔ guest traffic currently uses loopback ADB polling |
@@ -510,7 +516,7 @@ See [ROADMAP.md](ROADMAP.md) for detailed milestone exit criteria.
 
 | Contributor | Commits |
 |---|---:|
-| Johan Rodríguez | 222 |
+| Johan Rodríguez | 310 |
 
 ---
 
