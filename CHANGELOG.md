@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-11-25
+
 ### Documentation
 - **ADR-0007 follow-up on the GPU mode's host errors**: the `SET_SCANOUT` / `INVALID_RESOURCE_ID` messages QEMU prints with `graphics_mode = "gfxstream"` occur only while Android boots (about 1,900 per boot with the shipped `blob=on`), not during use, idle, screen off or scrcpy windows. `blob=off` produces more of them and renders slower (median frame 45 ms vs 37 ms). The isolated 5 s GPU frame did not recur in eight benchmark runs.
 
